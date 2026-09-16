@@ -1,0 +1,2319 @@
+﻿FastraSuite
+Product Requirements Document
+Document Type: FastraSuite PRD Addendum
+Version: 1.1
+Date: April 2026
+Status: Approved
+Prepared For: Technical and non-technical stakeholders
+1. Introduction & Purpose
+This document serves as a formal addendum to the existing FastraSuite Product Requirements Specification. It defines the functional requirements for two newly introduced modules:
+* Project Costing Module: the central financial tracking and reporting hub for all project-related spending, powered by the Project Costing Engine.
+* Project Request Module: a mobile-first request initiation layer designed specifically for site workers and field teams.
+These modules complement the existing Purchase, Inventory, and Invoice modules and complete the core operational loop of FastraSuite.
+1.1 Core System Philosophy
+FastraSuite is designed to simplify ERP complexity by clearly separating operational responsibilities across four layers:
+Layer
+	Actor
+	Responsibility
+	Module(s) Used
+	Field (Mobile)
+	Site Workers
+	Initiate Requests
+	Project Request Module
+	Office (Operations)
+	Procurement, Inventory, Finance
+	Process Requests
+	Purchase, Inventory, Invoice
+	Finance
+	Accounts / Management
+	Approve & pay
+	Invoice Module
+	Management
+	Project Managers, Directors
+	Monitor & report
+	Project Costing Module
+	The system must enforce strict alignment between what is requested on-site, what is approved within the project budget, and what is ultimately paid by finance. All spending must originate from validated site activity. Every transaction must be traceable to a project, a WBS element, and a cost category. Payments are only made for verified and validated work or deliveries.
+1.2 System Architecture Note
+FastraSuite operates as a multi-tenant SaaS platform. Each registered company exists as an isolated tenant with its own data environment. No data is shared across companies. All companies share the same underlying codebase and infrastructure.
+1.3 Subscription Model
+FastraSuite is offered on two subscription tiers. The Core tier includes four modules: Project Request Module, Project Costing Module, Invoice Module, and Inventory Module. The Enterprise tier includes all core modules plus Sales (CRM, Quotation, SO), Purchase, HR, and Asset Management. Companies on the Core tier can upgrade to Enterprise at any time. All data created during the Core subscription is retained and carried over upon upgrade. The Purchase Order feature lives inside the Invoice Module on Core and moves to the Purchase Module on upgrade without any data loss.
+ 
+1.4 Product Objectives & Success Metrics
+Objective
+	Measurable Success Metric
+	Eliminate unbudgeted spending
+	100% of submitted requests pass through the Budget Validation Gate; no exceptions
+	Full cost traceability
+	Every transaction carries a valid WBS reference and cost category. No transaction is recorded without both fields
+	Prevent payment without delivery confirmation
+	A 3-way match is enforced on all vendor invoices. No invoice paid without a matched site receipt
+	Real-time financial visibility
+	BvA Dashboard reflects the current financial state within 5 minutes of any transaction across all modules
+	Reduce manual financial reconciliation
+	The finance team can process the payment queue without manually cross-referencing purchase orders, receipts, and invoices
+	Field accessibility
+	Project Request Module is fully functional on low-end mobile devices using a standard mobile browser
+	 
+2. User Personas
+2.1 Site Supervisor / Site Worker
+Attribute
+	Detail
+	Primary access
+	Mobile browser on Android or iOS device
+	Technical literacy
+	Low to medium — minimal typing, prefers dropdowns and tap interactions
+	Location
+	On-site — often in areas with unreliable internet connectivity
+	Primary actions
+	Submits spending requests, logs material receipts, records material consumption
+	Key frustration
+	Complex forms, too many fields, slow loading on low-end devices
+	What they need
+	A fast, simple interface that allows them to submit a request in under 2 minutes with minimal effort
+	 
+
+
+2.2 Site Manager
+Attribute
+	Detail
+	Primary access
+	Mobile browser (primary) and web browser (secondary)
+	Technical literacy
+	Medium
+	Primary actions
+	Submits requests, acts as first-level approver for site requests, confirms material receipts on behalf of the site team
+	Key frustration
+	No visibility into what has been requested and what budget remains before approving
+	What they need
+	A clear view of all requests on their project and enough budget information to make sound approval decisions
+	
+
+2.3 Project Manager
+Attribute
+	Detail
+	Primary access
+	Web browser. Both desktop and tablet
+	Technical literacy
+	Medium to high
+	Primary actions
+	Creates and manages projects, sets and manages budgets, reviews and approves requests, and monitors the BvA Dashboard.
+	Key frustration
+	Budget overruns discovered after the fact;  no early warning system
+	What they need
+	Real-time visibility into budget consumption at every level of the project hierarchy, with proactive alerts before budgets are exhausted
+	
+
+2.4 Finance Officer / Accountant
+Attribute
+	Detail
+	Primary access
+	Web browser — desktop
+	Technical literacy
+	Medium to high
+	Primary actions
+	Validates vendor invoices via 3-Way Match, manages the Accounts Payable queue, approves payments, reviews the Cash Flow view
+	Key frustration
+	Processing invoices that do not match what was actually delivered or ordered—manual reconciliation is time-consuming and error-prone
+	What they need
+	A system that automatically flags mismatches and only surfaces invoices that are verified and ready to pay
+	 
+2.5 Company Admin
+Attribute
+	Detail
+	Primary access
+	Web browser — desktop
+	Technical literacy
+	High
+	Primary actions
+	Creates and manages user accounts, configures access groups, manages the cost code library, adjusts system settings
+	Key frustration
+	Manual onboarding of users and repeated configuration for each new project
+	What they need
+	A simple admin panel that allows full user and configuration management without requiring technical support
+	 
+3. Module Overview & Cross-Cutting Features
+3.1 Project Request Module
+The Project Request Module is the mandatory entry point for all site activity and spending requests. It is a streamlined, mobile-optimized interface designed for site workers and field teams. Every spending request must be tagged with a WBS element and a cost code and is automatically validated by the budget validation gate before reaching any human approver. This module is strictly for initiating requests and routing approvals — it does not process payments.
+This module covers seven request types:
+1. Purchase Request
+2. Labour Request
+3. Petty Cash Request
+4. Subcontractor Request — supports both lump-sum and milestone-based payment terms
+5. Plant & Equipment Request
+6. Material Consumption Request
+3.2 Project Costing Module
+The Project Module is the financial management and reporting backbone of FastraSuite, powered by the Project Costing Engine—an active validation and tracking engine, not a passive reporting tool. It manages the work breakdown structure, holds the cost code library, runs the budget validation gate on every request submission, tracks committed and actual amounts in real time, and displays financial status via the BvA Dashboard.
+3.3 User Onboarding, Authentication & Access Activation
+Company Registration
+FastraSuite operates as a true SaaS platform. Companies self-register, verify their email addresses, and gain immediate access; no manual activation is required. The first person to register a company automatically becomes the Company Super Admin.
+Registration Flow:
+1.      A company representative visits the FastraSuite registration page and fills in the registration form
+2.      When you fill out the form, the system sends a link to your registered email address to confirm it.
+3.      The representative clicks the confirmation link, and the system gives them instant access to the dashboard.
+4.      A representative lands on the main dashboard as the company super admin.
+5.      A setup wizard dialog appears, guiding the Super Admin through initial company configuration
+
+
+Registration Field
+	Behaviour
+	Company Name
+	Text input — required
+	Contact Name
+	Text input — required
+	Email Address
+	Text input is required, checked for the right format, and blocked if there are duplicate emails.
+	Password
+	Text input is required and must follow the password policy.
+	 
+Rule
+	Detail
+	Email verification
+	The company cannot log in until the confirmation link is clicked
+	Immediate access
+	After email verification, company gains full access—no further approval required
+	Super Admin assignment
+	The registering user automatically becomes the company super admin.
+	Industry selection
+	Determines the default terminology and budget template pre-loaded for the company—all of which can be customised after registration
+	Confirmation link expiry
+	The link is valid for 24 hours—expired links show a clear error with the option to request a new link
+	Duplicate detection
+	System blocks duplicate email registrations with a clear error message
+	 
+Acceptance Criteria
+	Detail
+	Registration
+	A company can register and receive a confirmation email within 2 minutes
+	Verification
+	Clicking the confirmation link grants immediate access to the dashboard
+	Super Admin
+	The registered user has Super Admin permissions from first login
+	Duplicate email
+	The second registration attempt with the same email is blocked with a clear error
+	Expired link
+	An expired confirmation link shows an error and offers a resend option
+	Industry template
+	The selected industry applies correct default terminology and budget templates across all modules
+	 
+Setup Wizard: First Login
+On first login, a guided three-step wizard helps the Super Admin configure the company environment before any operational work begins.
+Step
+	What the Admin Does
+	Step 1: Company Settings
+	Updates the company logo, phone number, address, registration number, tax ID, company size, and language. Reviews and confirms the industry selection made at registration. Sets the base currency and default tax settings.
+	Step 2: Access Groups
+	Creates access groups and assigns permissions per application. Available applications: Settings, Inventory, Invoice, Project Costing Module, and Project Request Module. Permission types: View, Edit, Approve — configurable per action per application.
+	Step 3: User Creation
+	Creates user accounts for all team members. Assigns each user an access group and operational area (site or back office). Shares the login link and temporary password with each user directly.
+	
+
+Individual User Account Creation
+Users do not self-register. The Company Super Admin creates all user accounts directly from the Settings panel and shares credentials with each user. Users are forced to change their temporary password on first login before accessing any module.
+User Creation Field
+	Behaviour
+	Full Name
+	Text input — required
+	Email Address
+	Text input — required — must be unique within the company
+	Operational Area
+	Choose either "Site" or "Back Office."
+	Access Group
+	Select from existing access groups—required
+	Temporary Password
+	Auto-generated by the system — visible to the admin for sharing with the user
+	 
+Rule
+	Detail
+	Admin-only creation
+	Only the Super Admin or users with user management permissions can create accounts
+	No self-registration
+	Individual users cannot register themselves. The admin creates all accounts
+	First login password change
+	System forces a password change on first login—the user cannot access any module until this is complete
+	Operational area — Site
+	The user lands on the mobile Project Request Module dashboard after login
+	Operational area — Back Office
+	The user lands on the desktop back-office dashboard based on their access group
+	Access group
+	Determines all permissions across all modules for that user
+	 
+Acceptance Criteria
+	Detail
+	User creation
+	Admin can create a user account with all required fields
+	Temporary password
+	System generates a temporary password visible to the admin
+	First login
+	The user is forced to change password on first login before accessing any module
+	Site users
+	Land on the mobile Project Request Module dashboard after login
+	Back Office users
+	Land on the desktop back-office dashboard based on their access group
+	Duplicate email
+	Second user creation with the same email is blocked with a clear error
+	
+
+Password Reset & Account Recovery
+User Flow:
+6.      The user clicks "Forgot Password" on the login page
+7.      The user enters their registered email address and submits
+8.      System sends a time-limited password reset link to that email
+9.      The user clicks the link and is taken to a password reset form
+10.  The user enters and confirms their new password and submits
+11.  System confirms the change and redirects the user to the login page
+ 
+Rule
+	Detail
+	Reset link validity
+	60 minutes from the time of sending
+	Expired link behaviour
+	System shows a clear error message with the option to request a new link
+	Password policy
+	Must match the existing policy, alphanumeric with at least one special character
+	Admin-triggered reset
+	Admins can force a password reset for any user from the Users panel in Settings without knowing the user's current password
+	Duplicate requests
+	If a new reset is requested before the first link expires, the first link is invalidated
+	3.4 Security Policy
+Password Policy:
+Requirement
+	Detail
+	Minimum length
+	8 characters
+	Character requirement
+	Must include at least one letter, one number, and one special character
+	Reuse restriction
+	Users cannot reuse their last 3 passwords
+	Session Policy:
+Requirement
+	Detail
+	Session timeout
+	30 minutes of inactivity
+	Timeout behaviour
+	The user is logged out and redirected to the login page
+	Re-authentication
+	Required after every session expiry
+	Account Lockout:
+Trigger
+	Action
+	5 consecutive failed login attempts
+	The account is temporarily locked
+	Unlock method
+	The user initiates a password reset, or the admin unlocks from Settings
+	Two-Factor Authentication (2FA):
+Setting
+	Detail
+	Method
+	Email OTP (One-Time Password)
+	Availability
+	Available to all users
+	Admin control
+	Admin can make 2FA mandatory for all users or optional per role group
+	OTP validity
+	10 minutes from the time of sending
+	3.5 Notification System
+Delivery Channels:
+Channel
+	Description
+	Default State
+	In-app
+	Notification bell icon visible on the dashboard at all times
+	Enabled
+	Email
+	Sent to the user's registered email address
+	Enabled
+	Push notifications
+	Not in scope for version 1.0
+	N/A
+	Channel Configuration:
+1. Users can disable either channel individually from their profile settings
+2. Admins can restrict which notification types are active system-wide from the Settings panel
+Notification Triggers:
+Trigger Event
+	Who Is Notified
+	New request submitted
+	Assigned approver
+	Request approved
+	Original submitter
+	Request rejected
+	Original submitter (with rejection reason)
+	Clarification requested
+	Original submitter
+	Request held in Overrun Queue
+	Project Manager (within 2 minutes)
+	Budget overrun alert threshold reached
+	Configurable per project — default PM and Finance
+	Payment confirmed
+	Project Manager and Finance
+	3-Way Match failed
+	Finance (within 2 minutes)
+	Material receipt quantity mismatch
+	Finance and Project Manager (automatically)
+	Low stock alert triggered
+	Configurable. Default Site Manager and Project Manager
+	
+
+Notification Content Requirements:
+1. Every notification must include event type, record ID and name, the user who triggered the action, timestamp, and a direct link to the relevant record
+2. Notifications must be delivered within 2 minutes of the triggering event
+3. Unread in-app notifications must display a count badge on the notification bell
+ 
+3.6 Platform & Mobile Strategy
+Platform:
+Attribute
+	Detail
+	Delivery type
+	Progressive Web App (PWA)
+	Installation
+	Installable on Android and iOS home screens without an app store
+	Browser support
+	All modern browsers (Chrome, Safari, Firefox, Edge)
+	Target device
+	Low-end Android smartphones. The Project Request module must be functional on devices with limited processing power and 3G connectivity
+	 
+Device Optimization by Module:
+Module
+	Primary Device
+	Optimisation Requirement
+	Project Request Module
+	Mobile
+	Fully mobile-optimized—large touch targets, minimal fields, minimal scrolling, minimal typing required
+	Inventory Module
+	Desktop
+	Desktop-primary, functionally usable on mobile
+	Invoice Module
+	Desktop
+	Desktop-primary, functionally usable on mobile
+	Project Costing Module
+	Desktop + Mobile
+	Responsive—usable on both without degradation
+	 
+Offline Capability:
+Feature
+	Offline Support
+	Request form draft saving — text fields only
+	Supported—drafts saved locally and synced on reconnection
+	Material Consumption draft saving—text fields only
+	Supported—drafts saved locally and synced on reconnection
+	Request form submission
+	Not supported — active connection required to submit
+	Photo capture and attachment upload
+	Not supported offline — active connection required (v1.1)
+	All back-office modules
+	Not supported offline — active connection required
+	When a site worker loses connectivity mid-form, the system automatically saves their current form input as a local draft on their device. A clear visual indicator informs the user they are offline. When connectivity is restored, the draft syncs automatically to the server without requiring any action from the user. If a sync conflict occurs — for example, the same draft was modified on two devices — the most recently modified version takes precedence, and the user is notified.
+ 
+3.7 System-Wide Audit Trail
+What is Logged:
+Field
+	Detail
+	Timestamp
+	Date and time of the action (to the second)
+	User
+	Full name and role of the user who performed the action
+	Action type
+	Created, Edited, Submitted, Approved, Rejected, Deleted, Paid, Overridden, Reallocated, Adjusted, etc.
+	Module
+	The module in which the action occurred
+	Record
+	The record type and unique ID affected
+	Field changes
+	The field name, previous value, and new value for any edits
+	 
+Access & Permissions:
+Rule
+	Detail
+	Who can view the global audit log
+	Admin-level users only, via Settings
+	Who can view a record-level audit trail
+	Any user with access to that record
+	Editability
+	The audit log is fully read-only. No user at any level can edit or delete entries
+	Export
+	The global audit log is exportable as CSV or PDF
+	Filtering
+	Filterable by user, module, action type, and date range
+	 
+Immutable Entries:
+The following actions generate permanent audit log entries that can never be edited or deleted:
+1. PM approve with override on an overrun request—includes the override note and overrun amount
+2. PM reject an overrun request—includes the rejection reason
+3. PM reallocate budget then approves
+4. Payment approval by Finance Officer
+5. Budget revision approval or rejection
+6. All manual inventory adjustments
+ 
+3.8 Attachment & Document Management
+Supported File Types & Limits:
+Attribute
+	Detail
+	Accepted file types
+	PDF, JPG, PNG, DOCX, XLSX, and photos captured directly via device camera
+	Maximum file size
+	10MB per file. Images captured via camera are automatically compressed before upload to reduce data usage on mobile connections
+	Maximum attachments
+	5 files per record
+	Storage
+	Cloud-based, encrypted at rest
+	Camera capture
+	Users can capture photos directly from their device camera within any form. The system requests camera permission on first use
+	Preview
+	Users see a thumbnail preview of each attachment before submitting the form
+	Progress indicator
+	Upload progress is shown to the user for each file during upload
+	
+
+Access Rules:
+Rule
+	Detail
+	Who can view attachments
+	Any user with permission to view the parent record
+	Who can upload
+	Any user with edit access to the record
+	Who can delete (before approval)
+	The original uploader or an Admin
+	Who can delete (after approval)
+	Nobody. attachments are locked once a record is approved
+	Offline behaviour
+	Photo upload requires an active connection — offline photo queuing is not supported in v1.0
+	Audit:
+1. All attachment activity (uploads and deletions) is captured in the record's audit trail
+2. Deleted files are logged but not recoverable by users
+ 
+3.9 Work Breakdown Structure (WBS) Manager
+The Work Breakdown Structure (WBS) is a hierarchical breakdown of a project into configurable levels such as phases, sub-phases, and activities. Every budget line, request, commitment, and actual cost in FastraSuite must be tagged to a specific activity-level WBS element. This enables financial and operational tracking at any level of the project hierarchy, from the overall project down to an individual executable activity.
+FastraSuite uses one unified WBS structure across all industries. When a company registers, the system pre-loads a standard WBS template with default level names. The Company Admin can rename levels, configure the number of hierarchy levels, and customize the terminology to match the organization’s operational structure. The underlying hierarchy engine remains the same regardless of industry.
+The WBS structure distinguishes between the following:
+1. Summary Elements (containers used for grouping)
+2. Activity Elements (lowest-level executable work items)
+Only activity elements can receive the following:
+1. budget lines
+2. requests
+3. commitments
+4. actual costs
+5. procurement transactions
+Summary elements exist strictly for aggregation and roll-up reporting.
+WBS Structure Rules:
+Rule
+	Detail
+	Configurable depth
+	The number of hierarchy levels is configurable by the company admin. There is no fixed limit set by the system
+	System-generated IDs
+	The system assigns a unique ID to each WBS element on creation. This ID cannot be manually edited after the first transaction is attached to that element
+	Activity-only budget attachment
+	Budget lines can only be attached to the activity elements. The system blocks budget attachment to any parent or summary element. 
+	Parent total rollup
+	All parent element values are automatically calculated as the sum of child elements. Manual entry at the parent level is not allowed. 
+	No deletion after transaction
+	A WBS element cannot be deleted after any transaction has been attached to it. It can only be marked as "Cancelled."
+	Cancelled elements
+	A Cancelled WBS element remains visible in history and reports but cannot receive any new transactions
+	New activity elements
+	New activity elements can be added to an Active project without triggering a full budget revision
+	Hierarchy integrity enforcement 
+	An Activity Element cannot exist without a valid parent Summary Element in the hierarchy chain. 
+	Transaction locking rule 
+	Once a transaction is posted against an element, structural modifications that affect hierarchy relationships are restricted. 
+	 
+WBS Hierarchy — Example:
+Level
+	Default Name
+	Example (Construction Project)
+	Level 1
+	Phase
+	Foundation
+	Level 2
+	Sub-phase
+	Structural Works
+	Level 3
+	Activity
+	Concrete Pouring
+	   
+Budget lines are strictly attached at the activity level. All higher levels function as roll-up containers for reporting and control purposes. 
+
+
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a project manager, I want to define and manage a work breakdown structure for my project so that all financial and operational transactions can be accurately tracked against a structured hierarchy. 
+	1. PM creates a new project or opens an existing draft project
+2. Navigates to the WBS section
+3. The system displays a standard WBS table
+4. PM clicks on a dropdown icon in the WBS table to create a Phase and then an activity underneath
+5. PM continues building the hierarchy to the required depth
+6. PM reviews the full tree structure and saves
+7. Once the project is Active, new activity elements can be added but existing elements with transactions cannot be deleted
+	1. The Company Admin must be able to rename all WBS level names from the company settings
+2. Admin and PMs can build a multi-level WBS tree with a configurable number of levels
+3. The system pre-loads a standard WBS template that the PM can customize on project creation
+4. The system assigns a unique ID to each element on creation
+5. The element ID cannot be edited after the first transaction is attached
+6. The system automatically identifies which elements are activity nodes
+7. All parent element totals are read-only and auto-calculated from children
+8. Elements with transactions can be marked. Cancelled but never deleted
+	1. PM can create a multi-level WBS tree to any depth permitted
+2. Every WBS element has a unique system-generated ID
+3. Budget lines can only be attached to activity elements; the system blocks attachment to parent elements
+4. Parent element totals display the sum of all children and cannot be manually edited
+5. The element ID cannot be edited after the first transaction is attached
+6. Cancelled elements are visible in history and reports but cannot receive new transactions
+7. New activity elements can be added to an Active project without triggering a budget revision
+	
+
+3.10 Cost Code Library
+Cost codes are a company-level master list of spending categories. Every budget line, request, and actual cost must be tagged with both a WBS element and a cost code. The WBS element tells you where in the project a cost belongs. The cost code tells you what type of cost it is. For example, labor, materials, or equipment.
+FastraSuite pre-loads a standard set of cost codes when a company registers. The company admin can rename existing codes, add new codes, and remove codes that are not relevant to their business. Cost codes are shared across all projects within a company — projects do not create their own codes.
+Cost Code Rules:
+Rule
+	Detail
+	Company-level master list
+	Cost codes belong to the company, not to individual projects
+	No project-specific codes
+	Projects are select from the company library; they cannot create their own cost codes
+	Standard pre-load
+	When a company registers, the system pre-loads a standard set of cost codes. The admin can customize these after registration.
+	
+
+Standard Pre-Loaded Cost Codes:
+Code
+	Name
+	CC-01
+	Labour
+	CC-02
+	Materials
+	CC-03
+	Plant & Equipment
+	CC-04
+	Subcontractors
+	CC-05
+	Petty Cash / Miscellaneous
+	
+
+
+
+3.11 Budget Validation
+The budget validation is an automated check that fires every time a request is submitted. It checks whether the requested amount is within the available budget for the specific WBS element and cost code combination tagged on the request. It fires before any human approver sees the request.
+Available Budget Formula:
+Available Budget = Budgeted Amount − Actual Amount − Committed Amount
+Term
+	Definition
+	Budgeted Amount
+	The approved budget for a specific WBS element and cost code combination
+	Actual Amount
+	Confirmed payments already made against that WBS element and cost code
+	Committed Amount
+	Approved but not yet paid requests against that WBS element and cost code
+	Available Budget
+	What remains available for new spending on that specific line
+	Critical Rule: Committed amounts are always deducted from the available budget in every validation check. A request that has been approved but not yet paid still consumes the available budget.
+Pre-Submission Budget Visibility:
+Before submitting any request, the site worker can see the available budget for the selected WBS element and cost code combination. The system displays the available budget amount only — the worker does not see the full breakdown of budgeted, actual, or committed amounts separately. This gives the worker enough information to self-check their request before submission without exposing sensitive financial details.
+Display Rule
+	Detail
+	What is shown
+	Available Budget amount for the tagged WBS element and cost code—updates in real time as the worker selects both fields
+	When it appears
+	Immediately after both WBS elements are selected, before the worker enters the requested amount
+	Format
+	Displayed as: 'Available Budget: ₦[amount]' — prominently positioned above the amount or cost fields
+	What is NOT shown
+	Budgeted Amount, Actual Amount, Committed Amount. These are never shown to site workers
+	Insufficient budget indicator
+	If the worker enters an amount that exceeds the available budget, a warning is shown before submission: 'This request exceeds the available budget and will require a budget review.'
+	
+
+Validation Gate Flow:
+Step
+	Action
+	Result
+	1
+	A site worker selects WBS elements.
+	System displays the available budget amount for that combination
+	2
+	The worker completes the form and taps Submit
+	System intercepts the request before routing to any approver
+	3
+	System recalculates the available budget at the exact moment of submission
+	Budgeted − Actual − Committed for that WBS + Cost Code
+	4a
+	Within budget
+	Request proceeds to the PM approval queue normally
+	4b
+	Over budget
+	Request is flagged and proceeds to the PM approval queue while showing cost information of the request.
+	5
+	The worker sees the result
+	Within budget: standard confirmation. Over budget: 'This request requires a budget review before it can be processed. You will be notified of the outcome.'
+	 
+Over-Budget Requests:
+When a request exceeds the available budget for the tagged WBS element, the request is not blocked and does not go to a separate queue. Instead, it proceeds to the PM's normal approval queue with a clear visual flag showing it is over budget and by how much.
+The PM sees the following information on the flagged request:
+1. WBS Element
+2. Auto-assigned Cost Code
+3. Budgeted Amount
+4. Committed Amount
+5. Actual Amount
+6. Available Budget
+7. Requested Amount
+8. Overrun Amount
+The PM has two options:
+Action
+	What Happens
+	Approve
+	Request is approved despite the overrun. The committed amount increases. A permanent audit log entry is created noting the overrun amount at the time of approval.
+	Reject
+	Request is rejected. The committed amount is not affected. The submitter is notified of the rejection reason.
+	If the PM wants to accommodate recurring overruns on a particular WBS element, they can increase the budget for the entire project from within the Project Costing Module using the Budget Revision Workflow (Section 5.6). 
+Committed Amount Lifecycle:
+Event
+	Effect on Committed Amount
+	Request approved — within budget
+	Requested amount added to Committed
+	Request approved with PM override
+	Requested amount added to Committed
+	Request rejected by PM
+	Committed amount released immediately back to Available Budget
+	Request cancelled
+	Committed amount released immediately back to Available Budget
+	Payment confirmed in Invoice Module
+	Amount removed from Committed and added to Actual
+	Material consumption validated
+	No committed stage; goes directly to Actual Amount
+	 
+3.12 Overrun Alert System
+The Overrun Alert System monitors budget consumption across all WBS elements on every active project. When consumption reaches a configured threshold, the system sends an alert to the designated recipients. This is a proactive warning system — it fires before the budget is exhausted, giving the PM time to act.
+Alert Threshold Formula:
+* Alert fires when: (Actual Amount + Committed Amount) ÷ Budgeted Amount × 100 ≥ Threshold %
+Alert Threshold Configuration:
+Setting
+	Detail
+	Company default threshold
+	A single default threshold percentage set at the company level. This applies to all projects and all cost categories unless overridden
+	Project-level override
+	The PM can override the company default threshold for each individual project
+	Category-level override
+	The PM can set different thresholds per cost category within the same project. For example, Labour at 75% and Materials at 85%
+	Alert recipients
+	Configurable per project. The default recipients are the PM and Finance team
+	
+
+Alert Behavior:
+1. Alert fires once when the threshold is first crossed. It does not fire repeatedly on every subsequent transaction
+2. Alert resets if budget is reallocated and consumption drops below the threshold. It will fire again the next time the threshold is crossed
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a project manager, I want to receive an alert when a budget line on my project is approaching its limit so that I can take preventive action before the budget is exhausted and requests start being held in the overrun queue.
+	1. PM creates a new project or opens an existing active project
+2. Navigates to Project Settings and clicks Alert Thresholds
+3. Sees the company default threshold pre-filled. For example, 80%
+4. PM accepts the default or overrides it at project level
+5. PM can further set different thresholds per cost category
+6. PM saves the thresholds
+7. As the project progresses and transactions are recorded, the system monitors consumption continuously
+8. When any WBS and cost code line reaches its configured threshold, the PM receives an in-system notification identifying the specific line, its current consumption percentage, and the remaining available budget
+9. The BvA Dashboard highlights the line with the at-risk indicator.
+10. If budget is subsequently reallocated and consumption drops below the threshold, the alert resets
+	1.  Admin can set a company-wide default alert threshold in Settings
+2. PM can override the company default per project
+3. PM can set different thresholds per cost category within a project
+4. The system monitors consumption continuously, alerting fires as soon as the threshold is crossed
+5. Alert fires once per threshold crossing, not repeatedly
+6. Alert resets if budget is reallocated and consumption drops below the threshold
+7. PM can configure who receives alerts per project
+	1. Admin can set and save a company-wide default threshold
+2. PM can set a project-level threshold that overrides the company default
+3. PM can set different thresholds per cost category. These override both project and company defaults
+4. Alert fires correctly when the formula reaches the threshold percentage
+5. Alert does not fire repeatedly; it fires once per threshold crossing
+6. Alert resets correctly if consumption drops below the threshold after a budget reallocation
+7. Alert appears in the notification bell for configured recipients
+8. PM can add or remove alert recipients from project settings
+	4. Project Request Module
+The Project Request Module is the mandatory entry point for all site spending. Every request must be tagged with a WBS element and a cost code before submission. The Budget Validation Gate fires automatically on every submission. The available budget for the tagged WBS element and cost code combination is displayed to the worker before they submit.
+4.1 Module Access & Navigation
+The module is accessible from the main module dashboard. It is optimized for mobile screen sizes and touch interaction. Site users with the appropriate access role will see the Project Request module tile on their dashboard.
+4.2 Request Type Definitions
+Request Type
+	Description
+	Processed In
+	Purchase Request
+	Request to procure goods or materials needed on-site
+	Invoice module: converted to PO by accountant
+	Labour Request
+	Request for additional human resources (workers, contractors)
+	Invoice Module: payment processed directly by accountant
+	Petty Cash Request
+	Request for small cash disbursements for on-site expenses
+	Invoice Module: payment processed directly by accountant
+	Subcontractor Request
+	Request to engage a subcontractor — supports lump-sum and milestone-based payment terms
+	Invoice module: converted to PO by accountant
+	Plant & Equipment Request
+	Request for machinery, tools, or equipment needed on-site
+	Invoice module: converted to PO by accountant
+	Material Consumption Request
+	Record of materials consumed from inventory on-site
+	Inventory Module: stock deducted automatically
+	 
+4.3 Request Initiation
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a site worker,
+I want to raise a new request from my mobile device.
+so that I can initiate procurement, labor, or material needs without visiting the office.
+	1. Site worker logs into FastraSuite on mobile
+2. Selects the Project Request module from the dashboard
+3. Sees a list of available request types
+4. Taps the relevant request type
+5. A simplified form appears pre-filled with the worker's name, project, date, and site location
+5. The worker selects the WBS elements.
+6. System immediately displays the Available Budget for that WBS element and combination
+7. The worker completes the remaining fields and submits
+8. Budget Validation gate fires automatically
+9. If within budget, request proceeds to approval queue with a confirmation message
+9. If over budget, request proceeds to approval queue while been flagged with a confirmation message
+	1. The system must support all 7 request types
+2. Forms must be mobile-optimized.
+3. Project name must be selectable from a list of active projects
+4. The WBS element must be selected from the activity elements of the selected project. This is mandatory
+5. Cost Code is auto-assigned by the system based on the request type. Site workers do not select a cost code. The PM or accountant can reclassify the cost code in the Invoice Module or Project Costing Module before the request is finalized if needed. 
+6. The Available Budget for the selected WBS element must be displayed immediately after both fields are selected
+7. The submitting user is auto-populated from the logged-in account
+8. Request date is auto-filled with the current date
+9. System must validate mandatory fields before submission
+10. Each submitted request must receive a unique reference ID
+11. The system must support local draft saving when the device has no internet connectivity. No drafts must sync automatically when connectivity is restored
+	1. Site worker can access the Project Request module on a mobile browser on a low-end device
+2. All 7 request type forms are available and accessible
+3. WBS Element field is present and mandatory on all six spending request forms
+4. Cost Code is auto-assigned based on the request type. 
+5. WBS dropdown shows only activity elements of the selected project
+6. The available budget is displayed immediately after the WBS element is selected. This updates in real time
+7. Mandatory fields are validated before submission
+8. A submitted request is assigned a unique ID (e.g., PR-2026-001).
+9. Worker receives a confirmation message on screen after submission
+10. Budget Validation Gate fires on every submission without exception
+11. Over-budget worker sees only the neutral review message; no financial figures are shown
+	 
+4.4 Purchase Request
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a site worker,
+I want to raise a Purchase Request for goods needed on-site,
+so that the procurement team can process the order.
+	1. Worker selects "Purchase Request" from the request type list
+2. Form is displayed with fields:
+   - Request ID (auto-generated)
+   - Project (select from active projects)
+   - WBS Element (select from activity elements of the selected project)
+   - Cost Code (auto-generated)
+   - Date (auto-filled with current date)
+   - Requested By (auto-filled from logged-in user)
+   - Site Location
+   - Required By Date
+   - Product Line (product name, description, quantity, estimated unit cost)
+   - Notes / Justification
+3. After selecting WBS Element and Cost Code, the system displays the Available Budget for that combination
+4. Worker adds one or more product lines
+5. Worker submits the request
+6. Budget Validation Gate fires automatically
+7. If within budget — request is sent to the Invoice Module and worker receives a confirmation message
+8. If over budget, request proceeds to approval queue while been flagged with a confirmation message
+	1. At least one product line is required before submission
+2. WBS Element is mandatory; only activity elements of the selected project are selectable
+3. Available Budget must be displayed for the selected WBS element before the worker enters cost details
+4. The request must be linked to the originating project
+5. Budget Validation Gate fires automatically on every submission
+6. On approval, the approved amount is added to the Committed Amount in the Costing Engine for the tagged WBS element
+	1. Form cannot be submitted without at least one product line
+2. WBS Element dropdown is visible and mandatory — shows only activity elements
+3. Available Budget is displayed immediately after WBS Elements are selected
+4. A draft PR is automatically created in the Purchase Module upon submission, carrying the WBS element references
+5. The PR in the Purchase Module references the original Project Request ID
+6. The purchase team can view and process the request in the Purchase Module
+7. Budget Validation Gate fires on every submission
+8. Within-budget requests proceed to the approval queue. The over-budget requests proceed to the approval queue while being flagged.
+10. On approval, the Costing Engine Committed Amount increases by the approved request value
+	 
+4.5 Labour Request
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a site manager,
+I want to request additional labor resources so that staffing gaps on-site can be addressed promptly.
+	1. Manager selects labor request from the request type list
+2. Form is displayed with fields:
+   - Request ID (auto-generated)
+   - Project (select from active projects)
+   - WBS Element (select from activity elements of the selected project)
+   - Cost Code (auto-generated)
+   - Date Required
+   - Number of Workers
+   - Role / Trade Type
+   - Duration (numeric input with a Days or Weeks selector)
+   - Estimated Daily Rate
+   - Projected Cost (auto-calculated and read-only)
+   - Justification Notes
+3. After selecting WBS Element and Cost Code, the system displays the Available Budget for that combination
+4. Manager submits the request
+5. Budget Validation Gate fires using the projected cost as the validation amount
+6. On approval, the projected cost is added to the Committed Amount in the Costing Engine and the request is routed to the Invoice Module
+	1. Role Type field must support free-text entry or selection from predefined roles
+2. The WBS element is mandatory. Only phase and activity elements of the selected project are selectable
+3. Available Budget must be displayed for the selected WBS element before the manager enters cost details
+5. Projected Cost Formula: Number of Workers × Duration in Days × Estimated Daily Rate
+6. If the manager selects Weeks as the duration unit, the system must automatically convert to days before calculating — 1 week = 7 days
+7. The Projected Cost field must recalculate and display instantly whenever the Number of Workers, Duration, or Estimated Daily Rate fields change
+8. The Projected Cost field is auto-calculated and read-only — the manager cannot type into it directly
+9. Budget Validation Gate fires using the projected cost as the validation amount
+10. On approval, the projected cost is added to the Committed Amount in the Costing Engine
+	1. Labour request form captures all required fields
+2. WBS Element dropdown is visible and mandatory — shows only activity elements
+3. Available Budget is displayed immediately after WBS Elements are selected
+4. Projected cost formula is applied correctly: Workers × Duration in Days × Daily Rate
+5. When duration is entered in weeks, the system automatically converts to days before calculating — 2 weeks = 14 days
+6. Projected cost recalculates instantly when any of the three input fields change
+7. Manager cannot manually edit the Projected Cost field
+8. Budget Validation Gate fires using the projected cost — not just the daily rate
+9. On approval, the Costing Engine Committed Amount increases by the projected cost value
+	 
+4.6 Petty Cash Request
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a site worker,
+I want to request petty cash for minor on-site expenses.
+so that small purchases can be made without formal procurement.
+	1. Worker selects "Petty Cash Request" from the request type list
+2. Form is displayed with fields:
+   - Request ID (auto-generated)
+   - Project (select from active projects)
+   - WBS Element (select from activity elements of the selected project)
+   - Cost Code (auto-generated)
+   - Date
+   - Amount Requested
+   - Purpose / Expense Category
+   - Description of Expense
+   - Notes
+3. After selecting WBS elements, the system displays the Available Budget for that combination
+4. Worker submits the request
+5. Budget Validation Gate check runs on submission
+6. If over budget — the request is flagged while being moved to the approval queue.
+	1. A maximum petty cash limit per request must be configurable in system settings
+2. If the amount exceeds the petty cash limit, the system must warn the user and suggest a Purchase Request instead
+3. WBS Element is mandatory — only activity elements of the selected project are selectable
+4. Available Budget must be displayed for the selected WBS element before the worker enters the amount
+5. The Budget Validation Gate check must run on every submission
+6. Approved petty cash is recorded as an Actual Cost in the cost engine upon payment
+7. The finance team must be able to approve or reject petty cash requests
+	1. Amount field is validated against the configured maximum petty cash limit
+2. A warning is shown if the petty cash limit is exceeded
+3. WBS Element dropdown is visible and mandatory — shows only activity elements
+4. Available Budget is displayed immediately after WBS Elements are selected
+5. Both the petty cash limit check and the Budget Validation Gate run on every submission
+6. Finance receives a notification for approval
+7. On approval and disbursement, the actual cost is recorded in the Costing Module
+8. Rejected requests are visible to the requester with a rejection reason
+9. The over-budget requests proceed to the approval queue while being flagged.
+	 
+4.7 Subcontractor Request
+The subcontractor request supports both lump-sum and milestone-based payment terms. When milestone-based is selected, the PM defines the milestones and their payment amounts at the time of the request. Each milestone payment is only released when the PM marks the corresponding milestone as complete.
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a project manager,
+I want to formally request the engagement of a subcontractor with the option to define milestone-based payment terms so that specialized work can be outsourced through the proper financial process with payments tied to verified progress.
+	1. Manager selects "Subcontractor Request" from the request type list
+2. Form is displayed with fields:
+   - Request ID (auto-generated)
+   - Project (select from active projects)
+   - WBS Element (select from activity elements of the selected project)
+   - Cost Code (auto-generated)
+   - Subcontractor Name (select from existing vendors or enter as free text)
+   - Scope of Work
+   - Start Date / End Date
+   - Payment Type (Lump Sum or Milestone-Based)
+   - Contract Value (Estimated)
+   - Payment Terms
+   - Justification Notes
+
+
+3. If Milestone-Based is selected: PM adds milestone lines, each with a milestone name, percentage of the contract value, and completion criteria
+4. After selecting WBS Element and Cost Code, the system displays the Available Budget for that combination
+5. Manager submits the request
+6. Budget Validation Gate fires using the total contract value as the validation amount
+7. On approval: contract value is added to the Committed Amount; request is routed to the Invoice Module
+8. For milestone-based: each milestone payment is only processable after the PM marks that milestone as complete
+	1. The subcontractor’s name must be selectable from existing vendor records or entered as free text. If entered as free text, a corresponding vendor record must be automatically created in the Inventory Module upon approval
+2. Payment Type must support Lump Sum and Milestone-Based options
+3. For Milestone-Based: the PM must define at least two milestones — the percentage values of all milestones must total 100%
+4. The WBS element is mandatory. Only activity elements of the selected project are selectable
+5. Available Budget must be displayed before the PM enters the contract value
+6. Budget Validation Gate fires using the total contract value as the validation amount
+7. The WBS element and cost code references must carry through to all downstream records in the invoice module.
+	1. Request is linked to the project and includes all required scope and cost fields
+2. WBS Element dropdown is visible and mandatory — shows only activity elements
+3. Cost Code dropdown is visible and mandatory
+4. Available Budget is displayed immediately after WBS Element and Cost Code are both selected
+5. Lump Sum and milestone-based payment type options are available and functional
+6. For milestone-based: the milestone percentage total must equal 100%. The system blocks submission if the total does not equal 100%
+7. On approval, the contract value is recorded as a committed cost in the costing module.
+8. For milestone-based: each milestone payment is only processable after the PM marks that milestone as complete
+9. WBS element and cost code references carry through to all downstream records
+	 
+Vendor Record Handling:
+1. Subcontractor names are selectable from existing vendor records in the Inventory Module
+2. No separate vendor management feature is required for this module — it relies entirely on the existing vendor list in the Inventory Module
+3. If a subcontractor does not exist as a vendor, the user may enter their details as free text on the request form
+4. Upon approval of the request, the system automatically creates a corresponding vendor record in the Inventory Module using the entered details
+5. On upgrade to Enterprise, the Purchase Module provides full vendor management, and historical subcontractor records can be formally created at that point.
+ 
+4.8 Plant & Equipment Request
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a site manager,
+I want to request a plant or equipment for the project site so that the required machinery is procured or hired on time.
+	1. Manager selects plant & equipment. Request from the request type list
+2. Form is displayed with fields:
+   - Request ID (auto-generated)
+   - Project (select from active projects)
+   - WBS Element (select from activity elements of the selected project)
+   - Cost Code (select from active cost codes — Plant & Equipment pre-selected by default)
+   - Equipment Name / Description
+   - Quantity
+   - Required Date
+   - Estimated Cost
+   - Notes / Justification
+3. After selecting WBS Element and Cost Code, the system displays the Available Budget for that combination
+4. Manager submits the request
+5. Budget Validation Gate fires using the estimated cost as the validation amount
+6. On approval, the estimated cost is added to the Committed Amount and the request is routed to the Invoice Module
+	1. The WBS element is mandatory. Only activity elements of the selected project are selectable
+2. Available Budget must be displayed for the selected WBS element and cost code combination before the manager enters the estimated cost
+3. Budget Validation Gate fires using the estimated cost as the validation amount
+4. On approval, the estimated cost is added to the Committed Amount in the Costing Engine
+5. All plant and equipment requests are routed to the Invoice Module for payment processing
+6. Recurring hire payments are handled as individual manual entries.
+	1. WBS Element dropdown is visible and mandatory. It shows only activity elements
+2. Available Budget is displayed immediately after WBS elements are selected
+3. Committed cost is recorded in the Costing Module on approval
+5. Actual cost is updated once the associated payment is confirmed in the Invoice Module
+6. Request is routed to the Invoice Module upon approval for payment processing
+	 
+4.9 Material Consumption Request
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a site worker, I want to record materials consumed from inventory on-site so that inventory levels are accurate and project material costs are tracked.
+	1. Worker selects the material consumption request from the request type list
+2. Form is displayed with fields:
+   - Request ID (auto-generated)
+   - Project (select from active projects)
+   - WBS Element (select from activity elements of the selected project)
+   - Cost Code (auto-generated)
+   - Date Consumed
+   - Location / Warehouse
+   - Product Line (product name, quantity, unit of measure, unit cost, total cost)
+   - Notes
+3. If within available stock, the request is moved to the approval queue.
+4. If approved, the stock is deducted from the inventory module.
+5. If there is insufficient stock, the system blocks submission with a clear message.
+	1. Only products available in the linked inventory location can be selected
+2. The WBS element is mandatory.
+3. Available Budget must be displayed for the selected WBS element before the worker enters quantities
+4. The system must validate that sufficient stock exists before submission
+5. Consuming materials from inventory reduces the stock on hand and records which WBS element the materials were used on 
+6. Stock is deducted from inventory automatically when the request is approved
+	1. Products shown in the form are filtered to available inventory items only
+2. WBS Element dropdown is visible and mandatory.
+3. Available Budget is displayed immediately after WBS Element and Cost Code are both selected
+4. The system prevents submission if the requested stock quantity exceeds the available stock on hand
+5. On approval, the Inventory Module deducts the specified quantity
+6. The consumption record is visible in the Inventory Module 
+7. Form cannot be submitted without at least one product line
+	4.10 Request Approval Workflow
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As an approver,
+I want to review and approve or reject requests submitted from the site so that I can control project spending and ensure requests are valid.
+	1. The approver receives a notification (in-app and/or email) of a new pending request.
+2. Approver logs in and navigates to the Approver section in the Project Request Module.
+3. The approver sees a list of pending requests filtered by project and type
+4. Approver clicks on a request to view full details
+5. Approver can
+   a. Approve: The request moves to the processing queue in the relevant module.
+   b. Reject: The approver must provide a rejection reason.
+   c. Request Clarification: The request is returned to the submitter with comments.
+6. The submitter is notified of the outcome.
+	1. Approval roles must be configurable per request type and per project
+2. Approver must be able to view the full request form and all attachments
+3. All approval decisions must be logged with a timestamp and the approver's name
+4. The original requester can resubmit a rejected request after editing
+5. Approved requests must automatically trigger the relevant action in the back-office module
+	1. approver receives notification within seconds of submission
+2. Approve, Reject, and Request Clarification options are all available
+3. Rejection requires a mandatory reason field
+4. All decisions are logged in the request audit trail
+5. Approval triggers the creation of the corresponding record in the back-office module
+5. The submitter receives a notification of the decision, including the reason if rejected
+6. Resubmission is allowed after rejection.
+	
+
+4.10 Request Status Definitions
+Status
+	Description
+	Next Possible States
+	Draft
+	The request has been created but not yet submitted.
+	Submitted, Deleted
+	Submitted
+	Request has been submitted and is pending review.
+	Approved, Rejected, Clarification Needed
+	Clarification Needed
+	The approver has returned the request to the submitter for more information.
+	Submitted
+	Approved
+	Request has been approved and sent to the back office for processing.
+	In Progress
+	Rejected
+	Request has been declined. The reason is provided.
+	Resubmitted
+	In Progress
+	The back office is processing the request.
+	Completed
+	Completed
+	Request has been fully processed, and payment or action is confirmed.
+	Closed
+	 
+5. Project Costing Module
+The Project Module is the financial management and reporting backbone of FastraSuite, powered by the Project Costing Engine. This module is displayed to users under industry-appropriate terminology — for example, the company admin may rename it to match their organization — but operates on a unified, flexible structure underneath.
+5.1 Module Purpose & Scope
+This module supersedes and extends the project costing functionality described in the original PRD. Key terminology standardization:
+Old Term (Original PRD)
+	New Standard Term
+	BOQ
+	Project Budget
+	Budget Estimate
+	Project Budget
+	Total Actual Cost
+	Actual Amount
+	Cost Margin
+	Variance
+	 
+5.2 Project Creation & Budget Setup
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a project manager,
+I want to create a new project and define its budget so that all subsequent financial activities can be tracked against an approved plan.
+	1. The PM logs into FastraSuite and navigates to the Project Costing Module.
+2. Clicks New Project
+3. Fills in project details:
+   - Project Name
+   - Project Code (auto-generated, editable)
+   - Client Name
+   - Project Type (Fixed Price / Time & Material / Cost Plus / Milestone-based)
+   - Start Date
+   - Expected End Date
+   - Project Manager (auto-filled from logged-in user)
+   - Description
+4. Navigates to the WBS menu and builds the project hierarchy
+5. Navigates to the Budget tab
+6. Attaches budget lines to activity WBS elements.
+7. A project cannot be activated without at least one budget line
+8. Saves the project in draft status
+9. Submits for approval. On approval, project status moves to active.
+	1. A project must have at least a name and a total budget to be saved.
+2. Budget must be broken down by WBS element. Not just by top-level category
+3. Budget lines can only be attached to activity WBS elements
+4. Category totals must not exceed the overall project budget
+5. A project cannot be activated without at least one budget line attached to a activity WBS element
+6. Project status must follow the below: Draft → Pending Approval → Active → Completed / Closed
+7. Once active, budget lines cannot be deleted. They can be adjusted with PM-level permission only, and every adjustment generates an audit log entry.
+8. All budget revisions must be logged with the reason, old value, new value, and approving user.
+	1. The project creation form captures all required fields
+2. Budget breakdown by WBS element is required before a project can be activated
+3. Budget lines can only attach to activity elements — the system blocks attachment to parent elements
+4. Category totals are validated against the overall budget in real time
+5. Project moves to Active status only after approval
+6. Budget edits on an Active project trigger a revision workflow
+7. All budget revision history is accessible in the project record
+8. Each project has a unique system-generated project code
+
+
+	 
+5.3 Project Dashboard & Analytics
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a project manager or stakeholder, I want to view a comprehensive project dashboard so that I can immediately understand project financial performance at a glance.
+	1. The user navigates to the Project Module and selects a project.
+2. Dashboard loads and displays:
+   - Header: project name, status, PM name, start date, expected end date
+   - Financial KPI cards: Budget, Actual, Committed, Remaining, Variance
+   - Budget utilization bar (visual progress indicator)
+   - Spend by category breakdown (chart)
+   - Timeline view: spend over time vs the budget curve
+   - Recent transactions list
+   - Pending requests count and value
+   - Budget health indicator (On Track / At Risk / Over Budget)
+3. The user expands WBS elements to view the financial breakdown at every hierarchy level. 
+4. The user clicks on any financial figure to view underlying transactions.
+5. User applies filters by:
+* Date range
+* WBS element
+* Cost code
+6. User reviews budget vs. actual analysis across all project activities 
+7. User exports the financial summary as PDF.
+	1. The dashboard must display project financial data at every level of the WBS hierarchy. 
+2. All financial figures must update in real time as transactions occur. 
+3. The dashboard must support WBS drill-down from parent elements to activity level 
+4. Clicking any financial figure must open the filtered list of contributing transactions. 
+5. Budget health status must be calculated automatically using configured variance thresholds. 
+6. The dashboard must support filtering by date range, WBS element, and cost code.
+7. The spend-over-time chart must support comparison against the planned spend curve. 
+8. Dashboard data must refresh automatically without manual page reload. 
+9. The dashboard must load within 3 seconds for projects with up to 500 transactions. 
+10. Dashboard data must be exportable as PDF and Excel. 
+11. The export must include all visible KPIs, charts, and analysis tables 
+12. The Pending Requests widget must display the count and total value of requests awaiting approval. 
+	1. The dashboard displays all required KPI cards correctly.
+2. All 8 budget vs. actual analysis columns display correctly for every WBS element.
+3. Financial figures update automatically when transactions occur
+4. Expanding a parent WBS element displays all child elements with their own financial data. 
+5. Budget health indicators display correctly based on configured thresholds. 
+6. Clicking any KPI or financial figure opens the correct filtered transaction list. 
+7. Spend-by-category charts accurately reflect confirmed payments by category. 
+8. Timeline charts update automatically as new payments are confirmed. 
+9. Date range filters update all dashboard widgets and analysis tables simultaneously. 
+10. Dashboard loads within 3 seconds for projects with up to 500 transactions 
+11. PDF and Excel exports generate properly formatted reports with all visible dashboard data 
+12. The Pending Requests widget displays the correct count and total value of outstanding approvals. 
+	5.4 Budget vs Actual Analysis
+Dashboard Data Columns:
+For every WBS element, the dashboard displays:
+Column
+	Definition
+	WBS Element
+	The project phase, sub-phase, or activity using the company's configured terminology
+	Cost Code
+	The spending category
+	Budgeted Amount
+	The approved budget for this WBS element and cost code combination
+	Committed Amount
+	Approved but unpaid requests against this line
+	Actual Amount
+	Confirmed payments against this line
+	Remaining Budget
+	Budgeted − Committed − Actual
+	% Consumed
+	(Committed + Actual) ÷ Budgeted × 100
+	Budget Health
+	On Track, At Risk, or Over Budget based on configured thresholds.
+	
+
+Budget Health Indicators:
+Status
+	Condition
+	On Track
+	% Consumed is below the configured alert threshold.
+	At Risk
+	% Consumed is at or above the alert threshold but below 100%.
+	Over Budget
+	The actual amount plus the committed amount exceeds the budgeted amount.
+	  
+5.5 Budget Revision Workflow
+The original approved budget for any active project is permanently locked. It cannot be edited, overwritten, or deleted. All budget changes are stored as adjustment entries on top of the original. The current approved budget at any point in time is always system-calculated as the original approved budget plus all approved adjustment entries.
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a project manager, I want to submit structured budget adjustments when project scope changes so that all budget changes are properly controlled, traceable, and approved without modifying the original approved budget. 
+	1. PM identifies the need for a budget change.
+2. PM opens the project and clicks Add Budget Adjustment
+3. PM adds one or more adjustment lines:
+    - Adjust Existing Activity (select WBS activity, enter adjustment amount)
+     - Add New Activity (create new WBS activity with budget)
+4. PM reviews the adjustment summary showing:
+     - Original Approved Budget
+     - Total Adjustment Value
+      - New Calculated Budget
+5. PM submits the adjustment for approval.
+6. Approver reviews and either approves or rejects.
+7. On approval, the system applies adjustments and recalculates all budgets and WBS rollups.
+8. On rejection, no changes are applied, and the PM is notified with the reason.
+	1. The original approved budget must be locked after project activation.
+2. All budget changes must be stored as adjustment entries and never overwrite original values.
+3. Budget adjustments must be linked to WBS activities and cost codes.
+4. The system must support both:
+   - Adjusting existing WBS activities
+   - Adding new WBS activities
+5. All adjustments must go through an approval workflow before becoming active.
+6. Budget decreases are only allowed if enabled in system settings.
+7. The current approved budget must always be system-calculated.
+8. All adjustments must be fully auditable and stored in the revision history.
+9. New activities created through adjustment must automatically be added to the WBS.
+10. All WBS rollups must be updated. automatically after approval.
+	1. PM can access Add Budget Adjustment on active projects.
+2. PM can add both existing activity adjustments and new activities in one request.
+3. The system displays the original budget as read-only.
+4. The system calculates the updated budget before submission.
+5. An adjustment cannot be submitted if the WBS or cost code is missing.
+6. The approver receives notification when the adjustment is submitted.
+7. On approval, the system updates the WBS and budget automatically.
+8. On rejection, no financial or structural changes are applied.
+9. All approved adjustments are permanently stored and immutable.
+10. The current approved budget always equals the original budget plus approved adjustments.
+
+
+
+
+	6. Module Integration & Data Flows
+6.1 Overview
+All modules in FastraSuite are interconnected. The following describes how data originates in the Project Request Module and flows through the system, ultimately landing in the Project Costing Module as tracked financial data. Every transaction carries a mandatory reference, the WBS element, and that ensures costs are tracked at the correct level of the project hierarchy.
+6.2 End-to-End Data Flow
+Step
+	Action
+	Module Involved
+	Financial Impact on Project Costing
+	1
+	The user selects WBS components on site.
+
+
+	Project Request Module
+	User selects WBS components on-site.
+Project Request Module
+The available budget is displayed for reference. 
+	2
+	A site worker submits a request. 
+	Project Request Module
+	Request is created in the system (no financial impact).
+	3
+	The budget validation gate fires automatically.
+	Project Costing Module
+	System validates availability (no financial change). 
+	4a
+	Request is within budget and proceeds to the approval queue. 
+	Project Request Module
+	Request is routed to the PM approval queue. 
+	4b
+	Request exceeds budget threshold
+	Project Request Module
+	Request is flagged for attention but still proceeds to the PM approval queue.
+	5
+	The PM approves the request. 
+	Project Request Module
+	Request is marked as committed and linked to the WBS element and cost code. 
+	6
+	The back office processes the request; a PO is generated.
+	Invoice Module
+	A PO is issued and tracked (commitment remains active). 
+	7
+	PO approved and sent to vendor
+	Invoice Module
+	Committed amount maintained
+	8
+	Goods are received on-site; the supervisor confirms receipt and uploads supporting evidence. 
+	Inventory Module
+	Stock on hand is updated based on received quantity. 
+	8b
+	System detects a quantity variance between the PO and the material receipt.
+	Project Request Module and Invoice Module
+	A variance alert is triggered, and Finance + PM are notified automatically. 
+	9
+	The vendor invoice is received and matched to the PO.
+	Invoice Module
+	The invoice is recorded and linked for matching (no financial posting yet). 
+	10
+	3-way match process is executed (PO vs Goods Receipt vs Invoice)
+	Invoice Module
+	System validates consistency across all documents. 
+	11a
+	Full match confirmed 
+	Invoice Module
+	The invoice is released to the accounts payable queue for payment processing. 
+	11b
+	Mismatch detected 
+	Invoice Module
+	The invoice is placed on hold pending resolution, and Finance is notified. 
+	12
+	Finance approves payment.
+	Invoice Module
+	Committed Amount releases; the actual amount increases for the tagged WBS element.
+	13
+	Project Costing Dashboard updates in real time
+	Project Costing Module
+	All KPIs recalculate: Budgeted, Committed, Actual, Remaining, % Consumed
+	14
+	For material consumption, stock deducted on validation
+	Inventory Module
+	Inventory is updated and consumption is reflected in project costing records 
+	6.3 Integration Rules
+1. A request in the Project Request Module must always be linked to an active project. Closed projects cannot receive new requests
+2. Every transaction across all modules must carry a valid WBS element reference and a cost code reference. No transaction can be submitted without both fields
+3. The WBS element referenced must be a activity element; parent elements cannot receive transactions
+4. The Budget Validation Gate fires on every request submission in the project request module
+5. The WBS element and cost code references must carry through from the originating request to every other module
+6. Payment cancellation or reversal in the Invoice Module must trigger a reversal of the actual cost entry in the Project Costing Module
+7. Finance must be automatically notified whenever a Material Receipt quantity does not match the corresponding PO quantity
+6.4 Budget Commitment Logic
+Event
+	Effect on Costing Engine
+	Request approved (within budget)
+	The committed amount increases by the approved value for the tagged WBS element and cost code
+	Request approved with PM override
+	The committed amount increases by the approved value
+	Request Rejected by PM 
+	The committed amount (if previously reserved) is released immediately. 
+	Approved Request Cancelled before Payment 
+	The committed amount is released immediately
+	Purchase Order Cancelled after Approval 
+	The committed amount is released immediately. 
+	Payment confirmed in Invoice Module
+	The committed amount is released, and the actual amount increases for the tagged WBS element and cost code.
+	Material consumption validated (within budget)
+	The actual amount increases directly where applicable; no committed stage is applied for consumption-based transactions. 
+	Material consumption cancelled
+	The previously recorded actual amount is reversed immediately. 
+	Material Receipt confirmed
+	Inventory stock on hand increases by the actual quantity received
+	7. Settings & Configuration
+7.1 Project Request Module Settings
+Setting
+	Description
+	Petty Cash Maximum Limit
+	Maximum amount allowed per petty cash request, which is configurable by admin (e.g., ₦50,000)
+	Notify on Submission
+	Send notification to approver on new submission, which is enabled by default
+	Notify on Approval
+	Send a notification to the submitter on approval or rejection. This is enabled by default
+	Auto-create Back-Office Record on Submission
+	Automatically create a draft PR or invoice on request submission. This is enabled by default
+	Allow Resubmission After Rejection
+	Allow submitters to revise and resubmit rejected requests. Enabled by default
+	Optional Waybill Photo on Material Receipt
+	Block material receipt confirmation without at least one photo attachment. This is enabled by default
+	
+
+7.2 Project Module Settings
+Setting
+	Description
+	Budget Health Thresholds
+	Set percentage variance thresholds for On Track, At Risk, and Over Budget. Default: 5% and 15%
+	Company Default Alert Threshold
+	Default consumption percentage that triggers the Overrun Alert System; default: 80%
+	Budget Revision Requires Approval
+	Require formal approval for all budget changes on Active projects, enabled by default
+	Allow Budget Decrease
+	Allow the project budget to be reduced via revision; disabled by default
+	Default Project Currency
+	Set the base currency for all project financial data: system default
+	Require Category Budget Breakdown
+	Require PMs to allocate budget to WBS elements on project creation; enabled by default
+	Dashboard Auto-Refresh Interval
+	How often the dashboard refreshes financial data; default: 5 minutes
+	3-Way Match Tolerance
+	Acceptable discrepancy percentage for 3-Way Match — default: 0% (exact match required)
+	Low Stock Alert Threshold
+	Configurable per material item per site — triggers an alert when stock on hand falls below this quantity
+	 
+8. Access Control & Roles[a]
+8.1 Design Principle
+FastraSuite does not enforce fixed job title roles across all companies. Different organizations are structured differently, use different job titles, and assign responsibilities differently. Forcing every company into a predefined role structure creates friction and limits the flexibility that a SaaS platform should offer.
+Instead, FastraSuite uses a permission-based access control system. When a company admin creates a user account, they configure that user's permissions directly across all modules in one screen. There are no mandatory role assignments and no group structures that every user must fit into.
+For companies with large teams where many users share the same permissions, the admin can create optional permission templates to speed up user creation. Templates are not mandatory. They exist only to save time.
+8.2 The Seven Permission Types
+FastraSuite has seven permission types. These are defined by the system and do not change. They describe what a user can do, not what their job title is.
+Permission Type
+	What It Allows
+	Requester
+	Create and submit requests. The user can initiate activity in the system.
+	Reviewer
+	View records, dashboards, and reports. The user can see what is happening but cannot take any action.
+	Approver
+	Approve or reject requests, budgets, and adjustments submitted by others. A user with this permission cannot approve their own submissions.
+	Processor
+	Convert approved requests into purchase orders and manage the accounts payable queue.
+	Payer
+	Authorize and execute payments. This is the most sensitive permission in the system.
+	Manager
+	Create projects, build the WBS, set and adjust budgets, and configure project-level settings.
+	Administrator
+	Manage users, configure permissions, manage cost codes, and configure company-wide settings.
+	8.3 Permission Types by Module
+Not every permission type applies to every module. Where a permission type has no relevance to a module, it is not shown on that module's column in the permissions grid and cannot be selected.
+Project Request Module
+Permission Type
+	What the User Can Do
+	Requester
+	Create and submit purchase requests, labor requests, petty cash requests, plant and equipment requests, and material consumption requests.
+	Reviewer
+	View all requests across their assigned projects. Cannot submit, approve, or take any action.
+	Approver
+	Approve or reject requests submitted by others. Cannot approve requests they submitted themselves.
+	Manager
+	Submit Subcontractor Requests. Subcontractor requests are restricted to users with manager permission because they involve contracts and significant financial commitments. View all requests across all projects.
+	Administrator
+	Full access to all actions, including configuration of the petty cash limit.
+	Project Costing Module
+Permission Type
+	What the User Can Do
+	Reviewer
+	View the BvA Dashboard, project financial summary, and all reports. Cannot make any changes.
+	Approver
+	Approve or reject project budgets and budget adjustment requests submitted by others.
+	Manager
+	Create projects, build the WBS, set up project budgets, submit budget adjustment requests, configure project-level alert thresholds, and generate and export reports.
+	Administrator
+	Full access including closing and archiving projects, configuring company-wide alert thresholds, and managing the cost code library.
+	Invoice Module
+Permission Type
+	What the User Can Do
+	Reviewer
+	View approved requests, purchase orders, the accounts payable queue, and the cash flow view. Cannot take any action.
+	Approver
+	Approve invoices for payment processing.
+	Processor
+	Convert approved requests to purchase orders and manage the accounts payable queue.
+	Payer
+	Authorize and execute payments. A user must have Payer permission to process any payment in the system. No other permission type grants this ability.
+	Administrator
+	Full access, including configuring the 2-point match tolerance.
+	Inventory Module
+Permission Type
+	What the User Can Do
+	Requester
+	Submit Material Consumption Requests.
+	Reviewer
+	View stock on hand and the inventory ledger. Cannot make any changes.
+	Approver
+	Confirm material receipts. Approve material consumption requests.
+	Manager
+	Configure low stock alert thresholds per material item per site.
+	Administrator
+	Full access including manual stock adjustments. Every manual adjustment requires a mandatory reason and generates a permanent audit log entry.
+	Settings
+Permission Type
+	What the User Can Do
+	Administrator
+	Manage users, configure permissions, manage permission templates, and configure company-wide settings. Only users with administrator permission on settings can access the settings module.
+	8.4 How User Permissions Are Configured
+When the company admin creates a new user account, they configure that user's permissions directly in one screen. There are no separate group screens or group assignments. The admin sees a single permissions grid covering all modules and ticks exactly what that specific user needs.
+The Permissions Grid
+The grid has modules as rows and permission types as columns. The admin ticks the permissions relevant to that user. Where a permission type does not apply to a module, that cell is not shown and cannot be selected.
+Module
+	Requester
+	Reviewer
+	Approver
+	Processor
+	Payer
+	Manager
+	Administrator
+	Project Request Module
+	☐
+	☐
+	☐
+	
+
+	
+
+	☐
+	☐
+	Project Costing Module
+	
+
+	☐
+	☐
+	
+
+	
+
+	☐
+	☐
+	Invoice Module
+	
+
+	☐
+	☐
+	☐
+	☐
+	
+
+	☐
+	Inventory Module
+	☐
+	☐
+	☐
+	
+
+	
+
+	☐
+	☐
+	Settings
+	
+
+	
+
+	
+
+	
+
+	
+
+	
+
+	☐
+	The admin saves the configuration, and the user's permissions are active immediately
+8.5 Permission Templates
+For companies with large teams where many users share the same permissions, the Company Admin can create named permission templates. A template is a pre-saved permissions grid configuration that the admin can apply when creating a new user to pre-fill their permissions grid.
+How templates work:
+1. Admin navigates to Settings and selects Permission Templates
+2. Clicks Create New Template
+3. Enters a template name of their choosing
+4. Configures the permissions grid for that template
+5. Saves the template
+When creating a new user, the admin can optionally select a template to pre-fill the permissions grid. After applying the template, the admin can still adjust individual permissions for that specific user before saving. The template is a starting point, not a fixed assignment.
+Important: Templates are entirely optional. A company with a small team or unique user structures can configure every user individually without creating any templates. The system works fully without them.
+Template rules:
+A template can be edited at any time. Editing a template does not retroactively change the permissions of users who were previously created using that template. Each user's permissions are independent once saved. A template can be archived when it is no longer needed. An archived template cannot be applied to new users, but existing users are not affected.
+8.6 Unbreakable System Rules
+These rules apply regardless of how permissions are configured. They cannot be overridden by any admin or any permission configuration.
+Rule 1: No Self-Approval
+A user cannot approve any request, budget, or adjustment they submitted themselves. If a user has both Requester and Approver permissions, the system automatically routes their own submissions to another user with Approver permission. If no other approver is available, the submission is held and the administrator is notified.
+Rule 2: Super Admin Is Unrestricted
+The Company Super Admin, the first person to register the company on FastraSuite, has full access to all actions across all modules at all times. This cannot be restricted by any permission configuration.
+8.7 General Permission Rules
+Immediate effect: Changes to a user's permissions take effect immediately. The user does not need to log out and log back in.
+Hidden not disabled: If a user does not have permission for an action, that action is not visible to them at all. They do not see a greyed-out button. The option simply does not appear on their screen.
+Minimum permission: A user with no permissions ticked on a module cannot access that module at all. The module tile does not appear on their dashboard.
+Cumulative permissions: Permissions within the same module are independent of each other. A user can have Reviewer and Approver permissions on the Project Costing Module simultaneously, giving them the ability to view and also approve budgets.
+8.8 Typical Permission Configurations by Function
+These are examples only. Companies can configure permissions in any way that fits their structure.
+Typical Function
+	Suggested Permissions
+	Field worker submitting requests
+	Requester on Project Request Module and Inventory Module
+	Person reviewing and approving site requests
+	Reviewer and Approver on Project Request Module
+	Person managing projects and budgets
+	Manager on Project Costing Module and Approver on Project Request Module
+	Person monitoring financial performance only
+	Reviewer on Project Costing Module and Invoice Module
+	Person processing purchase orders
+	Processor on Invoice Module and Reviewer on Project Request Module
+	Person authorising payments
+	Payer and Approver on Invoice Module
+	Person managing stock on site
+	Approver and Reviewer on Inventory Module
+	Person managing the whole system
+	Administrator on Settings
+	
+
+The following roles and permissions apply across both new modules. These are configurable via the existing Access Groups feature in the Settings module.
+ 
+9. Finance Ledger Extension
+The Finance Ledger Extension is NOT a new module. It extends the existing invoice module. No new module tile is created on the dashboard. Finance users access these features from within the existing invoice module. It adds four capabilities: 3-Way Match Logic, Accounts Payable Queue, Cash Flow View, and Payment Approval Workflow.
+9.1 3-Way Match Logic
+The 3-way match automatically verifies that the purchase order amount, the site receipt quantity confirmed by the site supervisor via material receipt logging, and the vendor invoice amount all agree before an invoice is allowed to proceed to payment.
+What 3-Way Match Checks:
+Check
+	What Is Compared
+	Source of Data
+	PO vs Site Receipt
+	Purchase Order quantity and amount vs actual quantity confirmed by the Site Supervisor
+	PO from Invoice Module; receipt from Material Receipt Logging
+	Site Receipt vs Invoice
+	Actual quantity confirmed on-site vs quantity billed on the vendor's invoice
+	Material Receipt Logging: vendor invoice
+	PO vs Invoice
+	Purchase Order agreed price vs the price on the vendor's invoice
+	PO from Purchase Module; vendor invoice
+	
+
+3-Way Match Outcomes:
+Outcome
+	Condition
+	Action
+	Full Match
+	All three match within the configured tolerance
+	Invoice moves automatically to the Accounts Payable queue
+	Partial Match
+	Minor discrepancy within the configurable tolerance
+	Invoice moves to the AP queue with a warning flag
+	Mismatch
+	Discrepancy exceeds the configured tolerance
+	Invoice is held. Finance is notified; manual resolution required
+	 
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a Finance Officer,
+I want the system to automatically verify that the purchase order, the site goods receipt, and the vendor invoice all agree before I process payment,
+so that I can prevent overpayments and catch discrepancies before money leaves the company.
+	1. Vendor's invoice is received and entered into the Invoice Module
+2. Finance user links the invoice to the originating Purchase Order
+3. System automatically runs the 3-Way Match using the PO data, the confirmed site receipt from Material Receipt Logging, and the vendor invoice
+4. The match result is displayed on the invoice record
+5. Full match — invoice proceeds to the Accounts Payable queue automatically
+6. Mismatch — invoice is held — Finance is notified with a full breakdown of the discrepancy
+7. Finance resolves the discrepancy — corrects the invoice, raises a dispute with the vendor, or escalates to management
+	1. The 3-Way Match runs automatically when a vendor invoice is linked to a PO — no manual trigger required
+2. The site receipt data point must come from a confirmed Material Receipt Logging submission — the system must block 3-Way Match processing if no site receipt confirmation exists
+3. Admin can configure an acceptable discrepancy tolerance — the default is 0% (exact match required)
+4. Invoices with discrepancies exceeding the tolerance are held automatically
+5. Finance receives an in-system notification when a mismatch hold occurs
+6. All 3-Way Match results — pass and fail — are logged in the invoice audit trail
+7. The mismatch notification must show the full breakdown of which check failed and by how much
+	1. 3-Way Match fires automatically when the invoice is linked to the PO
+2. System blocks 3-Way Match processing if no confirmed site receipt exists — Finance is notified that site confirmation is still pending
+3. Full match moves invoice to the AP queue without manual intervention
+4. Mismatched invoice is held and Finance is notified within 2 minutes
+5. Full breakdown of which check failed and by how much is visible on the invoice record
+6. Every 3-Way Match result is logged in the invoice audit trail with a timestamp
+	 
+9.2 Accounts Payable Queue
+AP Queue List View Columns:
+Column
+	Detail
+	Invoice ID
+	Unique invoice identifier
+	Vendor
+	Vendor name
+	PO Reference
+	Linked purchase order ID
+	Invoice Date
+	Date on the vendor invoice
+	Due Date
+	Payment due date based on payment terms
+	Amount
+	Total invoice amount
+	Match Status
+	Full Match or Partial Match with warning
+	WBS Element
+	The project WBS element this cost is tagged to
+	Cost Category
+	The spending category
+	Days Until Due
+	Countdown to the payment due date — queue is sorted by this field in ascending order by default
+	Status
+	Awaiting Approval, Approved, or Paid
+	 
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a Finance Officer,
+I want a structured queue of invoices that have passed the 3-Way Match check and are ready for payment approval,
+so that I can process payments in order of urgency without manually hunting for eligible invoices.
+	1. Finance Officer navigates to the Invoice Module and clicks Accounts Payable
+2. Sees the AP Queue list view—all invoices that have passed 3-Way Match, sorted by days until due—most urgent first
+3. Clicks on an invoice to open the full detail view
+4. Reviews the complete invoice record — vendor details, PO reference, match result, WBS element, cost code, payment terms, and amount
+5. The finance officer clicks. Request Payment Approval
+6. System routes the payment request to the designated approver
+7. The finance officer sees the invoice status update to "Awaiting Approval."
+8. Finance Officer receives a notification when the approver makes a decision
+	1. Invoices move to the AP queue automatically after passing 3-Way Match — no manual intervention required
+2.  The queue must clearly show the days until the payment due date for each invoice
+3.  The queue defaults to sorting by days until due—most urgent first
+4.  Every invoice in the queue must show its WBS element and cost code
+5.  Finance can filter the queue by vendor, due date range, status, WBS element, and cost code
+	1.  Invoices appear in the AP queue automatically after passing a 3-way match.
+2.  All 11 list view columns display correctly
+3.  Queue defaults to ascending days until due
+4.  All filters work correctly and can be combined
+5.  Payment approval action routes correctly to the designated approver
+6.  WBS element and cost code display correctly on every invoice in the queue
+	 
+9.3 Cash Flow View
+The cash flow view provides finance with a forward-looking view of expected cash outflows. The primary view is a 30-day projection based on approved invoice due dates and committed amounts from approved requests. Historical actual payments are also displayed for comparison.
+Cash Flow View Displays:
+Element
+	Detail
+	Timeline
+	A week-by-week or month-by-month view of expected payments—defaults to the next 30 days on load
+	Expected outflows
+	Sum of approved invoices grouped by due date
+	Committed not yet invoiced
+	Sum of committed amounts from approved requests that have not yet been invoiced
+	Actual payments made
+	Sum of payments confirmed in each historical period
+	Running balance
+	Cumulative cash position across the timeline
+	 
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a Finance Officer or CFO,
+I want a forward-looking view of expected cash outflows—with a prominent 30-day projection—across all active projects.
+so that I can plan cash availability and avoid payment delays caused by insufficient funds.
+	1. Finance Officer navigates to the Invoice Module and clicks Cash Flow
+2.  System displays the Cash Flow View—defaulting to the next 30 days as the primary view
+3.  View shows expected outflows (approved invoices grouped by due date), committed but not yet invoiced amounts, and historical actual payments
+4.  Finance Officer can switch to week-by-week or month-by-month views
+5.  Finance Officer applies filters by project, WBS element, cost code, or vendor
+6.  Finance Officer identifies high-spend periods and clicks to drill down to the individual invoices contributing to the outflow
+7.  The finance officer exports the data as PDF or Excel for reporting to the board
+	1. The default view must show the next 30 days on load—this is the primary short-term projection view
+2. Expected outflows must be based on approved invoice due dates
+3. Committed amounts from approved requests must be visible as expected future outflows
+4. The view must also show historical actual payments for comparison
+5. All data must reflect the current state of the system at all times
+6. Cash flow data must be exportable as PDF and Excel
+	1.  The default view shows the next 30 days on load
+2. Week-by-week and month-by-month views are both available
+3. Expected outflows are correctly calculated from approved invoices and their due dates
+4. Committed amounts from approved requests are visible as expected future outflows
+37.  Historical payments display correctly per period
+38.  All filters work correctly and update the view in real time
+39.  PDF and Excel exports include all visible data in a clean, formatted layout
+	 
+9.4 Payment Approval Workflow
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a CFO or Finance Manager,
+I want to formally approve payments before they are processed, so that no payment leaves the company without proper authorisation.
+	40.  Finance Officer selects an approved invoice from the AP queue and clicks Request Payment Approval
+41.  System routes the payment request to the designated approver — CFO or Finance Manager
+42.  Approver receives an in-system notification
+43.  Approver reviews the payment request — invoice detail, match result, WBS element, cost code, and amount
+44.  Approver approves or rejects — rejection requires a mandatory reason
+45.  On approval: payment is processed and the Costing Engine records the amount as Actual and releases it from Committed
+46.  On rejection: Finance Officer is notified with the rejection reason
+	47.  No payment can be processed without formal approval from a designated approver
+48.  The designated approver role is configurable in Settings — the default is Finance Manager or Admin
+49.  Rejection requires a mandatory reason field — the system blocks rejection submission without it
+50.  On payment approval, the Costing Engine immediately records the amount as Actual and releases it from Committed
+51.  All approval and rejection decisions are logged with a timestamp and the approver's name
+	52.  The system blocks payment processing without formal approval
+53.  Approver receives an in-system notification within 2 minutes
+54.  Rejection requires a mandatory reason — system blocks submission without it
+55.  On approval, the Costing Engine Actual Amount updates and the Committed Amount releases in real time
+56.  All decisions are logged with the timestamp, approver name, and decision detail
+57.  Finance Officer is notified of the approval or rejection within 2 minutes
+	 
+9.5 Purchase Order Management
+In the Core tier, Purchase Order management sits within the Invoice module. When the PM approves a request in the Project Request Module, the approved request appears in the Invoice Module as a pending item. The accountant reviews the approved request and converts it into a purchase order within the invoice module. The accountant then processes payment against the purchase order. On upgrade to Enterprise, the Purchase Order feature moves to the dedicated Purchase Module, and all PO data is migrated automatically.
+10. Inventory Module
+The Inventory Module provides site-level material tracking. It is focused on a single project site per implementation in the core product. It tracks stock on hand, records all movements, issues low stock alerts, and supports manual adjustments with full audit logging.
+ 
+10.1 New Mandatory Fields on All Project-Linked Inventory Documents
+The following two fields must be added as mandatory fields to every inventory issue and material consumption record linked to a project:
+Field
+	Behaviour
+	WBS Element
+	Dropdown — select from the active activity WBS elements of the linked project — mandatory — only activity elements are shown
+	Cost Code
+	Dropdown — select from the company's active cost code library — mandatory — only active codes are shown
+	 
+10.2 Budget Validation Gate Integration
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As an inventory or warehouse user,
+I want every inventory issue and material consumption record linked to a project to be validated against the available budget before proceeding,
+so that all material costs are accurately tracked against the correct project line and budget overruns are caught before stock is issued.
+	58.  Inventory user creates a new Material Consumption or Inventory Issue record
+59.  Selects the project, then selects the WBS Element and Cost Code
+60.  System displays the Available Budget for the selected WBS element and cost code combination
+61.  User completes the product lines and clicks Submit
+62.  System calls the Budget Validation Gate automatically
+6a. Within budget — record proceeds; stock is deducted from inventory; Actual Amount updated immediately in the Costing Engine (no committed stage)
+6b. Over budget — record is held in the Overrun Queue; PM is notified; stock is NOT deducted until the PM resolves the request
+63.  On PM approval of a held record: stock is deducted and Actual Amount is updated in the Costing Engine
+64.  On PM rejection: record is cancelled; no stock deduction; user is notified with the rejection reason
+65.  On cancellation of a previously confirmed consumption: a reversal is recorded in the Costing Engine and the Actual Amount is reduced
+	66.  Both the WBS Element and Cost Code fields are mandatory on all project-linked inventory issue and material consumption records
+67.  Available Budget must be displayed for the selected WBS element and cost code combination before the user enters quantities
+68.  The Budget Validation Gate fires on every project-linked material consumption and inventory issue
+69.  Material consumption does not create a Committed Amount — it goes directly to the Actual Amount on validation
+70.  Stock is only deducted after PM approval when a request was held — or immediately on submission when within budget
+	71.  WBS Element field is present and mandatory on all project-linked inventory documents
+72.  Cost Code field is present and mandatory on all project-linked inventory documents
+73.  Available Budget is displayed after both WBS Element and Cost Code are selected
+74.  Budget Validation Gate fires on every project-linked material consumption and inventory issue
+75.  Over-budget issues are held and the PM is notified
+76.  The Costing Engine Actual Amount updates immediately on consumption validation — no committed stage is created
+77.  A reversal is recorded in the Costing Engine immediately when a consumption is cancelled
+	 
+10.3 Stock on Hand
+The system maintains a real-time material balance per site location. Stock increases when a Material Receipt is confirmed by the Site Supervisor. Stock decreases when a Material Consumption Request is approved. The system checks available stock before allowing any consumption record to be submitted — if there is insufficient stock, submission is blocked with a clear message.
+ 
+10.4 Feature: Inventory Ledger
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a Project Manager or Site Manager,
+I want to view a complete record of all stock movements for my project site,
+so that I can trace every material item from receipt to consumption and verify inventory accuracy at any point in time.
+	78.  User navigates to the Inventory Module and selects Inventory Ledger
+79.  System displays a chronological list of all stock movements for the selected site
+80.  User applies filters — date range, material item, movement type, WBS element, or project
+81.  User clicks on a ledger entry to see full detail and the link to the originating record
+82.  User exports the ledger as CSV or PDF
+	83.  Every stock movement must generate a ledger entry automatically — no manual ledger entries are permitted except for admin adjustments
+84.  Each ledger entry must capture: timestamp, user who performed the action, movement type, material item, quantity change (positive or negative), running balance after the movement, project, WBS element, cost code, and reference to the source document
+85.  The ledger must be read-only — no editing of existing entries
+86.  The ledger must be filterable and exportable
+87.  All movement types must be captured: Material Receipt, Material Consumption, Manual Adjustment, and Stock Return
+	88.  The Inventory Ledger displays a chronological list of all stock movements for the selected site
+89.  Each entry shows: timestamp, user, movement type, material item, quantity change, running balance, project, WBS element, cost code, and source document reference
+90.  All filters work correctly and can be combined
+91.  Clicking any ledger entry links back to the originating record
+92.  The ledger is read-only — no entries can be edited or deleted
+93.  CSV and PDF export includes all visible data
+94.  All movement types are captured: Receipt, Consumption, Adjustment, and Return
+	 
+10.5 Feature: Low Stock Alerts
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a Site Manager or Project Manager,
+I want to be automatically alerted when any material item on my site falls below a defined stock threshold,
+so that I can initiate a Purchase Request before operations are disrupted by a stockout.
+	95.  Admin or PM navigates to Inventory Settings and sets a low stock threshold for each material item on the site
+96.  The system monitors stock on hand continuously after every stock movement
+97.  When any material item's stock on hand falls below its configured threshold, an in-system and email notification is sent to the configured recipients
+98.  The notification includes: the material item name, the current stock level, the threshold level, the site location, and a direct link to create a new Purchase Request for the item
+99.  The alert does not fire repeatedly — it fires once when the threshold is first crossed and resets when stock is replenished above the threshold
+	100.                 The low stock threshold must be configurable per material item per site — it is not a single global setting
+101.                 The alert must fire as soon as stock on hand falls below the configured threshold following any stock movement
+102.                 Alert recipients are configurable per site — the default is Site Manager and Project Manager
+103.                 The alert notification must include: item name, current quantity, threshold quantity, site name, and a direct link to create a Purchase Request
+104.                 The alert must reset when stock is replenished above the threshold and must fire again the next time the threshold is crossed
+	105.                 Admin or PM can set a low stock threshold per material item per site
+106.                 Alert fires immediately when stock on hand falls below the threshold after any stock movement
+107.                 Alert fires only once per threshold crossing — does not fire repeatedly on every subsequent movement below the threshold
+108.                 Alert resets when stock is replenished above the threshold
+109.                 Alert notification contains: item name, current quantity, threshold, site name, and a direct link to create a Purchase Request
+110.                 Alert recipients receive both an in-system notification and an email
+111.                 Alert recipients are configurable per site
+	 
+10.6 Feature: Manual Stock Adjustments
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a Company Admin,
+I want to manually adjust stock quantities when necessary — for example, to correct a counting error or record damaged goods — with a mandatory reason and full audit logging,
+so that inventory records remain accurate while all manual interventions are fully traceable.
+	112.                 Admin navigates to the Inventory Module and selects Stock Adjustments
+113.                 Clicks New Adjustment
+114.                 Selects the site, material item, and adjustment type (Increase or Decrease)
+115.                 Enters the quantity to adjust
+116.                 Enters a mandatory reason for the adjustment
+117.                 For project-linked adjustments: selects the relevant project, WBS element, and cost code — all mandatory
+118.                 Confirms the adjustment
+119.                 System updates stock on hand immediately and creates an entry in the Inventory Ledger and the system-wide Audit Trail
+	120.                 Manual stock adjustments must be restricted to Admin-level users only
+121.                 A mandatory reason field must be provided before any adjustment can be saved — the system must block submission without it
+122.                 All manual adjustments must be recorded in the Inventory Ledger with: timestamp, admin user, adjustment type, quantity change, reason, and running balance after the adjustment
+123.                 All manual adjustments must also appear in the system-wide Audit Trail
+124.                 For project-linked adjustments: WBS element and cost code are mandatory
+125.                 For non-project-linked adjustments (general stock corrections): WBS element and cost code are not required
+	126.                 Manual stock adjustment is restricted to Admin-level users only
+127.                 The mandatory reason field blocks submission if left empty
+128.                 On confirmation, stock on hand updates immediately
+129.                 An Inventory Ledger entry is created automatically for every adjustment with all required fields
+130.                 A system-wide Audit Trail entry is created for every adjustment
+131.                 For project-linked adjustments, WBS element and cost code are mandatory — the system blocks submission without both fields
+132.                 Adjustment history is visible in the inventory ledger, filterable by movement type: Adjustment
+	 
+10.7 Feature: Material Receipt Logging
+Material Receipt Logging allows site supervisors to confirm the actual quantity of goods received on-site against a Purchase Order. This confirmation is required before the Finance team can process payment to the vendor. It is a key component of the 3-Way Match process.
+ 
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a site supervisor,
+I want to confirm the quantity of materials actually received on-site against the expected Purchase Order delivery,
+so that the Finance team has verified site confirmation before processing payment to the vendor.
+	1. Supervisor receives a notification that a delivery is expected, linked to an approved Purchase Order
+2. Supervisor navigates to the Material Receipt Logging section of the Project Request Module
+3. Sees a list of expected deliveries — each showing the PO reference, expected delivery date, vendor name, and product lines with expected quantities
+4. Supervisor selects the relevant delivery
+5. For each product line, supervisor enters the actual quantity received
+6. Supervisor uploads a photo of the waybill or delivery documentation as evidence
+7. Supervisor confirms the receipt and submits
+8a. If actual quantities match expected quantities — Finance is notified that the receipt is confirmed and ready for processing
+8b. If actual quantities differ from expected — the system records the discrepancy and automatically notifies Finance and the PM with a full breakdown of expected versus actual quantities
+	1. The list of expected deliveries must be populated automatically from approved Purchase Orders — site supervisors do not manually create receipt records
+2. At least one photo upload is required before a receipt can be confirmed — the system must block confirmation without it
+3. If the delivered quantity is less than ordered: the system must record the actual quantity received and notify Finance of the shortfall
+4. If the delivered quantity is greater than ordered: the system must flag the excess and notify Finance for resolution
+5. The confirmed receipt quantity is used as the site receipt data point in the 3-Way Match process
+6. Finance must be notified automatically whenever a quantity mismatch occurs — the notification must include the specific line items with expected versus actual quantities
+7. The confirmed receipt must automatically update the inventory stock on hand by the actual quantity received
+	1. Site supervisor can see a list of all expected deliveries for their project
+2. The list shows PO reference, expected date, vendor name, and product lines with expected quantities
+3. Supervisor can enter actual received quantities per product line
+4. The system blocks confirmation without at least one photo attachment
+5. On submission with matching quantities — Finance receives an automatic notification that the receipt is confirmed
+6. On submission with mismatched quantities — Finance and the PM both receive an automatic notification within 2 minutes with a full breakdown of expected versus actual quantities
+7. Confirmed receipt record is automatically linked to the originating PO for 3-Way Match processing
+8. Confirmed receipts increase the inventory stock on hand automatically by the actual quantity received
+9. Receipt record is visible in both the Inventory Module and the Finance Module
+	 
+12. BOQ/BOM Template Importer
+The BOQ/BOM Template Importer allows companies to upload their existing Excel or CSV budget files and automatically generate the WBS structure and budget lines from that file. The PM reviews and approves the mapping before the project is activated. FastraSuite uses one unified import process that works for all industries — the system reads whatever column structure the company provides and allows the PM to map each column to the appropriate FastraSuite field.
+ 
+12.1 Column Mapping Rules
+Scenario
+	System Behaviour
+	High confidence mapping
+	Column is auto-mapped and shown as confirmed — PM can override if incorrect
+	Low confidence mapping
+	Column is highlighted — PM must manually select the correct FastraSuite field
+	Unrecognised column
+	Column is highlighted — PM must either map it manually or mark it as Ignore
+	Any unresolved column
+	The entire import is paused — the PM cannot proceed until every column is either mapped or marked as Ignore
+	 
+Confirmed decision: The importer pauses the entire import when it cannot confidently map a column or row. It does not skip rows and continue.
+ 
+User Story
+	User Journey
+	Business Requirements
+	Acceptance Criteria
+	As a Project Manager,
+I want to upload my existing budget file and have the system automatically generate the WBS structure and budget lines from it,
+so that I do not have to manually recreate a budget that already exists in another format.
+	133.                 PM navigates to the project and clicks Import Budget from File
+134.                 PM selects the file from their device — Excel or CSV
+135.                 System reads the file and displays a column mapping screen
+136.                 System attempts to auto-map each column based on header names and data patterns
+137.                 Columns mapped with high confidence are shown as confirmed — columns that cannot be confidently mapped are highlighted and the import is paused
+138.                 PM resolves all highlighted columns — either mapping them manually to the correct FastraSuite field or marking them as Ignore
+139.                 PM cannot proceed until every column is either mapped or marked as Ignore
+140.                 PM confirms the full mapping
+141.                 System runs validation — checks that budget line totals do not exceed the overall project budget, all lines attach to activity WBS elements, and all lines reference active cost codes
+142.                 If any validation errors exist — the system shows a full list of errors and the PM must resolve them before any records are created
+143.                 PM reviews the generated WBS structure and budget lines on screen
+144.                 PM activates the project if satisfied — or edits individual lines before activating
+	145.                 Excel (.xlsx, .xls) and CSV (.csv) file formats are supported
+146.                 The system attempts to auto-map columns based on header names and data patterns
+147.                 The entire import pauses when any column cannot be confidently mapped — the system does not skip rows and proceed
+148.                 The PM must confirm all mappings before any records are created
+149.                 Post-import validation: budget line totals must not exceed the overall project budget; all lines must attach to activity WBS elements; all lines must reference active cost codes
+150.                 All validation errors are shown in a complete list — the PM must resolve them all before the import completes
+151.                 Parent WBS element totals are calculated automatically from the generated activity budget lines
+	152.                 PM can upload Excel and CSV files
+153.                 Columns mapped with high confidence are displayed to the PM for review
+154.                 The import pauses when any column is unresolved — the PM cannot proceed without resolving it
+155.                 PM must confirm all mappings before any records are created
+156.                 All post-import validation errors are displayed in a complete list
+157.                 The correct WBS hierarchy is generated from the file structure
+158.                 The correct budget lines are generated for every row in the file
+159.                 Parent WBS element totals calculate correctly from the generated activity lines
+160.                 The project cannot be activated until the PM confirms the generated structure
+	 
+13. Non-Functional Requirements
+13.1 Performance
+Requirement
+	Target
+	BvA Dashboard load time
+	Under 3 seconds for projects with up to 500 transactions
+	Budget Validation Gate response time
+	Under 3 seconds on every request submission — if no response within 3 seconds, the request is held pending manual review and the PM is notified
+	Notification delivery
+	All notifications delivered within 2 minutes of the triggering event
+	Report generation
+	Standard project reports generated within 5 seconds
+	3-Way Match processing
+	Match result returned within 3 seconds of the invoice being linked to the PO
+	Mobile form load time
+	Any request form must load within 4 seconds on a 3G connection on a low-end mobile device
+	 
+13.2 Scalability
+Requirement
+	Detail
+	Multi-tenancy
+	Each company's data must be fully isolated — all data queries must enforce company-level filtering without exception
+	Concurrent users
+	The system must support up to 100 concurrent users per company without performance degradation
+	Transaction volume
+	The system must handle up to 10,000 transactions per project without degradation in BvA Dashboard performance
+	File storage
+	File attachments must be stored in a cloud storage service — not on application servers — to allow independent scaling
+	 
+13.3 Reliability & Availability
+Requirement
+	Target
+	Uptime
+	99.5% monthly uptime excluding scheduled maintenance windows
+	Scheduled maintenance
+	Communicated to Company Admins at least 48 hours in advance
+	Data backup
+	All data backed up daily — backups retained for a minimum of 30 days
+	Offline sync reliability
+	Local draft sync must succeed on reconnection — if sync fails, the user must be notified immediately with a retry option
+	 
+13.4 Security
+Requirement
+	Detail
+	Data isolation
+	No cross-company data access under any circumstance — enforced at both the application and database levels
+	Transport security
+	All data transmitted over HTTPS — no unencrypted connections are permitted
+	Data at rest
+	All stored data and file attachments are encrypted at rest
+	Session management
+	Sessions expire after 30 minutes of inactivity — the user is logged out and redirected to the login page
+	Audit trail integrity
+	Audit log entries are immutable — they cannot be modified or deleted by any user or any automated process
+	Security testing
+	The platform must undergo a security test before the production launch
+	 
+13.5 Usability
+Requirement
+	Detail
+	Mobile form completion time
+	A site worker must be able to complete and submit a standard Purchase Request in under 2 minutes on a mobile device
+	Minimal typing
+	All forms must use dropdown selections, auto-population, and pre-filled defaults wherever possible to minimise manual text entry on mobile devices
+	Touch targets
+	All interactive elements on mobile must meet a minimum touch target size of 44px
+	Error messages
+	All validation error messages must be written in plain language — no technical codes or jargon shown to field users
+	Accessibility
+	All web-facing interfaces must meet WCAG 2.1 Level AA accessibility standards
+	 
+14. Assumptions & Constraints
+14.1 Assumptions
+•         All companies using FastraSuite have at least one person in an Admin or Super Admin role who is responsible for user management and configuration
+•         Site workers have access to a smartphone (Android or iOS) with a web browser and intermittent internet connectivity
+•         The existing FastraSuite platform — including the Purchase Module, Inventory Module, and Invoice Module — is functional at the point when this addendum is built on top of it
+•         Vendor management (creating and managing vendor records) is handled in the existing Purchase Module and does not need to be rebuilt
+•         The company's existing budget files are in Excel or CSV format for the BOQ/BOM importer to function
+•         A single base currency per company is sufficient for v1.0 — multi-currency support is not required in this delivery
+•         No live users exist at the time of development — all testing is conducted using dummy development environment accounts
+ 
+14.2 Constraints
+•         Deadline: End of June 2026 — this is a hard deadline with direct revenue implications for the organisation
+•         Team: Two frontend developers, two backend developers, one full-stack developer (partial availability), one designer, and one Project Manager — no dedicated QA resource
+•         Testing responsibility falls on the PM and developers — no external QA team is available for this delivery
+•         In-platform email and in-app notifications are in scope for v1.0 — a centralised notification delivery service is deferred
+•         Automated server provisioning for new clients is deferred — manual processes are acceptable for v1.0
+•         Multi-company or multi-subsidiary financial consolidation is out of scope
+•         GPS geo-fencing and biometric integration are out of scope
+ 
+15. Out of Scope
+The following items are confirmed deferred and must not be included in the June 2026 delivery. Including any of these items requires formal written sign-off from the PM and MD before development begins.
+The Enterprise tier — including the full Purchase Module with RFQ, vendor management, and advanced procurement workflows — is planned but is not in scope for the current delivery. The Core tier is the focus of this addendum.
+ 
+ 
+15.1 Deferred to Version 1.1
+Feature
+	Reason for Deferral
+	Offline photo capture and attachment queuing
+	Technically complex — synchronous photo upload on an active connection is sufficient for v1.0
+	Push notifications (mobile push alerts)
+	Requires additional service setup — in-app and email notifications are sufficient for v1.0
+	Multi-currency project tracking
+	Single base currency is sufficient for the initial market — the added complexity is not justified for v1.0
+	Automated recurring payment schedules for equipment hire
+	Individual manual invoice entries are sufficient for v1.0
+	 
+15.2 Deferred to a Future Phase
+Feature
+	Notes
+	Centralised identity management (single sign-on)
+	Required for Enterprise clients — deferred from the core build
+	Centralised notification delivery service (email/SMS infrastructure layer)
+	Event triggers are built in v1.0 — the dedicated delivery service is a future phase component
+	Centralised API traffic management
+	Required for high-volume API management — not needed at v1.0 scale
+	Automated client environment provisioning
+	Automated tenant setup — manual processes are acceptable for v1.0 client volumes
+	Multi-company or multi-subsidiary financial consolidation
+	Requires significant additional planning — not in scope for the core product
+	Advanced conditional multi-level approval workflows
+	Enterprise-tier feature — the core product supports configurable multi-level approvals only
+	GPS geo-fencing and biometric time-and-attendance integration
+	Specialist field management feature — not part of the core ERP scope
+	HRM module integration for labour requests
+	Labour requests in v1.0 are standalone cost entries — HRM integration requires the HRM module to be built first
+	CRM module
+	Not in scope for this addendum
+	Sales module
+	Not in scope for this addendum
+	 
+16. Glossary
+Term
+	Definition
+	Actual Amount
+	Total confirmed payments made against a specific WBS element and cost code combination — sourced from the Invoice Module via the Finance Ledger Extension
+	Available Budget
+	The budget remaining for new spending on a specific WBS element and cost code line. Formula: Budgeted Amount minus Actual Amount minus Committed Amount
+	Back-Office Module
+	The internal processing modules — Purchase, Inventory, and Invoice
+	BvA Dashboard
+	Budget vs Actual Dashboard — the real-time financial performance view showing Budgeted, Committed, Actual, Remaining, and % Consumed for every WBS element and cost code combination on a project
+	Budget Health
+	A system-calculated indicator for each WBS element and cost code line — On Track, At Risk, or Over Budget — based on configured alert thresholds
+	Budget Revision
+	A formal request to change the approved project budget on an active project — subject to an approval workflow — every revision is logged in the audit trail
+	Budget Template
+	The column structure used to define and upload a project budget. FastraSuite uses one unified template that is customisable by the Company Admin — additional columns can be added and existing columns can be renamed to match the company's terminology
+	Budget Validation Gate
+	The automated check that fires on every request submission across all modules. It checks the Available Budget for the tagged WBS element and cost code combination and either allows the request to proceed or holds it in the Overrun Queue
+	Committed Amount
+	The total value of approved but not yet paid requests and purchase orders against a specific WBS element and cost code combination. Committed amounts are always deducted from Available Budget in all validation checks
+	Committed to Actual
+	The conversion that occurs when a committed approved request or order is paid via the Invoice Module and confirmed through the Payment Approval Workflow
+	Cost Code
+	A spending category from the company-level master list. Every transaction must be tagged with a cost code — for example, Labour, Materials, or Plant & Equipment
+	Cost Code Library
+	The company-level master list of all available cost codes. Projects select from this library — they cannot create their own project-specific codes
+	Finance Ledger Extension
+	The extension to the existing Invoice Module that adds 3-Way Match logic, Accounts Payable Queue, Cash Flow View, and Payment Approval Workflow
+	Inventory Ledger
+	A complete chronological record of all stock movements at a site — including timestamp, user, movement type, quantity change, running balance, project, WBS element, and source document reference
+	Leaf Element
+	A WBS node that has no children. Only activity elements can have budget lines attached. Parent element totals roll up automatically from their children.
+	Material Receipt Logging
+	The on-site confirmation by a Site Supervisor of the actual quantity of goods received against a Purchase Order — provides the site receipt data point for the 3-Way Match process
+	Milestone-Based Payment
+	A payment structure for subcontractor requests where the total contract value is divided into defined milestones — each milestone payment is only released when the PM marks the corresponding milestone as complete
+	Overrun Queue
+	The holding queue for requests that have exceeded the Available Budget for their tagged WBS element and cost code combination — the PM reviews and resolves all held requests
+	Project Budget
+	The formally approved total spending limit for a project — broken down by WBS element and cost code
+	Project Costing Engine
+	The financial control system of FastraSuite — manages the WBS structure, cost code library, budget setup, budget validation, committed and actual tracking, overrun alerts, and the BvA Dashboard
+	Project Request
+	A field-initiated request submitted via the Project Request Module for goods, labour, cash, services, or material recording
+	Remaining Budget
+	Project Budget minus total Committed Amount minus total Actual Amount
+	3-Way Match
+	The automated verification that checks three data points before an invoice is approved for payment: the Purchase Order amount, the site receipt quantity confirmed by the Site Supervisor via Material Receipt Logging, and the vendor invoice amount
+	Variance
+	The difference between the Project Budget and the Actual Amount spent to date
+	WBS
+	Work Breakdown Structure — the hierarchical breakdown of a project into levels. The Company Admin defines the number of levels and the name of each level. Every budget line and transaction must be tagged to a specific WBS element.
+	WBS Element
+	A single node in the Work Breakdown Structure — for example, a phase, sub-phase, or task. Only activity elements (those with no children) can receive budget lines and transactions.
+	 
+Open Items & Decisions Log
+Resolved Items
+#
+	Item
+	Decision
+	Version
+	1
+	Labour Request — HRM Link
+	Standalone cost entries only. No HRM integration.
+	v1.0
+	2
+	Subcontractor Vendor Requirement
+	Ad hoc entry allowed. Vendor record auto-created on approval.
+	v1.0
+	3
+	Plant & Equipment Recurring Hire
+	Individual manual entries only. No recurring schedule.
+	v1.0
+	4
+	Multi-Project Workers
+	Workers can raise requests across multiple projects simultaneously.
+	v1.0
+	5
+	Offline Capability
+	Text-based draft saving for request forms only in v1.0. Photo capture offline deferred to v1.1.
+	v1.0 / v1.1
+	6
+	Budget Alert Notifications
+	Configurable per project and per cost category. Default recipients are PM and Finance.
+	v1.0
+	7
+	Multi-Currency
+	Single base currency only for the Project Module in v1.0.
+	v1.1
+	8
+	Project Closure Conditions
+	Five conditions defined: all requests resolved, all invoices settled, all POs closed, final budget reconciled, closure approved by Admin. Subject to Hafeez final review.
+	v1.0
+	9
+	User Registration Flow
+	True SaaS model. Company self-registers, verifies email, and gains immediate access. Admin creates all user accounts directly.
+	v1.0
+	10
+	BOQ/BOM Importer — Unmapped Columns
+	Import pauses entirely when any column cannot be confidently mapped. PM must resolve all unmapped columns before the import can proceed.
+	v1.0
+	11
+	3-Way Match Tolerance
+	Admin can configure an acceptable discrepancy tolerance percentage. Default is 0% — exact match required.
+	v1.0
+	12
+	Pre-Submission Budget Visibility
+	Available Budget amount for the tagged WBS element and cost code is displayed to the site worker before submission. The full breakdown (Budgeted, Actual, Committed) is not shown — the available amount only.
+	v1.0
+	13
+	Industry-Specific Budget Templates
+	One unified budget template is used for all industries. The Company Admin can rename columns, add new columns, and customise the structure after registration. No separate templates are built per industry.
+	v1.0
+	 
+Open Items Requiring Resolution
+#
+	Area
+	Open Question
+	Priority
+	14
+	WBS Depth Configuration
+	Who configures the maximum number of WBS levels—the FastraSuite team globally or each company admin independently for their own company?
+	High
+	15
+	Budget Reallocation Limits
+	When a PM reallocates budget from one WBS element and cost code line to another, can a PM reduce a line to zero? Is there a minimum remaining balance rule?
+	Medium
+	16
+	3-Way Match — Partial Deliveries
+	If goods are delivered in multiple shipments across multiple days, does the 3-Way Match wait for all deliveries before running, or does it run on each partial receipt independently?
+	High
+	17
+	Payment Approval Delegation
+	If the designated payment approver is unavailable, can approval be delegated to another user temporarily? Who controls this, and is it logged?
+	Medium
+	18
+	Industry Profile Change
+	If a company selected the wrong industry at registration and has not yet activated a project, can they change it freely or does it require admin intervention?
+	Low
+	19
+	Material Receipt — Partial PO Deliveries
+	If a PO is delivered in multiple shipments across multiple days, does each partial delivery create a separate receipt confirmation, or does the site supervisor update a single receipt record incrementally?
+	High
+	20
+	Subscription Model
+	FastraSuite operates on Core and Enterprise tiers. Core includes 4 modules. Enterprise adds the Purchase Module and others. Upgrade retains all data. PO feature moves from Invoice to Purchase Module on upgrade.
+	High
+	 
+FastraSuite  |  Confidential — Internal Document  |  Version 3.0  |  April 2026
+
+
+[a]lukmanoladokun86@gmail.com Let's discuss this tomorrow.

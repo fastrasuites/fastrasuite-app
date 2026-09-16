@@ -1,0 +1,13 @@
+﻿src/app/settings/users/newUser/page.tsx(11,18): error TS2307: Cannot find module '@/components/Settings/form/form' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(12,25): error TS2307: Cannot find module '@/components/Settings/form/FormSection' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(13,23): error TS2307: Cannot find module '@/components/Settings/form/FormInput' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(14,29): error TS2307: Cannot find module '@/components/Settings/form/FormImageUpload' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(15,24): error TS2307: Cannot find module '@/components/Settings/form/FormSelect' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(16,26): error TS2307: Cannot find module '@/components/Settings/form/SignaturePad' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(17,26): error TS2307: Cannot find module '@/components/ui/checkbox' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(18,30): error TS2307: Cannot find module '@/components/icons/gridCardIcon' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(19,31): error TS2307: Cannot find module '@/components/Settings/form/formRoleSelect' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(21,39): error TS2307: Cannot find module '@/api/settings/usersApi' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(22,54): error TS2307: Cannot find module '@/api/settings/accessGroupRightApi' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(23,56): error TS2307: Cannot find module '@/schemas/userSchema' or its corresponding type declarations.
+src/app/settings/users/newUser/page.tsx(24,27): error TS2307: Cannot find module '@/lib/store/store' or its corresponding type declarations.

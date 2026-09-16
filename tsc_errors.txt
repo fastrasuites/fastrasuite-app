@@ -1,0 +1,14 @@
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(9,28): error TS2307: Cannot find module '@/components/purchase/products/PageHeader' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(10,44): error TS2307: Cannot find module '@/components/purchase/purchaseOrder' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(11,32): error TS2307: Cannot find module '@/types/purchase' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(15,8): error TS2307: Cannot find module '@/api/purchase/purchaseOrderApi' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(19,8): error TS2307: Cannot find module '@/api/purchase/requestForQuotationApi' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(20,52): error TS2307: Cannot find module '@/api/inventory/locationApi' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(21,35): error TS2307: Cannot find module '@/components/shared/ToastNotification' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(27,8): error TS2307: Cannot find module '@/components/shared/AnimatedWrapper' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(29,27): error TS2307: Cannot find module '@/lib/store/store' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(30,23): error TS2307: Cannot find module '@/components/ui/input' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(31,23): error TS2307: Cannot find module '@/components/ui/label' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(32,26): error TS2307: Cannot find module '@/components/ui/textarea' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(39,8): error TS2307: Cannot find module '@/components/ui/select' or its corresponding type declarations.
+src/app/purchase/purchase_orders/convert/[id]/page.tsx(47,8): error TS2307: Cannot find module '@/components/ui/table' or its corresponding type declarations.
