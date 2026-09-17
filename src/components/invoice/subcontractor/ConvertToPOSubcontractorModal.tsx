@@ -13,6 +13,8 @@ import {
   Upload,
   File,
   Trash2,
+  Lock,
+  Unlock,
 } from "lucide-react";
 import { useGetApprovedProjectRequestDetailsQuery } from "@/api/invoice/approvedProjectRequestsApi";
 import { useGetActiveCurrenciesQuery } from "@/api/invoice/invoiceCurrencyApi";
@@ -23,6 +25,7 @@ import {
   useCreateVendorBillMutation,
   useGetAccountsPayableAccountsQuery,
 } from "@/api/invoice/vendorBillsApi";
+import { useMarkSubcontractorMilestoneCompleteMutation } from "@/api/subcontractorRequestApi";
 
 interface Request {
   id: string;
@@ -39,7 +42,6 @@ interface ConvertToPOSubcontractorModalProps {
   currentStep: number;
   onNextStep: () => void;
   onBackStep: () => void;
-  /** Optional callback – the modal now creates the vendor bill internally */
   onConvertToInvoice?: () => void | Promise<void>;
   formatCurrency: (amount: number) => string;
   request: Request | null;
@@ -172,6 +174,9 @@ export default function ConvertToPOSubcontractorModal({
   const [vendorId, setVendorId] = useState("");
   const [accountsPayableAccountId, setAccountsPayableAccountId] = useState("");
   const [paymentTermId, setPaymentTermId] = useState("");
+  const [markingMilestoneId, setMarkingMilestoneId] = useState<number | null>(
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   /* ─── Request ID ────────────────────────────────── */
@@ -187,6 +192,7 @@ export default function ConvertToPOSubcontractorModal({
     data: detailsData,
     isLoading: isDetailsLoading,
     isError: isDetailsError,
+    refetch: refetchDetails,
   } = useGetApprovedProjectRequestDetailsQuery(requestId as number, {
     skip: !isOpen || !requestId,
   });
@@ -212,6 +218,9 @@ export default function ConvertToPOSubcontractorModal({
   const [createVendorBill, { isLoading: isSubmitting }] =
     useCreateVendorBillMutation();
 
+  const [markMilestoneComplete] =
+    useMarkSubcontractorMilestoneCompleteMutation();
+
   /* ─── Derived data ─────────────────────────────── */
   const vendors = Array.isArray(vendorsResponse) ? vendorsResponse : [];
 
@@ -228,8 +237,6 @@ export default function ConvertToPOSubcontractorModal({
     : [];
 
   /* ─── Vendor & payment-term selection logic ─────── */
-  // Resolve the vendor id: explicit user selection takes priority,
-  // otherwise fall back to the vendor on the approved request details.
   const resolvedVendorId =
     vendorId || (detailsData?.vendor ? String(detailsData.vendor) : "");
   const effectiveVendorId = subcontractorVendors.some(
@@ -271,6 +278,12 @@ export default function ConvertToPOSubcontractorModal({
   const justification = detailsData?.justification_notes || "";
 
   const rawPaymentType = detailsData?.payment_type || "lump_sum";
+  const isMilestoneType = rawPaymentType === "milestone";
+
+  // All milestones must be completed before we can create the bill
+  const allMilestonesCompleted =
+    milestones.length > 0 &&
+    milestones.every((m: any) => m.is_completed === true);
 
   /* ─── Can submit? ───────────────────────────────── */
   const canSubmit =
@@ -284,7 +297,9 @@ export default function ConvertToPOSubcontractorModal({
     Boolean(selectedVendor) &&
     !vendorStale &&
     Boolean(accountsPayableAccountId) &&
-    Boolean(effectivePaymentTermId);
+    Boolean(effectivePaymentTermId) &&
+    // Extra gate for milestone type
+    (!isMilestoneType || allMilestonesCompleted);
 
   /* ─── Focus on open ─────────────────────────────── */
   useEffect(() => {
@@ -302,11 +317,11 @@ export default function ConvertToPOSubcontractorModal({
     if (!isOpen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setToast(null);
-      // Reset form state when modal closes
       setUploadedFile(null);
       setVendorId("");
       setAccountsPayableAccountId("");
       setPaymentTermId("");
+      setMarkingMilestoneId(null);
     }
   }, [isOpen]);
 
@@ -319,7 +334,6 @@ export default function ConvertToPOSubcontractorModal({
       if (subcontractorVendors.some((v: any) => v.id === Number(id))) {
         setVendorId(id);
 
-        // Also pre-fill payment term if the vendor has one
         const vendor = subcontractorVendors.find(
           (v: any) => v.id === Number(id),
         );
@@ -354,6 +368,20 @@ export default function ConvertToPOSubcontractorModal({
     setUploadedFile(file);
   };
 
+  const handleMarkComplete = async (milestoneId: number) => {
+    setMarkingMilestoneId(milestoneId);
+    try {
+      await markMilestoneComplete(milestoneId).unwrap();
+      showToast("success", "Milestone marked as completed");
+      // Refresh the details so the UI updates immediately
+      await refetchDetails();
+    } catch (err: unknown) {
+      showToast("error", extractErrorMessage(err));
+    } finally {
+      setMarkingMilestoneId(null);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!detailsData?.id && !requestId) {
       showToast("error", "Unable to determine request ID. Please try again.");
@@ -369,6 +397,14 @@ export default function ConvertToPOSubcontractorModal({
     }
     if (!effectivePaymentTermId) {
       showToast("error", "Please select a payment term");
+      return;
+    }
+
+    if (isMilestoneType && !allMilestonesCompleted) {
+      showToast(
+        "error",
+        "All milestones must be marked as completed before creating the vendor bill.",
+      );
       return;
     }
 
@@ -398,34 +434,19 @@ export default function ConvertToPOSubcontractorModal({
     }
 
     /* ─── Line mapping based on payment_type ────────────── */
-    if (rawPaymentType === "milestone") {
-      // TODO: Milestone line mapping – the milestone array structure is not
-      // yet confirmed by the backend. Once available, select the milestone
-      // and map it as follows:
-      //
-      //   formData.append("lines", JSON.stringify([{
-      //     subcontractor_milestone: selectedMilestoneId,
-      //     description: selectedMilestone.name,
-      //   }]));
-      //
-      // For now, the milestones array is empty so we cannot map a milestone.
-      const firstMilestone = milestones[0];
-      if (!firstMilestone?.id) {
-        showToast(
-          "error",
-          "Milestone payment type is selected but no milestones are available. " +
-            "Please use Lump Sum or contact support.",
-        );
+    if (isMilestoneType) {
+      const completed = milestones.filter((m: any) => m.is_completed);
+      if (completed.length === 0) {
+        showToast("error", "No completed milestones found.");
         return;
       }
       formData.append(
         "lines",
-        JSON.stringify([
-          {
-            subcontractor_milestone: Number(firstMilestone.id),
-            description: firstMilestone.name || "Milestone payment",
-          },
-        ]),
+        JSON.stringify(
+          completed.map((m: any) => ({
+            subcontractor_milestone: Number(m.id),
+          })),
+        ),
       );
     } else {
       // lump_sum – link the entire contract to the subcontractor request
@@ -499,8 +520,121 @@ export default function ConvertToPOSubcontractorModal({
     </div>
   );
 
-  /* ─── Milestones display ────────────────────────────── */
-  const renderMilestones = () => {
+  /* ─── Milestone status helpers ───────────────────────── */
+  const getMilestoneStatus = (milestone: any, index: number) => {
+    if (milestone.is_completed) return "completed";
+
+    // Find the first incomplete milestone → that one is "in progress"
+    const firstIncompleteIndex = milestones.findIndex(
+      (m: any) => !m.is_completed,
+    );
+    if (index === firstIncompleteIndex) return "in_progress";
+
+    return "locked";
+  };
+
+  /* ─── Milestones UI (Step 1 – with Mark as Complete) ─── */
+  const renderMilestonesStep1 = () => {
+    if (!milestones.length) {
+      return (
+        <div className="border border-gray-200 rounded-lg px-4 py-6 text-center text-sm text-gray-500">
+          No milestones defined
+        </div>
+      );
+    }
+
+    return (
+      <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
+        {milestones.map((m: any, index: number) => {
+          const status = getMilestoneStatus(m, index);
+          const isMarking = markingMilestoneId === m.id;
+
+          return (
+            <div
+              key={m.id ?? index}
+              className="px-4 py-4 flex flex-col sm:flex-row sm:items-start gap-3"
+            >
+              {/* Left side – icon + name + badge + description */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  {status === "completed" ? (
+                    <Unlock className="w-4 h-4 text-amber-500 shrink-0" />
+                  ) : status === "in_progress" ? (
+                    <Unlock className="w-4 h-4 text-amber-500 shrink-0" />
+                  ) : (
+                    <Lock className="w-4 h-4 text-gray-400 shrink-0" />
+                  )}
+
+                  <span className="text-sm font-medium text-gray-900">
+                    {m.name || `Milestone ${index + 1}`}
+                  </span>
+
+                  {status === "completed" && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Completed
+                    </span>
+                  )}
+                  {status === "in_progress" && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                      In progress
+                    </span>
+                  )}
+                  {status === "locked" && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      Locked
+                    </span>
+                  )}
+                </div>
+
+                {/* Description / completion criteria */}
+                {(m.completion_criteria || m.description) && (
+                  <p className="text-xs text-gray-500 mt-0.5 ml-6">
+                    {m.completion_criteria || m.description}
+                  </p>
+                )}
+
+                {/* Optional green completion record box – only when backend later provides richer data */}
+                {status === "completed" && m.completion_record && (
+                  <div className="mt-2 ml-6 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-800">
+                    <p className="font-medium mb-0.5">PM Completion Record</p>
+                    <p>{m.completion_record}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Right side – amount + action */}
+              <div className="flex items-center gap-3 shrink-0 sm:ml-4">
+                {status === "in_progress" && (
+                  <button
+                    type="button"
+                    onClick={() => handleMarkComplete(m.id)}
+                    disabled={isMarking || isSubmitting}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isMarking ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Marking…
+                      </>
+                    ) : (
+                      "Mark as Complete"
+                    )}
+                  </button>
+                )}
+
+                <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                  {formatCurrency(Number(m.amount) || 0)}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  /* ─── Milestones UI (Step 2 – read-only, all completed) ─ */
+  const renderMilestonesStep2 = () => {
     if (!milestones.length) {
       return (
         <div className="border border-gray-200 rounded-lg px-4 py-6 text-center text-sm text-gray-500">
@@ -510,30 +644,36 @@ export default function ConvertToPOSubcontractorModal({
     }
 
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
         {milestones.map((m: any, index: number) => (
           <div
             key={m.id ?? index}
-            className={`${
-              index % 2 === 0 ? "bg-gray-50" : "bg-white"
-            } px-4 py-3 border-b border-gray-200 last:border-b-0 flex items-center justify-between gap-4`}
+            className="px-4 py-3 flex items-center justify-between gap-4"
           >
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {m.name || `Milestone ${index + 1}`}
-              </p>
-              {m.description && (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  <TruncateWithTooltip
-                    text={String(m.description)}
-                    maxLength={60}
-                  />
-                </p>
-              )}
+            <div className="flex items-center gap-2 min-w-0">
+              <Unlock className="w-4 h-4 text-amber-500 shrink-0" />
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-900 truncate">
+                    {m.name || `Milestone ${index + 1}`}
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Completed
+                  </span>
+                </div>
+                {(m.completion_criteria || m.description) && (
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    <TruncateWithTooltip
+                      text={String(m.completion_criteria || m.description)}
+                      maxLength={60}
+                    />
+                  </p>
+                )}
+              </div>
             </div>
-            <p className="text-sm font-semibold text-gray-900 shrink-0">
+            <span className="text-sm font-semibold text-gray-900 shrink-0">
               {formatCurrency(Number(m.amount) || 0)}
-            </p>
+            </span>
           </div>
         ))}
       </div>
@@ -633,7 +773,6 @@ export default function ConvertToPOSubcontractorModal({
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              <InfoCard label="Subcontractor Name" value={vendorName} />
               <InfoCard label="Scope of Work" value={scopeOfWork} />
               <InfoCard
                 label="Contract Value"
@@ -660,13 +799,19 @@ export default function ConvertToPOSubcontractorModal({
               <h3 className="text-sm font-medium text-gray-700 mb-3">
                 Milestones
               </h3>
-              {renderMilestones()}
+              {isMilestoneType ? (
+                renderMilestonesStep1()
+              ) : (
+                <div className="border border-gray-200 rounded-lg px-4 py-6 text-center text-sm text-gray-500">
+                  No milestones defined (Lump Sum contract)
+                </div>
+              )}
             </div>
           </>
         )}
       </div>
 
-      <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-6 border-t border-gray-200 mt-6">
+      <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-6 border-t border-gray-200 mb-6">
         <button
           type="button"
           onClick={onClose}
@@ -679,10 +824,17 @@ export default function ConvertToPOSubcontractorModal({
           ref={primaryButtonRef}
           type="button"
           onClick={onNextStep}
-          disabled={isIssuing || isDetailsLoading || isDetailsError}
+          disabled={
+            isIssuing ||
+            isDetailsLoading ||
+            isDetailsError ||
+            (isMilestoneType && !allMilestonesCompleted)
+          }
           className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Review & Confirm
+          {isMilestoneType && !allMilestonesCompleted
+            ? "Complete all milestones first"
+            : "Review & Confirm"}
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
@@ -708,7 +860,6 @@ export default function ConvertToPOSubcontractorModal({
         </InfoBanner>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <InfoCard label="Subcontractor Name" value={vendorName} />
           <InfoCard label="Scope of Work" value={scopeOfWork} />
           <InfoCard
             label="Contract Value"
@@ -724,7 +875,13 @@ export default function ConvertToPOSubcontractorModal({
 
         <div>
           <h3 className="text-sm font-medium text-gray-700 mb-3">Milestones</h3>
-          {renderMilestones()}
+          {isMilestoneType ? (
+            renderMilestonesStep2()
+          ) : (
+            <div className="border border-gray-200 rounded-lg px-4 py-6 text-center text-sm text-gray-500">
+              No milestones defined (Lump Sum contract)
+            </div>
+          )}
         </div>
 
         {/* File Upload */}
@@ -871,7 +1028,7 @@ export default function ConvertToPOSubcontractorModal({
         </div>
       </div>
 
-      <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-6 border-t border-gray-200 mt-6">
+      <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-6 border-t border-gray-200 my-6">
         <button
           type="button"
           onClick={onBackStep}
