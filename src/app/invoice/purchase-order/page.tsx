@@ -104,7 +104,7 @@ const getStatusBadge = (status?: string | null) => {
 
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${color}`}
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${color}`}
     >
       {label}
     </span>
@@ -247,6 +247,7 @@ export default function PurchaseOrderPage() {
           <span className="text-gray-300">›</span>
           <span className="font-medium text-gray-900">Purchase Orders</span>
         </nav>
+
         {/* Header */}
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -270,6 +271,7 @@ export default function PurchaseOrderPage() {
             Refresh
           </button>
         </div>
+
         {/* Search + filters */}
         <div className="mb-4 space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -311,6 +313,7 @@ export default function PurchaseOrderPage() {
               </button>
             )}
           </div>
+
           {showFilters && (
             <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-end">
               <div className="min-w-[160px] flex-1">
@@ -349,6 +352,7 @@ export default function PurchaseOrderPage() {
             </div>
           )}
         </div>
+
         {/* Result count */}
         <div className="mb-3 flex items-center justify-between text-sm text-gray-500">
           <span>
@@ -371,6 +375,7 @@ export default function PurchaseOrderPage() {
             </span>
           )}
         </div>
+
         {/* Table */}
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
@@ -451,11 +456,19 @@ export default function PurchaseOrderPage() {
                 ) : (
                   filteredOrders.map((order: any) => {
                     const wbsLabel = resolveWbsLabel(order);
+                    const needsWbsTruncate = wbsLabel
+                      ? wbsLabel.length > 36
+                      : false;
+                    const displayWbs = needsWbsTruncate
+                      ? `${wbsLabel!.slice(0, 36)}…`
+                      : wbsLabel;
+
                     return (
                       <tr
                         key={order.id}
                         className="transition-colors hover:bg-gray-50/80"
                       >
+                        {/* PO Number */}
                         <td className="px-4 py-3.5 text-sm font-medium">
                           <Link
                             href={`/invoice/purchase-order/${order.id}`}
@@ -469,31 +482,50 @@ export default function PurchaseOrderPage() {
                             </p>
                           )}
                         </td>
-                        <td className="px-4 py-3.5">
+
+                        {/* Request Type – never wraps */}
+                        <td className="px-4 py-3.5 whitespace-nowrap">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getTypeColor(
+                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${getTypeColor(
                               order.source_request_type,
                             )}`}
                           >
                             {formatToSentenceCase(order.source_request_type)}
                           </span>
                         </td>
+
+                        {/* Vendor */}
                         <td className="px-4 py-3.5 text-sm text-gray-800">
                           {order.vendor_name || "—"}
                         </td>
+
+                        {/* WBS Element – truncated + tooltip */}
                         {showWbsColumn && (
-                          <td className="px-4 py-3.5 text-sm text-gray-600">
-                            {wbsLabel || (
+                          <td className="px-4 py-3.5 text-sm text-gray-600 max-w-[200px]">
+                            {wbsLabel ? (
+                              <span
+                                className="block truncate"
+                                title={needsWbsTruncate ? wbsLabel : undefined}
+                              >
+                                {displayWbs}
+                              </span>
+                            ) : (
                               <span className="text-gray-400">—</span>
                             )}
                           </td>
                         )}
+
+                        {/* Amount */}
                         <td className="px-4 py-3.5 text-right text-sm font-semibold text-gray-900">
                           {formatCurrency(Number(order.total_amount || 0))}
                         </td>
-                        <td className="px-4 py-3.5">
+
+                        {/* Status – never wraps */}
+                        <td className="px-4 py-3.5 whitespace-nowrap">
                           {getStatusBadge(order.status)}
                         </td>
+
+                        {/* Actions */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-center justify-center">
                             <Link
