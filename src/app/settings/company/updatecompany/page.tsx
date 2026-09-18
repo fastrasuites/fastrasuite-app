@@ -11,6 +11,7 @@ import { useSelector } from "react-redux";
 import { LoadingDots } from "@/components/shared/LoadingComponents";
 import StatusModal, { useStatusModal } from "@/components/shared/StatusModal";
 import { extractErrorMessage } from "@/lib/utils";
+import { formatWebsiteUrl, isValidWebsiteUrl } from "@/lib/urlUtils";
 
 import Form from "@/components/Settings/form/form";
 import FormSection from "@/components/Settings/form/FormSection";
@@ -81,7 +82,7 @@ export default function CompanyEdit() {
         industry: data.industry ?? "",
         language: data.language ?? "en",
         company_size: data.company_size ?? "",
-        website: data.website ?? "",
+        website: data.website ? formatWebsiteUrl(data.website) : "",
         roles: data.roles?.map((r: any) => r.name) ?? [""],
         logoPreview: data.logo ? data.logo : null,
         logoFile: null,
@@ -100,6 +101,85 @@ export default function CompanyEdit() {
       setFieldErrors((prev) => {
         const copy = { ...prev };
         delete copy[fieldName];
+        return copy;
+      });
+    }
+  };
+
+  const handleWebsiteChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
+  ) => {
+    const value = e.target.value;
+
+    // Quick fix if user pasted or typed duplicate https:// or http://
+    let cleaned = value;
+    if (/^https?:\/\/https?:\/\//i.test(cleaned)) {
+      cleaned = cleaned.replace(/^https?:\/\/https?:\/\//i, "https://");
+    } else if (/^http:\/\//i.test(cleaned)) {
+      cleaned = cleaned.replace(/^http:\/\//i, "https://");
+    }
+
+    setForm((prev) => ({ ...prev, website: cleaned }));
+
+    // Clear error if user has typed a valid URL or emptied the field
+    if (fieldErrors.website) {
+      const formatted = formatWebsiteUrl(cleaned);
+      if (isValidWebsiteUrl(formatted) || cleaned.trim() === "") {
+        setFieldErrors((prev) => {
+          const copy = { ...prev };
+          delete copy.website;
+          return copy;
+        });
+      }
+    }
+  };
+
+  const handleWebsiteBlur = () => {
+    const raw = form.website.trim();
+    if (!raw) {
+      setForm((prev) => ({ ...prev, website: "" }));
+      setFieldErrors((prev) => {
+        const copy = { ...prev };
+        delete copy.website;
+        return copy;
+      });
+      return;
+    }
+
+    // If the link already has https://, fix it; else add it as a prefix
+    const formatted = formatWebsiteUrl(raw);
+    setForm((prev) => ({ ...prev, website: formatted }));
+
+    if (!isValidWebsiteUrl(formatted)) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        website: "Please enter a valid website URL (e.g. https://example.com)",
+      }));
+    } else {
+      setFieldErrors((prev) => {
+        const copy = { ...prev };
+        delete copy.website;
+        return copy;
+      });
+    }
+  };
+
+  const handleApplyHttps = () => {
+    const raw = form.website.trim();
+    if (!raw) return;
+    const formatted = formatWebsiteUrl(raw);
+    setForm((prev) => ({ ...prev, website: formatted }));
+    if (!isValidWebsiteUrl(formatted)) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        website: "Please enter a valid website URL (e.g. https://example.com)",
+      }));
+    } else {
+      setFieldErrors((prev) => {
+        const copy = { ...prev };
+        delete copy.website;
         return copy;
       });
     }
@@ -142,6 +222,24 @@ export default function CompanyEdit() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate and format website before submission
+    let finalWebsite = "";
+    if (form.website.trim()) {
+      finalWebsite = formatWebsiteUrl(form.website);
+      if (!isValidWebsiteUrl(finalWebsite)) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          website: "Please enter a valid website URL (e.g. https://example.com)",
+        }));
+        statusModal.showError(
+          "Validation Error",
+          "Please enter a valid website URL (e.g. https://example.com).",
+        );
+        return;
+      }
+      setForm((prev) => ({ ...prev, website: finalWebsite }));
+    }
+
     try {
       setFieldErrors({});
       const fd = new FormData();
@@ -156,7 +254,7 @@ export default function CompanyEdit() {
       fd.append("industry", form.industry);
       fd.append("language", form.language);
       fd.append("company_size", form.company_size);
-      fd.append("website", form.website);
+      fd.append("website", finalWebsite);
 
       const cleanedRoles = form.roles.filter((r) => r.trim() !== "");
       fd.append(
@@ -299,10 +397,24 @@ export default function CompanyEdit() {
               />
               <FormInput
                 label="Website"
+                labelExtra={
+                  form.website.trim() && !form.website.startsWith("https://") ? (
+                    <button
+                      type="button"
+                      onClick={handleApplyHttps}
+                      className="text-xs text-[#3B7CED] hover:underline font-medium cursor-pointer"
+                    >
+                      {/^https?[:\/]+/i.test(form.website)
+                        ? "Fix to https://"
+                        : "Add https:// prefix"}
+                    </button>
+                  ) : null
+                }
                 name="website"
-                placeholder="Enter your company website here"
+                placeholder="https://example.com"
                 value={form.website}
-                onChange={handleInput}
+                onChange={handleWebsiteChange}
+                onBlur={handleWebsiteBlur}
                 error={fieldErrors.website}
               />
             </div>

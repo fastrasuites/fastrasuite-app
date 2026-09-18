@@ -23,8 +23,15 @@ export function getModuleConfig(moduleName?: string): ModuleConfig {
 
   switch (norm) {
     case "project_request":
+    case "project_requests":
     case "projectrequest":
+    case "projectrequests":
     case "requests":
+    case "plant_equipment":
+    case "subcontractor":
+    case "material_consumption":
+    case "labour":
+    case "petty_cash":
       return {
         label: "Project Request",
         badgeBg: "bg-[#F3E8FF]",
@@ -36,15 +43,14 @@ export function getModuleConfig(moduleName?: string): ModuleConfig {
 
     case "purchase":
     case "purchase_request":
-    case "purchase_order":
     case "rfq":
       return {
-        label: "Purchase",
-        badgeBg: "bg-[#E8F0FE]",
-        badgeText: "text-[#1A73E8]",
-        iconBg: "bg-[#E8F0FE]",
-        iconColor: "text-[#1A73E8]",
-        Icon: ShoppingCart,
+        label: "Project Request",
+        badgeBg: "bg-[#F3E8FF]",
+        badgeText: "text-[#7C3AED]",
+        iconBg: "bg-[#F3E8FF]",
+        iconColor: "text-[#7C3AED]",
+        Icon: ClipboardList,
       };
 
     case "inventory":
@@ -60,9 +66,12 @@ export function getModuleConfig(moduleName?: string): ModuleConfig {
       };
 
     case "invoice":
+    case "invoicing":
     case "accounting":
     case "payment":
     case "vendor_bill":
+    case "purchase_order":
+    case "purchase_orders":
       return {
         label: "Invoice",
         badgeBg: "bg-[#E6FFFA]",
@@ -201,72 +210,22 @@ export function resolveNotificationUrl(notification: {
       return `/project-request/approve/${masterId}`;
     }
 
-    // Check for specific sub-module creation or status updates
-    const isPurchase =
-      title.includes("purchase") ||
-      message.includes("purchase") ||
-      event.includes("purchase");
-
-    const isSubcontractor =
-      title.includes("subcontractor") ||
-      message.includes("subcontractor") ||
-      event.includes("subcontractor");
-
-    const isMaterial =
-      title.includes("material") ||
-      message.includes("material") ||
-      event.includes("material");
-
-    const isLabour =
-      title.includes("labour") ||
-      message.includes("labour") ||
-      event.includes("labour");
-
-    const isPettyCash =
-      title.includes("petty") ||
-      message.includes("petty") ||
-      event.includes("petty");
-
-    const isPlant =
-      title.includes("plant") ||
-      title.includes("equipment") ||
-      message.includes("equipment") ||
-      event.includes("equipment") ||
-      event.includes("plant");
-
-    if (isPurchase) {
-      const targetId = objectId || masterId;
-      return `/project-request/purchase-request/${targetId}`;
+    // If URL already targets a specific sub-module route directly
+    if (
+      url.includes("/plant-equipment-request/") ||
+      url.includes("/purchase-request/") ||
+      url.includes("/subcontractor-request/") ||
+      url.includes("/material-consumption-request/") ||
+      url.includes("/labour-request/") ||
+      url.includes("/petty-cash-request/")
+    ) {
+      return url;
     }
 
-    if (isSubcontractor) {
-      const targetId = objectId || masterId;
-      return `/project-request/subcontractor-request/${targetId}`;
-    }
-
-    if (isMaterial) {
-      const targetId = objectId || masterId;
-      return `/project-request/material-consumption-request/${targetId}`;
-    }
-
-    if (isLabour) {
-      const targetId = masterId || objectId;
-      return `/project-request/labour-request/${targetId}`;
-    }
-
-    if (isPettyCash) {
-      const targetId = masterId || objectId;
-      return `/project-request/petty-cash-request/${targetId}`;
-    }
-
-    if (isPlant) {
-      const targetId = objectId || masterId;
-      return `/project-request/plant-equipment-request/${targetId}`;
-    }
-
-    // Default fallback for project request
+    // Default: Dispatch through /project-request/[id] which dynamically handles
+    // draft vs approved/pending status and routes with correct detail IDs
     if (masterId) {
-      return `/project-request/approve/${masterId}`;
+      return `/project-request/${masterId}`;
     }
   }
 
@@ -276,6 +235,8 @@ export function resolveNotificationUrl(notification: {
   if (
     url.startsWith("/invoicing/purchase-orders/") ||
     url.startsWith("/invoice/purchase-orders/") ||
+    url.startsWith("/invoicing/purchase-order/") ||
+    url.startsWith("/invoice/purchase-order/") ||
     (mod === "invoice" && (event.includes("purchase_order") || title.includes("purchase order")))
   ) {
     const poMatch = url.match(/\/(?:invoicing|invoice)\/purchase-orders?\/([^\/\s]+)/);

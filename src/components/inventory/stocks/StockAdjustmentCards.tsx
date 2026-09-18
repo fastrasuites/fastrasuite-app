@@ -39,14 +39,14 @@ function StockAdjustmentCard({ request, index }: StockAdjustmentCardProps) {
     >
       <Card
         className={cn(
-          "cursor-pointer transition-all duration-200 hover:shadow border-2 border-gray-200 hover:border-gray-300 shadow-none rounded"
+          "cursor-pointer transition-all duration-200 hover:shadow border-2 border-gray-200 hover:border-gray-300 shadow-none rounded font-['Open_Sans',sans-serif]"
         )}
         onClick={handleCardClick}
       >
         <CardHeader>
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-lg font-semibold text-gray-900 truncate">
+              <CardTitle className="text-base font-semibold text-gray-900 truncate font-['Open_Sans',sans-serif]">
                 {request.product}
               </CardTitle>
               <StatusPill status={request.status} />
@@ -55,35 +55,43 @@ function StockAdjustmentCard({ request, index }: StockAdjustmentCardProps) {
         </CardHeader>
 
         <CardContent>
-          <div className="space-y-3">
+          <div className="space-y-3 font-['Open_Sans',sans-serif]">
             {/* Adjustment Type */}
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Type:</span>
-              <span className="text-sm font-medium text-gray-900">
+              <span className="text-sm text-gray-600 font-['Open_Sans',sans-serif]">Type:</span>
+              <span className="text-sm font-medium text-gray-900 font-['Open_Sans',sans-serif]">
                 {request.adjustmentType}
               </span>
             </div>
 
             {/* Location */}
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Location:</span>
-              <span className="text-sm font-medium text-gray-900 truncate max-w-32">
+              <span className="text-sm text-gray-600 font-['Open_Sans',sans-serif]">Location:</span>
+              <span className="text-sm font-medium text-gray-900 truncate max-w-32 font-['Open_Sans',sans-serif]">
                 {request.location}
               </span>
             </div>
 
             {/* Adjusted Date */}
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Date:</span>
-              <span className="text-sm font-medium text-gray-900">
+              <span className="text-sm text-gray-600 font-['Open_Sans',sans-serif]">Date:</span>
+              <span className="text-sm font-medium text-gray-900 font-['Open_Sans',sans-serif]">
                 {request.adjustedDate}
+              </span>
+            </div>
+
+            {/* Quantity Adjusted */}
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600 font-['Open_Sans',sans-serif]">Quantity Adjusted:</span>
+              <span className={`text-sm font-medium font-['Open_Sans',sans-serif] ${request.quantity !== undefined && request.quantity < 0 ? "text-[#E43D2B]" : "text-[#2BA24D]"}`}>
+                {request.quantity !== undefined ? (request.quantity > 0 ? `+${request.quantity}` : request.quantity) : "—"}
               </span>
             </div>
 
             {/* Stock Adjustment ID */}
             <div className="flex justify-between items-center pt-2 border-t border-gray-100">
-              <span className="text-xs text-gray-500">Adjustment ID:</span>
-              <span className="text-xs font-mono text-gray-600">
+              <span className="text-xs text-gray-500 font-['Open_Sans',sans-serif]">Adjustment ID:</span>
+              <span className="text-xs font-medium text-gray-600 font-['Open_Sans',sans-serif]">
                 {request.id}
               </span>
             </div>
@@ -100,7 +108,7 @@ export function StockAdjustmentCards({
 }: StockAdjustmentCardsProps & { isLoading?: boolean }) {
   return (
     <motion.div
-      className="px-6 bg-white h-full mt-6 rounded-md"
+      className="px-6 bg-white h-full mt-6 rounded-md font-['Open_Sans',sans-serif]"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
@@ -108,14 +116,14 @@ export function StockAdjustmentCards({
       {/* Stock Adjustment Cards Grid */}
       {isLoading ? (
         <motion.div
-          className="flex items-center justify-center h-64 text-center"
+          className="flex items-center justify-center h-64 text-center font-['Open_Sans',sans-serif]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <div className="text-gray-400 text-sm">Loading stock adjustments...</div>
+          <div className="text-gray-400 text-sm font-['Open_Sans',sans-serif]">Loading stock adjustments...</div>
         </motion.div>
       ) : stockAdjustments.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 py-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 py-6 font-['Open_Sans',sans-serif]">
           {stockAdjustments.map((stockAdjustment, index) => (
             <StockAdjustmentCard
               key={stockAdjustment.id}
@@ -126,12 +134,12 @@ export function StockAdjustmentCards({
         </div>
       ) : (
         <motion.div
-          className="flex items-center justify-center h-64"
+          className="flex items-center justify-center h-64 font-['Open_Sans',sans-serif]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, ease: "easeOut", delay: 0.3 }}
         >
-          <div className="text-center">
+          <div className="text-center font-['Open_Sans',sans-serif]">
             <div className="w-16 h-16 mx-auto mb-4 text-gray-300">
               <svg
                 className="w-full h-full"
@@ -147,7 +155,7 @@ export function StockAdjustmentCards({
                 />
               </svg>
             </div>
-            <p className="text-gray-400 text-sm">No stock adjustments found</p>
+            <p className="text-gray-400 text-sm font-['Open_Sans',sans-serif]">No stock adjustments found</p>
           </div>
         </motion.div>
       )}

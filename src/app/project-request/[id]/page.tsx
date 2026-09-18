@@ -49,6 +49,8 @@ export default function ProjectRequestDynamicRedirectPage() {
         router.replace(`/project-request/petty-cash-request/${numericId}`);
       } else if (type.includes("material")) {
         router.replace(`/project-request/material-consumption-request/${detailId || numericId}`);
+      } else if (type.includes("plant") || type.includes("equipment")) {
+        router.replace(`/project-request/plant-equipment-request/${detailId || numericId}`);
       } else {
         router.replace(`/project-request/approve/${numericId}`);
       }

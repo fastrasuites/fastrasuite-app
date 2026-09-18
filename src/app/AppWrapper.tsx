@@ -46,15 +46,24 @@ export default function AppWrapper({
   const pathname = usePathname();
   const isAuthPage = pathname.startsWith("/auth");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+
+  // Restore sidebar expansion state from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("fastra_sidebar_expanded");
+      if (saved !== null) {
+        setSidebarExpanded(saved === "true");
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
 
   const [prevPathname, setPrevPathname] = useState(pathname);
   if (prevPathname !== pathname) {
     setPrevPathname(pathname);
     setSidebarOpen(false);
-    if (pathname !== "/") {
-      setSidebarExpanded(false);
-    }
   }
 
   const toggleSidebar = () => {
@@ -62,8 +71,31 @@ export default function AppWrapper({
   };
 
   const toggleExpanded = () => {
-    setSidebarExpanded(!sidebarExpanded);
+    setSidebarExpanded((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("fastra_sidebar_expanded", String(next));
+      } catch {
+        // Ignore storage errors
+      }
+      return next;
+    });
   };
+
+  // Keyboard shortcut (Ctrl+B / Cmd+B) to toggle sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        // Don't trigger if typing in an input/textarea
+        const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+        if (tag === "input" || tag === "textarea") return;
+        e.preventDefault();
+        toggleExpanded();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const closeSidebar = () => {
     setSidebarOpen(false);

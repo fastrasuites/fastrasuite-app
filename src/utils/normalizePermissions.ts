@@ -83,13 +83,51 @@ function expandPermissionType(type: string): PermissionAction[] {
   } else if (normalizedType === "approver") {
     actions.push("view", "approve" as any, "reject" as any);
   } else if (normalizedType === "requester") {
-    // Requester has specific granular entitlements; do not give blanket module-wide view/create
-    actions.push("requester" as PermissionAction);
+    // Requester has view access to inspect and follow up on their submitted requests
+    actions.push("requester" as PermissionAction, "view" as PermissionAction);
   } else {
     actions.push(type as PermissionAction);
   }
   
   return actions;
+}
+
+export function getModuleAliases(mod: string): string[] {
+  const aliases = new Set<string>([mod]);
+  const lower = (mod || "").toLowerCase().replace(/[\s]/g, "");
+
+  if (
+    lower === "project_requests" ||
+    lower === "project_request" ||
+    lower === "project-request" ||
+    lower === "project-requests" ||
+    lower === "projectrequest" ||
+    lower === "projectrequests"
+  ) {
+    aliases.add("project_requests");
+    aliases.add("project_request");
+    aliases.add("project-request");
+    aliases.add("project-requests");
+    aliases.add("projectrequest");
+    aliases.add("projectrequests");
+  }
+  if (lower === "invoice" || lower === "invoicing") {
+    aliases.add("invoice");
+    aliases.add("invoicing");
+  }
+  if (
+    lower === "project_costing" ||
+    lower === "project-costing" ||
+    lower === "projectcosting"
+  ) {
+    aliases.add("project_costing");
+    aliases.add("project-costing");
+    aliases.add("projectcosting");
+  }
+  if (lower === "inventory") {
+    aliases.add("inventory");
+  }
+  return Array.from(aliases);
 }
 
 export function normalizePermissionDetails(
@@ -249,6 +287,19 @@ export function normalizePermissionDetails(
     }
   }
 
+  // Mirror aliases so lookups by singular/plural/hyphen/underscore all work
+  for (const [modKey, actions] of Object.entries(permissions)) {
+    const aliases = getModuleAliases(modKey);
+    for (const alias of aliases) {
+      if (!permissions[alias]) {
+        permissions[alias] = new Set();
+      }
+      for (const act of actions) {
+        permissions[alias].add(act);
+      }
+    }
+  }
+
   return { isAdmin: false, permissions, isReady: true };
 }
 
@@ -274,6 +325,20 @@ export function normalizePermissionsFromBackend(
       }
       permissions[key].add(entry.permission_type as PermissionAction);
     }
+
+    // Mirror aliases
+    for (const [modKey, actions] of Object.entries(permissions)) {
+      const aliases = getModuleAliases(modKey);
+      for (const alias of aliases) {
+        if (!permissions[alias]) {
+          permissions[alias] = new Set();
+        }
+        for (const act of actions) {
+          permissions[alias].add(act);
+        }
+      }
+    }
+
     return { isAdmin: false, permissions, isReady: true };
   }
 

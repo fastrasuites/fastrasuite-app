@@ -47,6 +47,14 @@ export default function StockAdjustmentPage() {
     status: selectedStatus === "all" ? undefined : (selectedStatus.toUpperCase() as any),
   });
 
+  const formatAdjustmentType = (type?: string | null) => {
+    if (!type) return "Stock Level Update";
+    return type
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
   const rows = useMemo(() => {
     if (!adjustmentsData) return [];
     const list = Array.isArray(adjustmentsData)
@@ -57,7 +65,7 @@ export default function StockAdjustmentPage() {
       const statusValue = normalizedStatus === "validated" || normalizedStatus === "done" ? "done" : "draft";
       return {
         id: adj.id,
-        adjustmentType: adj.adjustment_type || "Stock Level Update",
+        adjustmentType: formatAdjustmentType(adj.adjustment_type),
         location: adj.warehouse_location_details?.location_name || adj.warehouse_location || "N/A",
         adjustedDate: adj.date_created ? new Date(adj.date_created).toISOString().split("T")[0] : "N/A",
         status: statusValue as StockAdjustmentStatus,
@@ -77,14 +85,14 @@ export default function StockAdjustmentPage() {
   return (
     <PageGuard module="inventory" entitlement="view_stockadjustment">
       {/* Two-tone: gray page canvas */}
-      <div className="flex flex-col flex-1 min-h-[calc(100vh-64px)] bg-[#F6F9FC] relative pb-20">
-        <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full flex flex-col gap-6">
+      <div className="flex flex-col flex-1 min-h-[calc(100vh-64px)] bg-[#F6F9FC] relative pb-20 font-['Open_Sans',sans-serif]">
+        <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 w-full flex flex-col gap-6 font-['Open_Sans',sans-serif]">
           <Breadcrumbs
             items={items}
             action={
               <Button
                 variant="ghost"
-                className="text-sm text-gray-400 flex items-center gap-2 hover:text-[#3B7CED] transition-colors duration-200"
+                className="text-sm text-gray-400 flex items-center gap-2 hover:text-[#3B7CED] transition-colors duration-200 font-['Open_Sans',sans-serif]"
               >
                 Autosaved <AutoSaveIcon />
               </Button>
@@ -92,18 +100,18 @@ export default function StockAdjustmentPage() {
           />
 
           {/* White Section Card 1: Header + Controls + Filter Pills */}
-          <div className="bg-white rounded-lg shadow-2xs border border-gray-100 overflow-hidden">
+          <div className="bg-white rounded-lg shadow-2xs border border-gray-100 overflow-hidden font-['Open_Sans',sans-serif]">
             {/* Top Bar: title + search + actions */}
             <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                <h1 className="text-xl font-semibold text-[#32325D] shrink-0">
-                  Stock Adjustments
+                <h1 className="text-xl font-semibold text-[#32325D] shrink-0 font-['Open_Sans',sans-serif]">
+                  Stock Adjustment
                 </h1>
                 <div className="relative w-[260px] md:w-[320px]">
                   <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
                     type="text"
-                    className="pl-9 bg-white border-gray-200 h-9 text-sm rounded-lg focus-visible:ring-1 focus-visible:ring-[#3B7CED] focus-visible:border-[#3B7CED] text-[#32325D] w-full"
+                    className="pl-9 bg-white border-gray-200 h-9 text-sm rounded-lg focus-visible:ring-1 focus-visible:ring-[#3B7CED] focus-visible:border-[#3B7CED] text-[#32325D] w-full font-['Open_Sans',sans-serif]"
                     placeholder="Search adjustments by ID, location..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
@@ -115,12 +123,12 @@ export default function StockAdjustmentPage() {
               <div className="flex items-center gap-3 self-end sm:self-auto">
                 <PermissionGuard module="inventory" entitlement="add_stockadjustment">
                   <Link href="/inventory/stocks/adjustment/new">
-                    <Button className="bg-[#3B7CED] hover:bg-[#3065c3] text-white h-9 px-4 rounded-md font-medium text-sm shadow-2xs transition-all">
+                    <Button className="bg-[#3B7CED] hover:bg-[#3065c3] text-white h-9 px-4 rounded-md font-medium text-sm shadow-2xs transition-all font-['Open_Sans',sans-serif]">
                       <Plus className="w-4 h-4 mr-1.5" /> New Stock Adjustment
                     </Button>
                   </Link>
                 </PermissionGuard>
-                <div className="flex items-center border border-gray-200 rounded-lg p-0.5 bg-white gap-0.5 shadow-2xs">
+                <div className="flex items-center border border-gray-200 rounded-lg p-0.5 bg-white gap-0.5 shadow-2xs font-['Open_Sans',sans-serif]">
                   <ViewToggle
                     currentView={currentView}
                     onViewChange={handleViewChange}
@@ -130,11 +138,11 @@ export default function StockAdjustmentPage() {
             </div>
 
             {/* Status Filter Pills */}
-            <div className="px-4 py-3 flex items-center gap-2 flex-wrap">
+            <div className="px-4 py-3 flex items-center gap-2 flex-wrap font-['Open_Sans',sans-serif]">
               {[
                 { label: "All Records", value: "all" },
-                { label: "Validated", value: "done" },
                 { label: "Draft", value: "draft" },
+                { label: "Validated", value: "done" },
               ].map((tab) => {
                 const isSelected = selectedStatus === tab.value;
                 return (
@@ -142,7 +150,7 @@ export default function StockAdjustmentPage() {
                     key={tab.value}
                     type="button"
                     onClick={() => handleStatusChange(tab.value)}
-                    className={`px-4 py-1.5 rounded-full text-xs transition-all duration-150 cursor-pointer ${
+                    className={`px-4 py-1.5 rounded-full text-xs font-['Open_Sans',sans-serif] transition-all duration-150 cursor-pointer ${
                       isSelected
                         ? "bg-[#E8F0FE] text-[#1A73E8] font-semibold"
                         : "bg-[#E9ECEF] text-[#8898AA] font-normal hover:bg-gray-200"
@@ -156,11 +164,11 @@ export default function StockAdjustmentPage() {
           </div>
 
           {/* White Section Card 2: Table or Grid */}
-          <div data-wizard="inventory-adjustments-table" className="bg-white rounded-lg shadow-2xs border border-gray-100 overflow-hidden">
+          <div data-wizard="inventory-adjustments-table" className="bg-white rounded-lg shadow-2xs border border-gray-100 overflow-hidden font-['Open_Sans',sans-serif]">
             {currentView === "list" ? (
               <StockAdjustmentTable rows={rows} query={query} isLoading={isLoading} />
             ) : (
-              <div className="p-6">
+              <div className="p-6 font-['Open_Sans',sans-serif]">
                 <StockAdjustmentCards stockAdjustments={rows} isLoading={isLoading} />
               </div>
             )}

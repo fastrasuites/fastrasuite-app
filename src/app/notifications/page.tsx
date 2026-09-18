@@ -10,7 +10,6 @@ import {
   Inbox,
   Clock,
   ClipboardList,
-  ShoppingCart,
   Package,
   Receipt,
   Briefcase,
@@ -30,7 +29,6 @@ import { Button } from "@/components/ui/button";
 const MODULE_FILTERS = [
   { id: "all", label: "All Modules" },
   { id: "project_request", label: "Project Request", icon: ClipboardList },
-  { id: "purchase", label: "Purchase", icon: ShoppingCart },
   { id: "inventory", label: "Inventory", icon: Package },
   { id: "invoice", label: "Invoice", icon: Receipt },
   { id: "project_costing", label: "Project Costing", icon: Briefcase },
@@ -60,17 +58,22 @@ export default function NotificationsPage() {
   );
 
   const projectReqCount = useMemo(
-    () => notifications.filter((n) => (n.module || "").includes("project_request")).length,
-    [notifications]
-  );
-
-  const purchaseCount = useMemo(
-    () => notifications.filter((n) => (n.module || "").includes("purchase")).length,
+    () => notifications.filter((n) => (n.module || "").toLowerCase().includes("project_request")).length,
     [notifications]
   );
 
   const inventoryCount = useMemo(
-    () => notifications.filter((n) => (n.module || "").includes("inventory")).length,
+    () => notifications.filter((n) => (n.module || "").toLowerCase().includes("inventory")).length,
+    [notifications]
+  );
+
+  const invoiceCount = useMemo(
+    () => notifications.filter((n) => (n.module || "").toLowerCase().includes("invoice")).length,
+    [notifications]
+  );
+
+  const projectCostingCount = useMemo(
+    () => notifications.filter((n) => (n.module || "").toLowerCase().includes("project_costing")).length,
     [notifications]
   );
 
@@ -210,7 +213,7 @@ export default function NotificationsPage() {
 
         {/* Summary Metrics Cards (Inventory Tile Style) */}
         <div className="bg-white border border-gray-100 rounded-lg shadow-2xs overflow-hidden mb-2">
-          <div className="grid grid-cols-2 sm:grid-cols-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
             {[
               {
                 title: "Total Alerts",
@@ -234,20 +237,27 @@ export default function NotificationsPage() {
                 filter: "project_request",
               },
               {
-                title: "Purchases",
-                count: purchaseCount,
-                icon: ShoppingCart,
-                color: "#F0B401", // Yellow/Amber
-                filter: "purchase",
-              },
-              {
                 title: "Inventory",
                 count: inventoryCount,
                 icon: Package,
                 color: "#27AE60", // Green
                 filter: "inventory",
               },
-            ].map((mod, idx, arr) => (
+              {
+                title: "Invoice",
+                count: invoiceCount,
+                icon: Receipt,
+                color: "#0D9488", // Teal
+                filter: "invoice",
+              },
+              {
+                title: "Project Costing",
+                count: projectCostingCount,
+                icon: Briefcase,
+                color: "#D97706", // Amber
+                filter: "project_costing",
+              },
+            ].map((mod) => (
               <button
                 key={mod.title}
                 type="button"
@@ -260,11 +270,7 @@ export default function NotificationsPage() {
                     setStatusFilter("all");
                   }
                 }}
-                className={`p-5 cursor-pointer hover:bg-gray-50 transition-colors group flex flex-col text-left ${
-                  idx < arr.length - 1
-                    ? "border-b sm:border-b-0 sm:border-r border-gray-100"
-                    : ""
-                }`}
+                className="p-5 cursor-pointer hover:bg-gray-50 transition-colors group flex flex-col text-left"
               >
                 <div className="flex items-center gap-2 mb-4">
                   <mod.icon

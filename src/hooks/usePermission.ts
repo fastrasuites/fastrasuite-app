@@ -50,6 +50,19 @@ function matchesSubmodule(entitlementStr: string, moduleStr: string): boolean {
 export function usePermission() {
   const { isAdmin, permissions, isReady } = usePermissionContext();
 
+  const resolveTarget = useCallback((key?: string): Set<PermissionAction> | undefined => {
+    if (!key) return undefined;
+    if (permissions[key]) return permissions[key];
+    const norm = key.toLowerCase().replace(/[-_]/g, "");
+    for (const [pKey, pVal] of Object.entries(permissions)) {
+      const pNorm = pKey.toLowerCase().replace(/[-_]/g, "");
+      if (pNorm === norm || pNorm === norm + "s" || pNorm + "s" === norm) {
+        return pVal;
+      }
+    }
+    return undefined;
+  }, [permissions]);
+
   const can = useCallback(
     ({ application, module, action, entitlement }: CanParamsV2): boolean => {
       if (isAdmin) {
@@ -59,9 +72,7 @@ export function usePermission() {
       // New API: direct module/application + entitlement check
       if (entitlement) {
         // Resolve target permissions from module, or fallback to application if module is empty or not in permissions
-        const targetPerms =
-          (module && permissions[module]) ||
-          (application && permissions[application]);
+        const targetPerms = resolveTarget(module) || resolveTarget(application);
 
         if (targetPerms) {
           const hasDirect = targetPerms.has(entitlement as PermissionAction);
@@ -78,8 +89,15 @@ export function usePermission() {
             return true;
           }
 
-          // Fallback: If user has generic "view" entitlement, and the check is for a view entitlement
-          if (entitlement.startsWith("view") && targetPerms.has("view" as PermissionAction)) {
+          // Fallback: If user has generic "view" entitlement, or has requester/viewer role
+          if (
+            entitlement.startsWith("view") &&
+            (targetPerms.has("view" as PermissionAction) ||
+              targetPerms.has("requester" as PermissionAction) ||
+              targetPerms.has("viewer" as PermissionAction) ||
+              targetPerms.has("reviewer" as PermissionAction) ||
+              targetPerms.size > 0)
+          ) {
             return true;
           }
 
@@ -106,15 +124,21 @@ export function usePermission() {
         }
 
         // If module was specified but targetPerms on module failed, also check application key (e.g. module="adjustment", application="inventory")
-        if (module && application && permissions[application] && targetPerms !== permissions[application]) {
-          const appPerms = permissions[application];
-          if (
-            appPerms.has(entitlement as PermissionAction) ||
-            appPerms.has("administrator" as PermissionAction) ||
-            appPerms.has("admin" as PermissionAction) ||
-            appPerms.has("manager" as PermissionAction)
-          ) {
-            return true;
+        if (module && application) {
+          const appPerms = resolveTarget(application);
+          if (appPerms && appPerms !== targetPerms) {
+            if (
+              appPerms.has(entitlement as PermissionAction) ||
+              appPerms.has("administrator" as PermissionAction) ||
+              appPerms.has("admin" as PermissionAction) ||
+              appPerms.has("manager" as PermissionAction) ||
+              (entitlement.startsWith("view") &&
+                (appPerms.has("view" as PermissionAction) ||
+                  appPerms.has("requester" as PermissionAction) ||
+                  appPerms.has("viewer" as PermissionAction)))
+            ) {
+              return true;
+            }
           }
         }
 
@@ -124,7 +148,7 @@ export function usePermission() {
       // Legacy API: application:module + action check
       if (application && module && action !== undefined) {
         // First try new format: module as direct key
-        const newFormatActions = permissions[module];
+        const newFormatActions = resolveTarget(module);
         if (newFormatActions && newFormatActions.size > 0) {
           // Map legacy action to entitlement prefix for new format
           const prefix = LEGACY_ACTION_TO_ENTITLEMENT_PREFIX[action] ?? action;

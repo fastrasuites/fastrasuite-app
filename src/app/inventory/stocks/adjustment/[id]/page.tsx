@@ -62,9 +62,17 @@ export default function StockAdjustmentDetailPage() {
     setModalState((prev) => ({ ...prev, isOpen: false }));
   };
 
+  const formatAdjustmentType = (type?: string | null) => {
+    if (!type) return "Stock Level Update";
+    return type
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
   const record = adjData ? {
     id: adjData.id,
-    adjustment_type: adjData.adjustment_type || "Stock Level Update",
+    adjustment_type: formatAdjustmentType(adjData.adjustment_type),
     warehouse_location: adjData.warehouse_location_details?.location_name || adjData.warehouse_location,
     date: (adjData as any).date_created ? new Date((adjData as any).date_created).toLocaleDateString() : "N/A",
     status: (adjData.status || "DRAFT").toLowerCase(),
@@ -75,7 +83,7 @@ export default function StockAdjustmentDetailPage() {
 
   return (
     <PageGuard module="inventory" entitlement="view_stockadjustment">
-      <div className="flex flex-col flex-1 min-h-[calc(100vh-64px)] bg-[#F6F9FC] relative pb-20">
+      <div className="flex flex-col flex-1 min-h-[calc(100vh-64px)] bg-[#F6F9FC] relative pb-20 font-['Open_Sans',sans-serif]">
         {/* Clean Header Card */}
         {isLoading && <div className="p-6 text-center text-gray-500">Loading record details...</div>}
         {!isLoading && error && (

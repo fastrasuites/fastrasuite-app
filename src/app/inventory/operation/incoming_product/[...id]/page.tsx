@@ -45,10 +45,11 @@ interface LineItemState {
 export default function IncomingProductDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const id = (params?.id as string) || "";
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId.join("/") : (rawId as string) || "";
   const decodedId = decodeURIComponent(id);
 
-  const { data: incomingProduct, isLoading, error, refetch } = useGetIncomingProductQuery(id, { skip: !id });
+  const { data: incomingProduct, isLoading, error, refetch } = useGetIncomingProductQuery(decodedId || id, { skip: !id });
   const [validateIncomingProduct] = useValidateIncomingProductReceiptMutation();
   const [updateIncomingProduct] = useUpdateIncomingProductMutation();
   const [patchIncomingProduct] = usePatchIncomingProductMutation();

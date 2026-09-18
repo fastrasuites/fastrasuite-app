@@ -29,14 +29,18 @@ const getStatusStyles = (
 
 export function StatusPill({ status }: { status: StockAdjustmentStatus }) {
   const styles = getStatusStyles(status);
+  const displayLabel =
+    styles.label === "Done" || styles.label === "Validated/Done" || styles.label === "validated"
+      ? "Validated"
+      : styles.label;
 
   return (
     <span
       role="status"
-      aria-label={`Status ${styles.label}`}
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${styles.bg} ${styles.text}`}
+      aria-label={`Status ${displayLabel}`}
+      className={`inline-flex items-center rounded-full px-3 py-0.5 text-xs font-medium font-['Open_Sans',sans-serif] ${styles.bg} ${styles.text}`}
     >
-      {styles.label}
+      {displayLabel}
     </span>
   );
 }

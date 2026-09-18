@@ -8,7 +8,7 @@ import StatusModal, { extractErrorMessage } from "@/components/shared/StatusModa
 import { ToastNotification } from "@/components/shared/ToastNotification";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash, ArrowLeft, Save, CheckCircle } from "lucide-react";
+import { Plus, Trash, ArrowLeft, Save, CheckCircle, X } from "lucide-react";
 import { useGetLocationsQuery } from "@/api/inventory/locationApi";
 import { useGetInventoryProductsQuery } from "@/api/inventory/productsApi";
 import { 
@@ -315,23 +315,46 @@ export default function EditStockAdjustmentPage() {
 
   return (
     <PageGuard application="inventory" module="adjustment">
-      <div className="flex flex-col flex-1 min-h-[calc(100vh-64px)] bg-[#F6F9FC] relative pb-24">
-        {/* Clean Header Card */}
-        <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <Link href={`/inventory/stocks/adjustment/${id}`}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-gray-400 hover:text-[#32325D]"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-lg font-semibold text-[#32325D]">
+      <div className="flex flex-col flex-1 min-h-[calc(100vh-64px)] bg-[#F6F9FC] relative pb-24 font-['Open_Sans',sans-serif]">
+        {/* Header Bar - Sticky across all screen sizes */}
+        <div className="sticky top-0 z-30 bg-white border-b border-gray-100 shadow-2xs">
+          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <Link href={`/inventory/stocks/adjustment/${id}`}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-gray-400 hover:text-[#32325D] shrink-0"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              </Link>
+              <h1 className="text-base sm:text-lg font-semibold text-[#32325D] truncate">
                 Edit Stock Adjustment: {id}
               </h1>
+            </div>
+
+            {/* Action buttons in header: Always visible on all screens */}
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <Link href={`/inventory/stocks/adjustment/${id}`}>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50 text-xs sm:text-sm h-8 sm:h-9 px-2.5 sm:px-4 font-medium flex items-center gap-1.5"
+                >
+                  <X className="w-3.5 h-3.5 text-gray-500" />
+                  <span>Cancel</span>
+                </Button>
+              </Link>
+              <Button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleSubmit(onSave)}
+                className="bg-[#3B7CED] hover:bg-[#3065c3] text-white text-xs sm:text-sm h-8 sm:h-9 px-3 sm:px-4 font-semibold shadow-2xs flex items-center gap-1.5"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{isSubmitting ? "Saving..." : "Save Draft"}</span>
+              </Button>
             </div>
           </div>
         </div>
@@ -545,29 +568,55 @@ export default function EditStockAdjustmentPage() {
                 </Table>
               </div>
             </div>
+
+            {/* Inline Action Buttons at bottom of form */}
+            <div className="flex items-center justify-end gap-3 pt-1 pb-6">
+              <Link href={`/inventory/stocks/adjustment/${id}`}>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="border-gray-300 text-gray-700 hover:bg-gray-50 text-sm h-9 px-4 font-medium flex items-center gap-1.5"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                  Cancel
+                </Button>
+              </Link>
+              <Button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleSubmit(onSave)}
+                className="bg-[#3B7CED] hover:bg-[#3065c3] text-white text-sm h-9 px-4 font-semibold shadow-2xs flex items-center gap-1.5"
+              >
+                <Save className="w-4 h-4" />
+                {isSubmitting ? "Saving..." : "Save Draft"}
+              </Button>
+            </div>
           </form>
         </main>
 
-        {/* Fixed Signature Sticky Footer Bar */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 flex justify-end gap-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30">
-          <Link href={`/inventory/stocks/adjustment/${id}`}>
+        {/* Fixed Signature Sticky Footer Bar - Visible across all screen sizes */}
+        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xs border-t border-gray-200 py-3 px-4 sm:px-6 shadow-[0_-4px_12px_rgba(0,0,0,0.06)] z-40">
+          <div className="max-w-[1400px] mx-auto w-full flex items-center justify-between sm:justify-end gap-3">
+            <Link href={`/inventory/stocks/adjustment/${id}`}>
+              <Button
+                variant="outline"
+                type="button"
+                className="border-gray-300 text-gray-700 hover:bg-gray-50 text-sm h-9 px-4 font-medium flex items-center gap-1.5"
+              >
+                <X className="w-4 h-4 text-gray-500" />
+                Cancel
+              </Button>
+            </Link>
             <Button
-              variant="outline"
               type="button"
-              className="border-gray-300 text-gray-700 hover:bg-gray-50 h-9 px-4 text-sm font-medium"
+              disabled={isSubmitting}
+              onClick={handleSubmit(onSave)}
+              className="bg-[#3B7CED] hover:bg-[#3065c3] text-white text-sm h-9 px-4 font-semibold shadow-2xs flex items-center gap-1.5"
             >
-              Cancel
+              <Save className="w-4 h-4" />
+              {isSubmitting ? "Saving..." : "Save Draft"}
             </Button>
-          </Link>
-          <Button
-            type="button"
-            disabled={isSubmitting}
-            onClick={handleSubmit(onSave)}
-            className="bg-[#3B7CED] hover:bg-[#3065c3] text-white h-9 px-4 text-sm font-semibold shadow-2xs flex items-center gap-1.5"
-          >
-            <Save className="w-4 h-4" />
-            {isSubmitting ? "Saving..." : "Save Draft"}
-          </Button>
+          </div>
         </div>
 
         {/* Status Modal */}

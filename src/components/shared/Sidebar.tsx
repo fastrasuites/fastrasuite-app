@@ -1,83 +1,194 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import {
-  MenuIcon,
-  DashboardIcon,
-  AccountIcon,
-  SalesIcon,
-  FinanceIcon,
-  InventoryIcon,
-  HRIcon,
-  LogisticsIcon,
-  ContactIcon,
-  AppIcon,
-  SettingsIcon,
-} from "./icons";
-import { ClipboardList, Coins, ShieldCheck, Lock } from "lucide-react";
+  LayoutGrid,
+  ClipboardPenLine,
+  Clipboard,
+  ChevronDown,
+  Zap,
+  Settings,
+  ArrowLeftFromLine,
+  ArrowRightFromLine,
+  Lock,
+} from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { useGetSubscriptionStatusQuery } from "@/api/settings/subscriptionApi";
 
-// Navigation items grouped into sections
-const topItems = [{ id: "menu", icon: MenuIcon, label: "Menu", route: "/" }];
+// Custom receipt/invoice icon matching design
+const InvoiceIcon: React.FC<{ className?: string; color?: string; size?: number }> = ({
+  className,
+  color = "currentColor",
+  size = 20,
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M4 3a1.5 1.5 0 0 1 1.5-1.5h13A1.5 1.5 0 0 1 20 3v18l-2.5-1.5-2.5 1.5-2.5-1.5-2.5 1.5-2.5-1.5L4 21V3z" />
+    <line x1="8" y1="7" x2="16" y2="7" />
+    <line x1="8" y1="11" x2="16" y2="11" />
+    <line x1="8" y1="15" x2="13" y2="15" />
+  </svg>
+);
 
-const middleItems = [
-  // --- Functional Modules ---
-  { id: "dashboard", icon: DashboardIcon, label: "Dashboard", route: "/" },
+// Custom warehouse/inventory building icon matching design
+const InventoryWarehouseIcon: React.FC<{ className?: string; color?: string; size?: number }> = ({
+  className,
+  color = "currentColor",
+  size = 20,
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={color}
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M3 9.5L12 3l9 6.5V20a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 20V9.5z" />
+    <line x1="7" y1="12" x2="17" y2="12" />
+    <line x1="7" y1="15" x2="17" y2="15" />
+    <line x1="7" y1="18" x2="17" y2="18" />
+  </svg>
+);
+
+interface NavSubItem {
+  id: string;
+  label: string;
+  route: string;
+  entitlement?: string;
+}
+
+interface NavSectionItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string; color?: string; size?: number }>;
+  route?: string;
+  moduleKey?: string;
+  children?: NavSubItem[];
+}
+
+const navSections: NavSectionItem[] = [
   {
-    id: "account",
-    icon: AccountIcon,
+    id: "invoice",
     label: "Invoice",
+    icon: InvoiceIcon,
     route: "/invoice/approved-requests",
+    moduleKey: "invoice",
+    children: [
+      {
+        id: "approved-request",
+        label: "Approved request",
+        route: "/invoice/approved-requests",
+        entitlement: "view_approved_requests",
+      },
+      {
+        id: "purchase-order",
+        label: "Purchase Order",
+        route: "/invoice/purchase-order",
+        entitlement: "view_purchase_orders",
+      },
+      {
+        id: "payment-queue",
+        label: "Payment Queue",
+        route: "/invoice/payment-queue",
+        entitlement: "view_accounts_payable_queue",
+      },
+      {
+        id: "charts-of-account",
+        label: "Charts of Account",
+        route: "/invoice/chart-of-account",
+        entitlement: "view_cash_flow",
+      },
+      {
+        id: "account-ledger",
+        label: "Account Ledger",
+        route: "/invoice/account-ledger",
+        entitlement: "view_cash_flow",
+      },
+    ],
   },
   {
     id: "inventory",
-    icon: InventoryIcon,
     label: "Inventory",
+    icon: InventoryWarehouseIcon,
     route: "/inventory/operation",
+    moduleKey: "inventory",
+    children: [
+      {
+        id: "incoming-product",
+        label: "Incoming Product",
+        route: "/inventory/operation/incoming_product",
+        entitlement: "view_incoming_product",
+      },
+      {
+        id: "material-consumption",
+        label: "Material Consumption",
+        route: "/inventory/operation/material-consumption",
+        entitlement: "view_material_consumption",
+      },
+      {
+        id: "stock-on-hand",
+        label: "Stock on Hand",
+        route: "/inventory/stock-on-hand",
+        entitlement: "view_stock_on_hand",
+      },
+      {
+        id: "stock-adjustment",
+        label: "Stock Adjustment",
+        route: "/inventory/stocks/adjustment",
+        entitlement: "view_stock_adjustment",
+      },
+      {
+        id: "scrap",
+        label: "Scrap",
+        route: "/inventory/operation/scrap",
+        entitlement: "view_scrap",
+      },
+    ],
   },
   {
     id: "project-request",
-    icon: ClipboardList,
     label: "Project Request",
+    icon: ClipboardPenLine,
     route: "/project-request",
+    moduleKey: "projectRequest",
+    children: [
+      {
+        id: "make-a-request",
+        label: "Make a Request",
+        route: "/project-request/make-request",
+        entitlement: "create",
+      },
+      {
+        id: "approved-request",
+        label: "Approved Request",
+        route: "/project-request/approve",
+        entitlement: "approve",
+      },
+    ],
   },
   {
     id: "project-costing",
-    icon: Coins,
     label: "Project Costing",
+    icon: Clipboard,
     route: "/project-costing",
+    moduleKey: "projectCosting",
   },
-  // { id: "contact", icon: ContactIcon, label: "Contact", route: "/contact" },
-  // --- Non-Functional Modules (Coming Soon) ---
-  /*
-  { id: "sales", icon: SalesIcon, label: "Sales", route: "/sales" },
-  { id: "finance", icon: FinanceIcon, label: "Finance", route: "/finance" },
-  { id: "hr", icon: HRIcon, label: "HR", route: "/hr" },
-  {
-    id: "logistics",
-    icon: LogisticsIcon,
-    label: "Logistics",
-    route: "/logistics",
-  */
-];
-
-const bottomItems = [
-  {
-    id: "audit-trail",
-    icon: ShieldCheck,
-    label: "Audit Trail",
-    route: "/settings/audit-trail",
-  },
-  {
-    id: "settings",
-    icon: SettingsIcon,
-    label: "Settings",
-    route: "/settings/company/1",
-  },
-  // { id: "app", icon: AppIcon, label: "App", route: "/app" },
 ];
 
 interface SidebarProps {
@@ -91,20 +202,15 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   onClose,
-  onToggle,
-  isExpanded = false,
+  isExpanded = true,
   onToggleExpanded,
 }) => {
   const pathname = usePathname();
-  const [tooltip, setTooltip] = useState<{
-    text: string;
-    x: number;
-    y: number;
-  } | null>(null);
   const router = useRouter();
-  const { isAdmin } = usePermission();
-  const { hasAccess } = useModulePermissions();
+  const { isAdmin, can } = usePermission();
+  const { hasAccess, canDo } = useModulePermissions();
   const { data: subStatus } = useGetSubscriptionStatusQuery();
+
   const isExpired =
     subStatus?.status === "expired" ||
     (subStatus &&
@@ -112,77 +218,167 @@ const Sidebar: React.FC<SidebarProps> = ({
       subStatus.status !== "trialing" &&
       subStatus.status !== "past_due");
 
-  const visibleMiddleItems = middleItems.filter((item) => {
-    if (!isAdmin && ["sales", "finance", "hr", "logistics"].includes(item.id)) {
-      return false;
-    }
-
-    if (!isAdmin) {
-      switch (item.id) {
-        case "dashboard":
-          return true;
-        case "account":
-          return hasAccess("invoice");
-        case "inventory":
-          return hasAccess("inventory");
-        case "project-request":
-          return hasAccess("projectRequest");
-        case "project-costing":
-          return hasAccess("projectCosting");
-        // case "contact":
-        //   return hasAccess("contact");
-        default:
-          return true;
-      }
-    }
-
-    return true;
+  // Accordion state: default all sections open as depicted in design
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    invoice: true,
+    inventory: true,
+    "project-request": true,
   });
 
-  const visibleBottomItems = bottomItems.filter((item) => {
-    if (!isAdmin && item.id === "app") return false;
-    if (!isAdmin && item.id === "settings") return hasAccess("settings");
-    return true;
-  });
+  // Tooltip state for collapsed icon-only mode
+  const [tooltip, setTooltip] = useState<{
+    text: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
-  const handleNavigation = (item: {
-    id: string;
-    icon: any;
-    label: string;
-    route: string;
-  }) => {
+  // Flyout menu state for collapsed mode
+  const [flyout, setFlyout] = useState<{
+    section: NavSectionItem;
+    top: number;
+    left: number;
+  } | null>(null);
+  const flyoutTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Auto-expand relevant section if user navigates to a child route
+  useEffect(() => {
+    if (pathname.startsWith("/invoice")) {
+      setOpenSections((prev) => ({ ...prev, invoice: true }));
+    } else if (pathname.startsWith("/inventory")) {
+      setOpenSections((prev) => ({ ...prev, inventory: true }));
+    } else if (pathname.startsWith("/project-request")) {
+      setOpenSections((prev) => ({ ...prev, "project-request": true }));
+    }
+  }, [pathname]);
+
+  const toggleSection = (sectionId: string) => {
+    setOpenSections((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
+  };
+
+  const handleNavigate = (route: string) => {
+    setFlyout(null);
     if (onClose) onClose();
-    if (isExpired && !item.route.startsWith("/settings")) {
+    if (isExpired && !route.startsWith("/settings")) {
       router.push("/settings/billing?expired=true");
       return;
     }
-    router.push(item.route);
+    router.push(route);
   };
 
-  const isActiveItem = (item: { id: string; route: string }) => {
-    if (item.route === "/") {
-      return pathname === "/";
-    }
-    if (item.id === "account") {
-      return pathname?.startsWith("/invoice");
-    }
-    if (item.id === "inventory") {
-      return pathname?.startsWith("/inventory");
-    }
-    if (item.id === "audit-trail") {
-      return pathname?.startsWith("/settings/audit-trail") || pathname?.startsWith("/audit-trail");
-    }
-    if (item.id === "settings") {
-      return pathname?.startsWith("/settings") && !pathname?.startsWith("/settings/audit-trail");
-    }
-    return pathname?.startsWith(item.route);
+  const isDashboardActive = pathname === "/";
+
+  const isSubItemActive = (route: string) => {
+    return pathname === route || pathname.startsWith(`${route}/`);
   };
 
-  const handleMouseEnter = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    label: string,
+  const isSectionActive = (section: NavSectionItem) => {
+    if (section.id === "invoice") return pathname.startsWith("/invoice");
+    if (section.id === "inventory") return pathname.startsWith("/inventory");
+    if (section.id === "project-request") return pathname.startsWith("/project-request");
+    if (section.id === "project-costing") return pathname.startsWith("/project-costing");
+    return false;
+  };
+
+  const isSettingsActive =
+    pathname.startsWith("/settings") && !pathname.startsWith("/settings/billing");
+  const isUpgradePlanActive = pathname.startsWith("/settings/billing");
+
+  // Granular entitlement check for sub-items
+  const isChildVisible = (section: NavSectionItem, child: NavSubItem): boolean => {
+    if (isAdmin) return true;
+    if (!child.entitlement) return true;
+    if (!section.moduleKey) return true;
+
+    // Check both through usePermission can() and useModulePermissions canDo()
+    return (
+      can({
+        module: section.moduleKey,
+        entitlement: child.entitlement,
+        action: child.entitlement,
+      }) ||
+      canDo(section.moduleKey, child.entitlement)
+    );
+  };
+
+  // Filter sections by permissions and subscription rules (Hidden Not Disabled)
+  const visibleSections = navSections
+    .filter((section) => {
+      if (isAdmin) return true;
+      if (!section.moduleKey) return true;
+      return hasAccess(section.moduleKey);
+    })
+    .map((section) => {
+      if (!section.children) return section;
+      const visibleChildren = section.children.filter((child) =>
+        isChildVisible(section, child)
+      );
+      return {
+        ...section,
+        children: visibleChildren,
+      };
+    })
+    .filter((section) => {
+      if (isAdmin) return true;
+      // If a section has children originally, but none are visible to this user, hide section
+      const original = navSections.find((s) => s.id === section.id);
+      if (
+        original?.children &&
+        original.children.length > 0 &&
+        section.children?.length === 0
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+  const canAccessSettings = isAdmin || hasAccess("settings");
+
+  // Collapsed Mode Hover Handlers
+  const handleCollapsedMouseEnter = (
+    event: React.MouseEvent<HTMLElement>,
+    section: NavSectionItem
   ) => {
+    if (isExpanded) return;
+    if (flyoutTimeoutRef.current) {
+      clearTimeout(flyoutTimeoutRef.current);
+    }
+
     const rect = event.currentTarget.getBoundingClientRect();
+    if (section.children && section.children.length > 0) {
+      setTooltip(null);
+      setFlyout({
+        section,
+        top: Math.max(16, rect.top - 8),
+        left: rect.right + 8,
+      });
+    } else {
+      setFlyout(null);
+      setTooltip({
+        text: isExpired ? `${section.label} (Subscription Expired)` : section.label,
+        x: rect.right + 10,
+        y: rect.top + rect.height / 2,
+      });
+    }
+  };
+
+  const handleCollapsedMouseLeave = () => {
+    if (isExpanded) return;
+    flyoutTimeoutRef.current = setTimeout(() => {
+      setFlyout(null);
+      setTooltip(null);
+    }, 150);
+  };
+
+  const showSimpleTooltip = (
+    event: React.MouseEvent<HTMLElement>,
+    label: string
+  ) => {
+    if (isExpanded) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setFlyout(null);
     setTooltip({
       text: label,
       x: rect.right + 10,
@@ -190,142 +386,335 @@ const Sidebar: React.FC<SidebarProps> = ({
     });
   };
 
-  const handleMouseLeave = () => {
+  const hideSimpleTooltip = () => {
     setTooltip(null);
   };
 
   return (
     <>
       <nav
-        className={`fixed top-0 left-0 h-screen bg-white shadow-xs border-r border-gray-100 flex flex-col py-4 z-40 overflow-y-auto scrollbar-hide transition-all duration-300 ease-in-out
+        className={`fixed top-0 left-0 h-screen bg-white border-r border-gray-100 flex flex-col py-6 z-40 overflow-y-auto scrollbar-hide transition-all duration-300 ease-in-out select-none
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
-        md:translate-x-0 w-64 ${isExpanded ? "md:w-64" : "md:w-16"}`}
+        md:translate-x-0 w-64 ${isExpanded ? "md:w-64 px-4.5" : "md:w-16 px-2"}`}
         aria-label="Main navigation"
       >
-        {/* Top section: Menu Toggle */}
-        <div
-          className={`mb-8 flex items-center ${isExpanded ? "px-4 justify-start" : "justify-center px-4 md:px-0"}`}
-        >
-          <button
-            onClick={onToggle}
-            className="md:hidden w-11 h-11 flex items-center justify-center rounded-lg transition-colors duration-300 ease-in-out text-[#B8B8B8] hover:text-[#3B7CED] hover:bg-[#3B7CED]/5"
-            aria-label="Toggle sidebar"
-          >
-            <MenuIcon />
-          </button>
-          <button
-            onClick={onToggleExpanded}
-            className="hidden md:flex w-11 h-11 items-center justify-center rounded-lg transition-colors duration-300 ease-in-out text-[#B8B8B8] hover:text-[#3B7CED] hover:bg-[#3B7CED]/5"
-            aria-label="Toggle sidebar expansion"
-          >
-            <MenuIcon />
-          </button>
+        {/* Navigation Content */}
+        <div className="flex-1 flex flex-col space-y-4">
+          {/* Dashboard */}
+          <div>
+            <button
+              onClick={() => handleNavigate("/")}
+              onMouseEnter={(e) => showSimpleTooltip(e, "Dashboard")}
+              onMouseLeave={hideSimpleTooltip}
+              className={`w-full flex items-center py-2 px-2.5 rounded-lg transition-colors group cursor-pointer ${
+                !isExpanded ? "justify-center" : ""
+              } ${
+                isDashboardActive
+                  ? "text-[#2563EB]"
+                  : "text-gray-400 hover:text-gray-700"
+              }`}
+              aria-label="Dashboard"
+            >
+              <div className="w-5 h-5 flex items-center justify-center shrink-0">
+                <LayoutGrid
+                  size={20}
+                  color={isDashboardActive ? "#2563EB" : "#9CA3AF"}
+                  className="transition-colors group-hover:text-gray-700"
+                />
+              </div>
+              {isExpanded && (
+                <span
+                  className={`text-[15px] font-medium ml-3 whitespace-nowrap overflow-hidden text-ellipsis ${
+                    isDashboardActive
+                      ? "text-[#2563EB]"
+                      : "text-gray-400 group-hover:text-gray-700"
+                  }`}
+                >
+                  Dashboard
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Collapsible Sections & Direct Items */}
+          {visibleSections.map((section) => {
+            const IconComp = section.icon;
+            const hasChildren = section.children && section.children.length > 0;
+            const isSectionOpen = !!openSections[section.id];
+            const active = isSectionActive(section);
+
+            // Collapsed (icon-only mode)
+            if (!isExpanded) {
+              return (
+                <div
+                  key={section.id}
+                  className="relative flex justify-center"
+                  onMouseEnter={(e) => handleCollapsedMouseEnter(e, section)}
+                  onMouseLeave={handleCollapsedMouseLeave}
+                >
+                  <button
+                    onClick={() => {
+                      if (section.route) {
+                        handleNavigate(section.route);
+                      } else if (section.children?.[0]?.route) {
+                        handleNavigate(section.children[0].route);
+                      }
+                    }}
+                    className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors group cursor-pointer ${
+                      isExpired ? "opacity-60" : ""
+                    } ${
+                      active
+                        ? "text-[#2563EB] bg-blue-50/60"
+                        : "text-gray-400 hover:text-gray-700 hover:bg-gray-50/80"
+                    }`}
+                    aria-label={section.label}
+                  >
+                    <IconComp
+                      size={20}
+                      color={active ? "#2563EB" : "#9CA3AF"}
+                      className="transition-colors"
+                    />
+                  </button>
+                </div>
+              );
+            }
+
+            // Expanded Mode
+            return (
+              <div key={section.id} className="flex flex-col">
+                {/* Section Header Row */}
+                <button
+                  onClick={() => {
+                    if (hasChildren) {
+                      toggleSection(section.id);
+                    } else if (section.route) {
+                      handleNavigate(section.route);
+                    }
+                  }}
+                  className={`w-full flex items-center py-2 px-2.5 rounded-lg transition-colors group cursor-pointer ${
+                    isExpired ? "opacity-60" : ""
+                  } ${
+                    active
+                      ? "text-gray-700 font-medium"
+                      : "text-gray-400 hover:text-gray-700"
+                  }`}
+                  aria-label={section.label}
+                >
+                  <div className="w-5 h-5 flex items-center justify-center shrink-0">
+                    <IconComp
+                      size={20}
+                      color={active ? "#374151" : "#9CA3AF"}
+                      className="transition-colors group-hover:text-gray-700"
+                    />
+                  </div>
+                  <span
+                    className={`text-[15px] font-medium ml-3 transition-colors whitespace-nowrap overflow-hidden text-ellipsis ${
+                      active
+                        ? "text-gray-700"
+                        : "text-gray-400 group-hover:text-gray-700"
+                    }`}
+                  >
+                    {section.label}
+                  </span>
+
+                  {isExpired && (
+                    <Lock className="w-3.5 h-3.5 text-gray-400 ml-auto shrink-0" />
+                  )}
+
+                  {hasChildren && !isExpired && (
+                    <span className="ml-auto flex items-center text-gray-400 group-hover:text-gray-600 transition-colors">
+                      <ChevronDown
+                        size={16}
+                        strokeWidth={2}
+                        className={`transition-transform duration-200 ${
+                          isSectionOpen ? "rotate-180" : "rotate-0"
+                        }`}
+                      />
+                    </span>
+                  )}
+                </button>
+
+                {/* Sub-items Tree with Animated Accordion */}
+                <AnimatePresence initial={false}>
+                  {hasChildren && isSectionOpen && (
+                    <motion.div
+                      key={`content-${section.id}`}
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: "easeInOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="ml-[19px] pl-3.5 border-l border-gray-200 flex flex-col space-y-1.5 my-2">
+                        {section.children?.map((child) => {
+                          const childActive = isSubItemActive(child.route);
+                          return (
+                            <button
+                              key={child.id}
+                              onClick={() => handleNavigate(child.route)}
+                              className={`relative text-left text-[13.5px] py-1.5 px-2.5 rounded-md transition-all duration-150 leading-tight cursor-pointer ${
+                                childActive
+                                  ? "text-[#2563EB] bg-blue-50/70 font-medium"
+                                  : "text-gray-400 hover:text-gray-800 hover:bg-gray-50/70 font-normal"
+                              }`}
+                            >
+                              {child.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Middle section: Main options */}
-        <div
-          className={`flex-1 flex flex-col space-y-2 ${isExpanded ? "px-4" : "px-4 md:px-0 md:items-center"}`}
-        >
-          {visibleMiddleItems.map((item) => {
-            const IconComponent = item.icon;
-            const isActive = isActiveItem(item);
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigation(item)}
-                onMouseEnter={(e) => {
-                  if (!isExpanded)
-                    handleMouseEnter(
-                      e,
-                      isExpired ? `${item.label} (Subscription Expired)` : item.label
-                    );
-                }}
-                onMouseLeave={() => {
-                  if (!isExpanded) handleMouseLeave();
-                }}
-                className={`w-full h-11 flex items-center rounded-lg transition-colors duration-300 ease-in-out
-                ${isExpanded ? "px-3 gap-3" : "px-3 gap-3 md:w-11 md:px-0 md:justify-center md:gap-0"}
-                ${isExpired ? "opacity-55 hover:opacity-80" : ""}
-                ${isActive ? "text-[#3B7CED] bg-[#3B7CED]/10" : "text-[#B8B8B8] hover:text-[#3B7CED] hover:bg-[#3B7CED]/5"}
-              `}
-                aria-label={item.label}
-              >
-                <div
-                  className={`flex items-center justify-center ${isExpanded ? "w-5" : "w-5 md:w-auto"}`}
-                >
-                  <IconComponent color={isActive ? "#3B7CED" : undefined} />
-                </div>
-                <span
-                  className={`text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis ${!isExpanded ? "md:hidden" : ""} ${isActive ? "text-[#3B7CED]" : "text-gray-600"}`}
-                >
-                  {item.label}
+        {/* Bottom section: Upgrade plan, Settings, and Sidebar collapse toggle */}
+        <div className="mt-auto pt-6 flex flex-col space-y-4">
+          {/* Upgrade plan */}
+          <button
+            onClick={() => handleNavigate("/settings/billing")}
+            onMouseEnter={(e) => showSimpleTooltip(e, "Upgrade plan")}
+            onMouseLeave={hideSimpleTooltip}
+            className={`w-full flex items-center py-2 px-2.5 rounded-lg transition-colors group cursor-pointer ${
+              !isExpanded ? "justify-center" : ""
+            } ${
+              isUpgradePlanActive
+                ? "text-[#2563EB]"
+                : "text-gray-400 hover:text-gray-700"
+            }`}
+            aria-label="Upgrade plan"
+          >
+            <div className="w-5 h-5 flex items-center justify-center shrink-0">
+              <Zap
+                size={20}
+                color={isUpgradePlanActive ? "#2563EB" : "#9CA3AF"}
+                className="transition-colors group-hover:text-gray-700"
+              />
+            </div>
+            {isExpanded && (
+              <span className="text-[15px] font-medium ml-3 text-gray-400 group-hover:text-gray-700 transition-colors whitespace-nowrap overflow-hidden text-ellipsis">
+                Upgrade plan
+              </span>
+            )}
+          </button>
+
+          {/* Settings */}
+          {canAccessSettings && (
+            <button
+              onClick={() => handleNavigate("/settings/company/1")}
+              onMouseEnter={(e) => showSimpleTooltip(e, "Settings")}
+              onMouseLeave={hideSimpleTooltip}
+              className={`w-full flex items-center py-2 px-2.5 rounded-lg transition-colors group cursor-pointer ${
+                !isExpanded ? "justify-center" : ""
+              } ${
+                isSettingsActive
+                  ? "text-[#2563EB]"
+                  : "text-gray-400 hover:text-gray-700"
+              }`}
+              aria-label="Settings"
+            >
+              <div className="w-5 h-5 flex items-center justify-center shrink-0">
+                <Settings
+                  size={20}
+                  color={isSettingsActive ? "#2563EB" : "#9CA3AF"}
+                  className="transition-colors group-hover:text-gray-700"
+                />
+              </div>
+              {isExpanded && (
+                <span className="text-[15px] font-medium ml-3 text-gray-400 group-hover:text-gray-700 transition-colors whitespace-nowrap overflow-hidden text-ellipsis">
+                  Settings
                 </span>
-                {isExpired && isExpanded && (
-                  <Lock className="w-3.5 h-3.5 text-gray-400 ml-auto flex-shrink-0" />
+              )}
+            </button>
+          )}
+
+          {/* Collapse/Expand Toggle Button at bottom */}
+          <div className="pt-2">
+            <button
+              onClick={onToggleExpanded}
+              onMouseEnter={(e) =>
+                showSimpleTooltip(
+                  e,
+                  isExpanded ? "Collapse sidebar (Ctrl+B)" : "Expand sidebar (Ctrl+B)"
+                )
+              }
+              onMouseLeave={hideSimpleTooltip}
+              className={`flex items-center py-2 px-2.5 rounded-lg transition-colors text-gray-400 hover:text-gray-700 cursor-pointer ${
+                !isExpanded ? "w-full justify-center" : ""
+              }`}
+              aria-label={isExpanded ? "Collapse sidebar (Ctrl+B)" : "Expand sidebar (Ctrl+B)"}
+            >
+              <div className="w-5 h-5 flex items-center justify-center shrink-0">
+                {isExpanded ? (
+                  <ArrowLeftFromLine size={20} strokeWidth={2} />
+                ) : (
+                  <ArrowRightFromLine size={20} strokeWidth={2} />
                 )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Bottom section: App and Settings */}
-        <div
-          className={`mt-auto pb-4 pt-8 flex flex-col space-y-2 ${isExpanded ? "px-4" : "px-4 md:px-0 md:items-center"}`}
-        >
-          {visibleBottomItems.map((item) => {
-            const IconComponent = item.icon;
-            const isActive = isActiveItem(item);
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleNavigation(item)}
-                onMouseEnter={(e) => {
-                  if (!isExpanded) handleMouseEnter(e, item.label);
-                }}
-                onMouseLeave={() => {
-                  if (!isExpanded) handleMouseLeave();
-                }}
-                className={`w-full h-11 flex items-center rounded-lg transition-colors duration-300 ease-in-out
-                ${isExpanded ? "px-3 gap-3" : "px-3 gap-3 md:w-11 md:px-0 md:justify-center md:gap-0"}
-                ${isActive ? "text-[#3B7CED] bg-[#3B7CED]/10" : "text-[#B8B8B8] hover:text-[#3B7CED] hover:bg-[#3B7CED]/5"}
-              `}
-                aria-label={item.label}
-              >
-                <div
-                  className={`flex items-center justify-center ${isExpanded ? "w-5" : "w-5 md:w-auto"}`}
-                >
-                  <IconComponent color={isActive ? "#3B7CED" : undefined} />
-                </div>
-                <span
-                  className={`text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis ${!isExpanded ? "md:hidden" : ""} ${isActive ? "text-[#3B7CED]" : "text-gray-600"}`}
-                >
-                  {item.label}
-                </span>
-              </button>
-            );
-          })}
+              </div>
+            </button>
+          </div>
         </div>
       </nav>
 
-      {/* Custom Tooltip */}
-      {tooltip && (
+      {/* Collapsed Mode Flyout Popover Menu */}
+      {!isExpanded && flyout && (
         <div
-          className="fixed z-100 px-3 py-2 bg-gray-800 text-white text-sm rounded-md shadow-lg pointer-events-none"
+          className="fixed z-50 bg-white border border-gray-200 shadow-xl rounded-xl py-2 px-1 w-52 pointer-events-auto animate-in fade-in zoom-in-95 duration-150"
+          style={{
+            top: flyout.top,
+            left: flyout.left,
+          }}
+          onMouseEnter={() => {
+            if (flyoutTimeoutRef.current) clearTimeout(flyoutTimeoutRef.current);
+          }}
+          onMouseLeave={handleCollapsedMouseLeave}
+        >
+          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider border-b border-gray-100 mb-1">
+            {flyout.section.label}
+          </div>
+          <div className="flex flex-col space-y-0.5">
+            {flyout.section.children?.map((child) => {
+              const childActive = isSubItemActive(child.route);
+              return (
+                <button
+                  key={`flyout-${child.id}`}
+                  onClick={() => handleNavigate(child.route)}
+                  className={`w-full text-left text-sm py-1.5 px-3 rounded-lg transition-colors cursor-pointer ${
+                    childActive
+                      ? "text-[#2563EB] bg-blue-50/70 font-medium"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  {child.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Custom Simple Tooltip */}
+      {!isExpanded && !flyout && tooltip && (
+        <div
+          className="fixed z-100 px-3 py-1.5 bg-gray-800 text-white text-xs font-medium rounded-md shadow-lg pointer-events-none whitespace-nowrap animate-in fade-in duration-100"
           style={{
             left: tooltip.x,
-            top: tooltip.y - 20,
+            top: tooltip.y,
             transform: "translateY(-50%)",
           }}
         >
           {tooltip.text}
           <div
-            className="absolute w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-800"
+            className="absolute w-0 h-0 border-t-4 border-b-4 border-r-4 border-transparent border-r-gray-800"
             style={{
-              left: "-8px",
+              left: "-4px",
               top: "50%",
               transform: "translateY(-50%)",
             }}
-          ></div>
+          />
         </div>
       )}
     </>

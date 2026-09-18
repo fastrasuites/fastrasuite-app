@@ -14,7 +14,6 @@ import {
   Inbox,
   Loader2,
   ClipboardList,
-  ShoppingCart,
   Package,
   Receipt,
   Briefcase,
@@ -34,7 +33,6 @@ interface NotificationSlideoutProps {
 const MODULE_FILTERS = [
   { id: "all", label: "All" },
   { id: "project_request", label: "Project Request", icon: ClipboardList },
-  { id: "purchase", label: "Purchase", icon: ShoppingCart },
   { id: "inventory", label: "Inventory", icon: Package },
   { id: "invoice", label: "Invoice", icon: Receipt },
   { id: "project_costing", label: "Project Costing", icon: Briefcase },

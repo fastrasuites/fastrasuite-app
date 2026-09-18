@@ -38,7 +38,8 @@ export default function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/auth") ||
     pathname.startsWith("/verify-email") ||
-    pathname.startsWith("/resend-email-verification")
+    pathname.startsWith("/resend-email-verification") ||
+    pathname.startsWith("/project-costing/dashboard-preview")
   ) {
     return NextResponse.next();
   }
