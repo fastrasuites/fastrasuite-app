@@ -528,8 +528,19 @@ export default function PurchaseOrderDetailPage() {
                   key={line.id}
                   className="transition-colors hover:bg-gray-50/80"
                 >
-                  <td className="px-4 py-3 text-sm text-gray-900">
-                    {line.item_name || line.description || "—"}
+                  <td className="px-4 py-3 text-sm text-gray-900 max-w-[260px]">
+                    <span
+                      className="block truncate"
+                      title={
+                        (line.item_name || line.description || "").length > 48
+                          ? line.item_name || line.description
+                          : undefined
+                      }
+                    >
+                      {(line.item_name || line.description || "—").length > 48
+                        ? `${(line.item_name || line.description || "").slice(0, 48)}…`
+                        : line.item_name || line.description || "—"}
+                    </span>
                   </td>
                   {!isPlantAndEquipment && (
                     <td className="px-4 py-3 text-sm text-gray-600">

@@ -459,12 +459,12 @@ export default function ApprovedRequestsPage() {
                       key={request.backendId || index}
                       className="hover:bg-gray-50 transition-colors"
                     >
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
                         {request.id}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getTypeColor(
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap ${getTypeColor(
                             request.type,
                           )}`}
                         >
@@ -476,7 +476,7 @@ export default function ApprovedRequestsPage() {
                           {request.wbs}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
+                      <td className="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">
                         {request.approvalDate}
                       </td>
                       <td className="px-4 py-3 text-sm font-semibold text-gray-900">

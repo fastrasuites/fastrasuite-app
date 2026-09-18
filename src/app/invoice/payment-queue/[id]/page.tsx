@@ -52,6 +52,23 @@ const statusBadgeStyles: Record<string, string> = {
   partial: "bg-indigo-100 text-indigo-800",
 };
 
+const sourceTypeBadgeStyles: Record<string, string> = {
+  SUBCONTRACTOR: "bg-purple-100 text-purple-800",
+  LABOUR: "bg-teal-100 text-teal-800",
+  PURCHASE: "bg-blue-100 text-blue-800",
+  PROJECT_PO: "bg-blue-100 text-blue-800",
+  PLANT_AND_EQUIPMENT: "bg-orange-100 text-orange-800",
+  PETTY_CASH: "bg-amber-100 text-amber-800",
+  // fallback
+  default: "bg-gray-100 text-gray-700",
+};
+
+const getSourceTypeBadgeClass = (type?: string | null) => {
+  if (!type) return sourceTypeBadgeStyles.default;
+  const key = type.toUpperCase().replace(/\s+/g, "_");
+  return sourceTypeBadgeStyles[key] || sourceTypeBadgeStyles.default;
+};
+
 const formatCurrency = (amount: number | string) =>
   new Intl.NumberFormat("en-NG", {
     style: "currency",
@@ -449,13 +466,9 @@ export default function PaymentQueueDetailPage() {
     inv?.payment_term_details?.name ||
     (inv?.payment_term ? `Term #${inv.payment_term}` : "—");
 
-  // Company bank – support both the nested details on the bill and the
-  // standalone company-bank-account list shape you provided.
-  const companyBank = inv?.company_bank_account_details;
-  const companyBankLabel = companyBank
-    ? `${companyBank.bank_name || companyBank.account_name || "Bank"} • ${
-        companyBank.account_number_display || companyBank.account_number || ""
-      }`
+  const accountsPayableAccount = inv?.accounts_payable_account_details;
+  const accountsPayableAccountLabel = accountsPayableAccount
+    ? `${accountsPayableAccount.account_name || "Accounts Payable"}`
     : null;
 
   const projectName = inv?.source_details?.project?.name;
@@ -532,9 +545,16 @@ export default function PaymentQueueDetailPage() {
                   <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">
                     {inv.bill_number || `VB-${inv.id}`}
                   </h1>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Vendor Bill · {sourceTypeDisplay}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-sm text-gray-500">Vendor Bill</span>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSourceTypeBadgeClass(
+                        inv?.source_type || inv?.source_type_display,
+                      )}`}
+                    >
+                      {sourceTypeDisplay}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span
@@ -591,7 +611,7 @@ export default function PaymentQueueDetailPage() {
                         {formatCurrency(inv.balance)}
                       </div>
                     </div>
-                    {/* <div className="rounded-lg bg-gray-50 p-4">
+                    <div className="rounded-lg bg-gray-50 p-4">
                       <div className="text-xs text-gray-500 mb-1">
                         Days Until Due
                       </div>
@@ -606,7 +626,7 @@ export default function PaymentQueueDetailPage() {
                             ? `${Math.abs(daysUntilDue)}d overdue`
                             : `${daysUntilDue}d`}
                       </div>
-                    </div> */}
+                    </div>
                   </div>
                   {/* Vendor & Source */}
                   <div>
@@ -641,7 +661,7 @@ export default function PaymentQueueDetailPage() {
                         }
                       />
                       <InfoField
-                        label="Vendor Bank"
+                        label="Vendor Bank A/C"
                         value={
                           vendorBankLabel || (
                             <span className="text-amber-600 flex items-center gap-1">
@@ -652,10 +672,18 @@ export default function PaymentQueueDetailPage() {
                         }
                         icon={<CreditCard className="w-3.5 h-3.5" />}
                       />
-                      {/* <InfoField
+                      <InfoField
                         label="Source Type"
-                        value={sourceTypeDisplay}
-                      /> */}
+                        value={
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSourceTypeBadgeClass(
+                              inv?.source_type || inv?.source_type_display,
+                            )}`}
+                          >
+                            {sourceTypeDisplay}
+                          </span>
+                        }
+                      />
                       {poNumber && (
                         <InfoField
                           label="Reference Number"
@@ -703,8 +731,8 @@ export default function PaymentQueueDetailPage() {
                         value={paymentTermName}
                       />
                       <InfoField
-                        label="Company Bank Account"
-                        value={companyBankLabel || "Not selected"}
+                        label="Account"
+                        value={accountsPayableAccountLabel || "Not selected"}
                         icon={<CreditCard className="w-3.5 h-3.5" />}
                       />
                       {approvedByName && (
@@ -784,7 +812,13 @@ export default function PaymentQueueDetailPage() {
                     </h2>
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[520px]">
+                        <table
+                          className={`w-full ${
+                            inv?.source_type === "PROJECT_PO"
+                              ? "min-w-[600px]"
+                              : "min-w-[520px]"
+                          }`}
+                        >
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -793,6 +827,11 @@ export default function PaymentQueueDetailPage() {
                               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Qty
                               </th>
+                              {inv?.source_type === "PROJECT_PO" && (
+                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  Qty Received
+                                </th>
+                              )}
                               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Unit Price
                               </th>
@@ -805,7 +844,9 @@ export default function PaymentQueueDetailPage() {
                             {(inv.lines || []).length === 0 ? (
                               <tr>
                                 <td
-                                  colSpan={4}
+                                  colSpan={
+                                    inv?.source_type === "PROJECT_PO" ? 5 : 4
+                                  }
                                   className="px-4 py-8 text-center text-sm text-gray-500"
                                 >
                                   No line items
@@ -819,22 +860,51 @@ export default function PaymentQueueDetailPage() {
                                   line.line_total != null
                                     ? Number(line.line_total)
                                     : qty * price;
+
                                 const description =
                                   line.description ||
                                   line.source?.item_name ||
                                   line.source?.product?.product_name ||
+                                  line.source?.name ||
                                   "—";
+
+                                const quantityReceived =
+                                  line.source?.quantity_received ??
+                                  line.quantity_received ??
+                                  null;
+
+                                const needsTruncate = description.length > 52;
+                                const displayDescription = needsTruncate
+                                  ? `${description.slice(0, 52)}…`
+                                  : description;
+
                                 return (
                                   <tr
                                     key={line.id || idx}
                                     className="hover:bg-gray-50/60"
                                   >
-                                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                                      {description}
+                                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[260px]">
+                                      <span
+                                        className="block truncate"
+                                        title={
+                                          needsTruncate
+                                            ? description
+                                            : undefined
+                                        }
+                                      >
+                                        {displayDescription}
+                                      </span>
                                     </td>
                                     <td className="px-4 py-3 text-sm text-gray-700 text-right">
                                       {line.quantity ?? "—"}
                                     </td>
+                                    {inv?.source_type === "PROJECT_PO" && (
+                                      <td className="px-4 py-3 text-sm text-gray-700 text-right">
+                                        {quantityReceived != null
+                                          ? quantityReceived
+                                          : "—"}
+                                      </td>
+                                    )}
                                     <td className="px-4 py-3 text-sm text-gray-700 text-right">
                                       {line.unit_price
                                         ? formatCurrency(line.unit_price)
@@ -851,7 +921,9 @@ export default function PaymentQueueDetailPage() {
                           <tfoot>
                             <tr className="bg-gray-50 border-t border-gray-200">
                               <td
-                                colSpan={3}
+                                colSpan={
+                                  inv?.source_type === "PROJECT_PO" ? 4 : 3
+                                }
                                 className="px-4 py-3 text-sm font-semibold text-gray-900"
                               >
                                 Grand Total

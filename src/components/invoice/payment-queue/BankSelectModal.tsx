@@ -46,7 +46,6 @@ export default function BankSelectModal({
   }, [isOpen, currentBankAccountId]);
 
   const handleConfirm = () => {
-    // Allow confirming with the already-attached bank (or newly selected)
     onConfirm(
       selectedBank ||
         (currentBankAccountId ? String(currentBankAccountId) : null),
@@ -57,15 +56,14 @@ export default function BankSelectModal({
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/50 z-50 data-[state=open]:animate-in data-[state=closed]:animate-out fade-in-0" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-6 focus:outline-none">
-          <div className="flex items-start justify-between mb-5">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl shadow-xl p-8 focus:outline-none">
+          <div className="flex items-start justify-between mb-6">
             <div>
               <Dialog.Title className="text-xl font-semibold text-gray-900">
                 Confirm Payment
               </Dialog.Title>
-              <Dialog.Description className="text-sm text-gray-500 mt-1">
-                Review or change the company bank account the payment will leave
-                from. Changing is optional.
+              <Dialog.Description className="text-sm text-gray-500 mt-1.5">
+                Select the company bank account the payment will leave from.
               </Dialog.Description>
             </div>
             <button
@@ -78,7 +76,7 @@ export default function BankSelectModal({
           </div>
 
           {currentBankLabel && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm">
+            <div className="mb-5 p-3.5 bg-blue-50 border border-blue-100 rounded-lg text-sm">
               <span className="text-blue-800 font-medium">
                 Currently selected:{" "}
               </span>
@@ -86,26 +84,24 @@ export default function BankSelectModal({
             </div>
           )}
 
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Company Bank Account{" "}
-              {currentBankAccountId ? "(optional change)" : ""}
+          <div className="mb-8">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Company Bank Account
             </label>
             <Select value={selectedBank} onValueChange={setSelectedBank}>
-              <SelectTrigger className="w-full">
+              <SelectTrigger className="w-full h-11">
                 <SelectValue
                   placeholder={
                     isLoading
                       ? "Loading accounts…"
-                      : "Keep current or select another"
+                      : "Select company bank account"
                   }
                 />
               </SelectTrigger>
               <SelectContent>
                 {bankAccounts.map((bank: any) => (
                   <SelectItem key={bank.id} value={String(bank.id)}>
-                    {bank.bank_name} •{" "}
-                    {bank.account_number_display || bank.account_number}
+                    {bank.bank_name} • {bank.account_number}
                     {bank.is_active === false ? " (inactive)" : ""}
                   </SelectItem>
                 ))}
@@ -116,20 +112,17 @@ export default function BankSelectModal({
                 )}
               </SelectContent>
             </Select>
-            <p className="mt-1.5 text-xs text-gray-500">
-              Leave as-is to use the bank already attached to this bill.
-            </p>
           </div>
 
           <div className="flex gap-3">
-            <Button variant="outline" onClick={onClose} className="flex-1">
+            <Button variant="outline" onClick={onClose} className="flex-1 h-11">
               Cancel
             </Button>
             <Button
               variant="contained"
               onClick={handleConfirm}
               disabled={isLoading || (!selectedBank && !currentBankAccountId)}
-              className="flex-1"
+              className="flex-1 h-11"
             >
               Confirm & Pay
             </Button>

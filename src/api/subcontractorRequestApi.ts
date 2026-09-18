@@ -10,8 +10,12 @@ import type {
 // Helper function to get tenant-specific base URL
 const getTenantBaseUrl = (state: RootState): string => {
   const tenantSchemaName = state.auth.tenant_schema_name;
-  const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
+  const apiDomain =
+    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
+  const protocol =
+    apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
+      ? "http"
+      : "https";
   return `${protocol}://${tenantSchemaName}.${apiDomain}`;
 };
 
@@ -50,7 +54,12 @@ export const subcontractorRequestApi = createApi({
       const response = await fetch(url, {
         method: typeof args === "string" ? "GET" : args.method || "GET",
         headers,
-        body: typeof args === "string" ? undefined : args.body ? JSON.stringify(args.body) : undefined,
+        body:
+          typeof args === "string"
+            ? undefined
+            : args.body
+              ? JSON.stringify(args.body)
+              : undefined,
       });
 
       if (!response.ok) {
@@ -74,7 +83,10 @@ export const subcontractorRequestApi = createApi({
     }
   },
   endpoints: (builder) => ({
-    getSubcontractorRequests: builder.query<SubcontractorRequest[], GetSubcontractorRequestsParams | void>({
+    getSubcontractorRequests: builder.query<
+      SubcontractorRequest[],
+      GetSubcontractorRequestsParams | void
+    >({
       query: (params) => ({
         url: "/project-requests/subcontractor-requests/",
         params: params || undefined,
@@ -83,28 +95,46 @@ export const subcontractorRequestApi = createApi({
         const list = Array.isArray(result)
           ? result
           : (result as any)?.results && Array.isArray((result as any).results)
-          ? (result as any).results
-          : [];
+            ? (result as any).results
+            : [];
         return [
-          ...list.map(({ id }: { id: any }) => ({ type: "SubcontractorRequest" as const, id })),
+          ...list.map(({ id }: { id: any }) => ({
+            type: "SubcontractorRequest" as const,
+            id,
+          })),
           { type: "SubcontractorRequest", id: "LIST" },
           "SubcontractorRequest",
         ];
       },
     }),
-    getSubcontractorRequest: builder.query<SubcontractorRequest, number | string>({
+    getSubcontractorRequest: builder.query<
+      SubcontractorRequest,
+      number | string
+    >({
       query: (id) => `/project-requests/subcontractor-requests/${id}/`,
-      providesTags: (result, error, id) => [{ type: "SubcontractorRequest", id }, "SubcontractorRequest"],
+      providesTags: (result, error, id) => [
+        { type: "SubcontractorRequest", id },
+        "SubcontractorRequest",
+      ],
     }),
-    createSubcontractorRequest: builder.mutation<SubcontractorRequest, CreateSubcontractorRequest>({
+    createSubcontractorRequest: builder.mutation<
+      SubcontractorRequest,
+      CreateSubcontractorRequest
+    >({
       query: (body) => ({
         url: "/project-requests/subcontractor-requests/",
         method: "POST",
         body,
       }),
-      invalidatesTags: ["SubcontractorRequest", { type: "SubcontractorRequest", id: "LIST" }],
+      invalidatesTags: [
+        "SubcontractorRequest",
+        { type: "SubcontractorRequest", id: "LIST" },
+      ],
     }),
-    updateSubcontractorRequest: builder.mutation<SubcontractorRequest, { id: number | string; body: Partial<SubcontractorRequest> }>({
+    updateSubcontractorRequest: builder.mutation<
+      SubcontractorRequest,
+      { id: number | string; body: Partial<SubcontractorRequest> }
+    >({
       query: ({ id, body }) => ({
         url: `/project-requests/subcontractor-requests/${id}/`,
         method: "PUT",
@@ -127,7 +157,14 @@ export const subcontractorRequestApi = createApi({
         "SubcontractorRequest",
       ],
     }),
-    submitSubcontractorRequest: builder.mutation<SubcontractorRequest, { id: number | string; subcontractorRequestId?: number | string; data?: any }>({
+    submitSubcontractorRequest: builder.mutation<
+      SubcontractorRequest,
+      {
+        id: number | string;
+        subcontractorRequestId?: number | string;
+        data?: any;
+      }
+    >({
       query: ({ id, data }) => ({
         url: `/project-requests/project-requests/${id}/submit/`,
         method: "POST",
@@ -135,26 +172,55 @@ export const subcontractorRequestApi = createApi({
       }),
       invalidatesTags: (result, error, { id, subcontractorRequestId }) => [
         { type: "SubcontractorRequest", id },
-        ...(subcontractorRequestId ? [{ type: "SubcontractorRequest" as const, id: subcontractorRequestId }] : []),
+        ...(subcontractorRequestId
+          ? [
+              {
+                type: "SubcontractorRequest" as const,
+                id: subcontractorRequestId,
+              },
+            ]
+          : []),
         { type: "SubcontractorRequest", id: "LIST" },
         "SubcontractorRequest",
       ],
     }),
     // Milestone endpoints
-    getSubcontractorMilestones: builder.query<Milestone[], GetSubcontractorRequestsParams | void>({
+    getSubcontractorMilestones: builder.query<
+      Milestone[],
+      GetSubcontractorRequestsParams | void
+    >({
       query: (params) => ({
         url: "/project-requests/subcontractor-milestone/",
         params: params || undefined,
       }),
       providesTags: ["SubcontractorMilestone"],
     }),
-    createSubcontractorMilestone: builder.mutation<Milestone, Partial<Milestone>>({
+    createSubcontractorMilestone: builder.mutation<
+      Milestone,
+      Partial<Milestone>
+    >({
       query: (body) => ({
         url: "/project-requests/subcontractor-milestone/",
         method: "POST",
         body,
       }),
       invalidatesTags: ["SubcontractorMilestone"],
+    }),
+    // NEW – Mark a milestone as completed
+    markSubcontractorMilestoneComplete: builder.mutation<
+      Milestone,
+      number | string
+    >({
+      query: (id) => ({
+        url: `/project-requests/subcontractor-milestone/${id}/`,
+        method: "PATCH",
+        body: { is_completed: true },
+      }),
+      invalidatesTags: [
+        "SubcontractorMilestone",
+        "SubcontractorRequest",
+        { type: "SubcontractorRequest", id: "LIST" },
+      ],
     }),
   }),
 });
@@ -168,4 +234,5 @@ export const {
   useSubmitSubcontractorRequestMutation,
   useGetSubcontractorMilestonesQuery,
   useCreateSubcontractorMilestoneMutation,
+  useMarkSubcontractorMilestoneCompleteMutation,
 } = subcontractorRequestApi;
