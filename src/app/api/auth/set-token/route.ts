@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,28 +11,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cookieStore = await cookies();
+    const response = NextResponse.json({ success: true });
 
-    // Set httpOnly cookies for security
-    cookieStore.set("access_token", access_token, {
+    // Set httpOnly cookies directly on the response to guarantee Set-Cookie headers in all environments
+    response.cookies.set("access_token", access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 2592000,
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60, // 30 days
       path: "/",
     });
 
     if (refresh_token) {
-      cookieStore.set("refresh_token", refresh_token, {
+      response.cookies.set("refresh_token", refresh_token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 2592000,
+        sameSite: "lax",
+        maxAge: 30 * 24 * 60 * 60, // 30 days
         path: "/",
       });
     }
 
-    return NextResponse.json({ success: true });
+    return response;
   } catch (error) {
     return NextResponse.json({ error: "Failed to set token" }, { status: 500 });
   }

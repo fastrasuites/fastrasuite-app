@@ -8,8 +8,7 @@ import { RequestFormConfig } from "@/components/requests/types";
 import { useCreateLabourRequestMutation } from "@/api/requests/labourRequestApi";
 import { StatusModal } from "@/components/shared/StatusModal";
 import extractErrorMessage from "@/components/requests/utils/RequestErrorHandler";
-import { useSelector } from "react-redux";
-import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
 
 const formSchema = z.object({
@@ -43,12 +42,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 export default function NewLabourRequestPage() {
   const router = useRouter();
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = React.useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() || loggedInUser.username || "Current User";
-  }, [loggedInUser]);
+  const loggedInUserName = useCurrentUserName();
 
   const [createLabourRequest, { isLoading: isCreating }] =
     useCreateLabourRequestMutation();

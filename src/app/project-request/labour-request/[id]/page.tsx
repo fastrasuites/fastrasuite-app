@@ -27,7 +27,8 @@ import { useModulePermissions } from "@/hooks/useModulePermissions";
 export default function LabourRequestDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const id = parseInt(params.id as string);
+  const rawId = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const id = rawId ? parseInt(rawId as string, 10) : NaN;
   const { canDo } = useModulePermissions();
   const statusModal = useStatusModal();
 
@@ -37,7 +38,7 @@ export default function LabourRequestDetailPage() {
     error,
     refetch,
   } = useGetLabourRequestQuery(id, {
-    skip: isNaN(id),
+    skip: !id || isNaN(id),
   });
 
   const [deleteRequest, { isLoading: isDeleting }] = useDeleteLabourRequestMutation();
@@ -47,15 +48,51 @@ export default function LabourRequestDetailPage() {
 
   // Normalize request in case response is wrapped in an array
   const reqObj: any = (Array.isArray(request) ? request[0] : request) || {};
-  const detail: any = reqObj?.detail || (reqObj as any) || {};
-  const projectRequest: any = reqObj?.project_request || (reqObj as any) || {};
+  const detail: any = useMemo(() => {
+    const d = reqObj?.detail;
+    if (!d) return (reqObj as any) || {};
+    if (typeof d === "string") {
+      try {
+        return JSON.parse(d);
+      } catch {
+        return {};
+      }
+    }
+    return d;
+  }, [reqObj]);
 
-  const projectId =
+  const projectRequest: any = useMemo(() => {
+    const pr = reqObj?.project_request;
+    if (!pr) return (reqObj as any) || {};
+    if (typeof pr === "string") {
+      try {
+        return JSON.parse(pr);
+      } catch {
+        return {};
+      }
+    }
+    return pr;
+  }, [reqObj]);
+
+  const rawProjectId =
     reqObj?.project ||
     detail?.project ||
     projectRequest?.project ||
     detail?.project_details?.id ||
     reqObj?.project_details?.id;
+
+  const projectId = useMemo(() => {
+    if (!rawProjectId) return null;
+    if (typeof rawProjectId === "number") return rawProjectId;
+    if (typeof rawProjectId === "string") {
+      const parsed = parseInt(rawProjectId, 10);
+      return isNaN(parsed) ? null : parsed;
+    }
+    if (typeof rawProjectId === "object" && rawProjectId?.id) {
+      return Number(rawProjectId.id) || null;
+    }
+    return null;
+  }, [rawProjectId]);
 
   const activityId =
     reqObj?.activity ||
@@ -209,89 +246,6 @@ export default function LabourRequestDetailPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-white font-['Open_Sans',sans-serif]">
-        <header className="w-full bg-white px-5 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Skeleton className="w-6 h-6 rounded-md bg-gray-200" />
-            <Skeleton className="h-6 w-32 rounded bg-gray-200" />
-          </div>
-          <div className="flex items-center gap-3">
-            <Skeleton className="w-6 h-6 rounded-full bg-gray-200" />
-            <Skeleton className="w-9 h-9 rounded-full bg-gray-200" />
-          </div>
-        </header>
-        <div className="w-full h-2.5 bg-[#F1F3F6]" />
-        <main className="max-w-[430px] mx-auto px-5 py-6 space-y-6">
-          <Skeleton className="h-6 w-36 rounded bg-gray-200" />
-          <div className="grid grid-cols-2 gap-y-5 gap-x-6">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-              <div key={i} className="space-y-1.5">
-                <Skeleton className="h-3 w-20 rounded bg-gray-200" />
-                <Skeleton className="h-4 w-28 rounded bg-gray-200" />
-              </div>
-            ))}
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  if (error || !request) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-4 font-['Open_Sans',sans-serif]">
-        <div className="text-center bg-white p-8 rounded-2xl border border-gray-200 shadow-sm max-w-sm w-full">
-          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
-          <p className="text-gray-700 font-semibold mb-4">Failed to load request details</p>
-          <Button
-            onClick={() => router.back()}
-            className="w-full bg-[#3B82F6] text-white hover:bg-blue-600 font-bold h-11 rounded-xl"
-          >
-            Go Back
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  const createdBy = reqObj?.created_by_details || projectRequest?.created_by_details;
-  const requesterFullName =
-    createdBy?.first_name || createdBy?.last_name
-      ? `${createdBy.first_name || ""} ${createdBy.last_name || ""}`.trim()
-      : createdBy?.user?.first_name || createdBy?.user?.last_name
-      ? `${createdBy.user.first_name || ""} ${createdBy.user.last_name || ""}`.trim()
-      : createdBy?.username || createdBy?.user?.username;
-
-  const requesterName =
-    requesterFullName ||
-    detail?.created_by_name ||
-    reqObj?.created_by_name ||
-    createdBy?.email ||
-    "Firstname Lastname";
-
-  const dateValue = detail?.date_required || reqObj?.created_at || detail?.created_at || Date.now();
-  const formattedDate = new Date(dateValue).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-
-  // Reference code format: LB0001…
-  const labourDetailId = detail?.id ?? (reqObj as any)?.detail_id ?? reqObj?.id ?? id;
-  const refId =
-    (detail as any)?.reference_code ||
-    (detail as any)?.code ||
-    (detail as any)?.labour_reference ||
-    `LB${String(labourDetailId).padStart(4, "0")}`;
-
-  const projectName =
-    detail?.project_details?.name ||
-    reqObj?.project_details?.name ||
-    projectRequest?.project_details?.name ||
-    projectCosting?.name ||
-    (typeof projectId === "number" ? `Project #${projectId}` : "Building project");
-
   const rawPhaseName =
     detail?.phase_details?.name ||
     (typeof detail?.phase === "object" ? detail.phase?.name : null) ||
@@ -361,6 +315,51 @@ export default function LabourRequestDetailPage() {
       : "—";
   }, [rawActivityName, projectCosting, activityId]);
 
+  const createdBy = reqObj?.created_by_details || projectRequest?.created_by_details;
+  const requesterFullName =
+    createdBy?.first_name || createdBy?.last_name
+      ? `${createdBy.first_name || ""} ${createdBy.last_name || ""}`.trim()
+      : createdBy?.user?.first_name || createdBy?.user?.last_name
+      ? `${createdBy.user.first_name || ""} ${createdBy.user.last_name || ""}`.trim()
+      : createdBy?.username || createdBy?.user?.username;
+
+  const requesterName =
+    requesterFullName ||
+    detail?.created_by_name ||
+    reqObj?.created_by_name ||
+    createdBy?.email ||
+    "Firstname Lastname";
+
+  const dateValue = detail?.date_required || reqObj?.created_at || detail?.created_at || Date.now();
+  const formattedDate = (() => {
+    try {
+      const d = new Date(dateValue);
+      if (isNaN(d.getTime())) return "—";
+      return d.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "—";
+    }
+  })();
+
+  // Reference code format: LB0001…
+  const labourDetailId = detail?.id ?? (reqObj as any)?.detail_id ?? reqObj?.id ?? id;
+  const refId =
+    (detail as any)?.reference_code ||
+    (detail as any)?.code ||
+    (detail as any)?.labour_reference ||
+    `LB${String(labourDetailId).padStart(4, "0")}`;
+
+  const projectName =
+    detail?.project_details?.name ||
+    reqObj?.project_details?.name ||
+    projectRequest?.project_details?.name ||
+    projectCosting?.name ||
+    (typeof projectId === "number" ? `Project #${projectId}` : "Building project");
+
   const roleType = detail?.role_type || detail?.role || "Labourers";
   const numberOfWorkers = detail?.number_of_workers ?? 0;
 
@@ -394,6 +393,52 @@ export default function LabourRequestDetailPage() {
   const canEdit = isDraft && canDo("project_request", "edit");
   const canDelete = isDraft && canDo("project_request", "delete");
   const canSubmit = isDraft;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white font-['Open_Sans',sans-serif]">
+        <header className="w-full bg-white px-5 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton className="w-6 h-6 rounded-md bg-gray-200" />
+            <Skeleton className="h-6 w-32 rounded bg-gray-200" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Skeleton className="w-6 h-6 rounded-full bg-gray-200" />
+            <Skeleton className="w-9 h-9 rounded-full bg-gray-200" />
+          </div>
+        </header>
+        <div className="w-full h-2.5 bg-[#F1F3F6]" />
+        <main className="max-w-[430px] mx-auto px-5 py-6 space-y-6">
+          <Skeleton className="h-6 w-36 rounded bg-gray-200" />
+          <div className="grid grid-cols-2 gap-y-5 gap-x-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <div key={i} className="space-y-1.5">
+                <Skeleton className="h-3 w-20 rounded bg-gray-200" />
+                <Skeleton className="h-4 w-28 rounded bg-gray-200" />
+              </div>
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error || !request) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center p-4 font-['Open_Sans',sans-serif]">
+        <div className="text-center bg-white p-8 rounded-2xl border border-gray-200 shadow-sm max-w-sm w-full">
+          <AlertCircle className="h-12 w-12 mx-auto mb-4 text-red-500" />
+          <p className="text-gray-700 font-semibold mb-4">Failed to load request details</p>
+          <Button
+            onClick={() => router.back()}
+            className="w-full bg-[#3B82F6] text-white hover:bg-blue-600 font-bold h-11 rounded-xl"
+          >
+            Go Back
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <PageGuard module="project_request" entitlement="view">

@@ -1,24 +1,106 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import type { RootState } from "../../lib/store/store";
 
+export interface MaterialConsumptionProductDetails {
+  id: number;
+  product_code?: string;
+  product_name?: string;
+  description?: string;
+  standard_cost?: string | number;
+  available_stock?: number;
+  unit_of_measure?: number;
+  unit_of_measure_details?: {
+    unit_name?: string;
+    unit_symbol?: string;
+    [key: string]: any;
+  };
+  [key: string]: any;
+}
+
 export interface MaterialConsumptionLine {
   id?: number;
   product?: number;
-  quantity: number;
-  unit_cost: string; // decimal string
-  total_cost: string; // decimal string
+  product_details?: MaterialConsumptionProductDetails;
+  quantity: number | string;
+  quantity_released?: number | string;
+  unit_of_measure?: number | string;
+  unit_cost: string | number;
+  total_cost: string | number;
+  available_stock?: number;
+  [key: string]: any;
 }
 
 export interface MaterialConsumptionRequest {
   id: number;
   request_id: string;
-  project_request: number;
-  location: string;
-  date_consumed: string;
-  notes: string;
-  status: "draft" | "approved" | "pending" | "rejected" | "cancelled" | string;
+  status: "draft" | "approved" | "pending" | "rejected" | "cancelled" | "released" | string;
+  release_status?: "PENDING" | "RELEASED" | "PARTIAL" | string;
+  project_request?: number | {
+    id: number;
+    reference_id?: string;
+    request_type?: string;
+    status?: string;
+    request_amount?: number;
+    [key: string]: any;
+  };
+  project?: number;
+  project_details?: {
+    id: number;
+    name: string;
+    project_code?: string;
+    [key: string]: any;
+  };
+  phase?: string;
+  phase_details?: {
+    id: string;
+    name: string;
+    code?: string;
+    [key: string]: any;
+  };
+  activity?: string;
+  activity_details?: {
+    id: string;
+    name: string;
+    serial_number?: number;
+    [key: string]: any;
+  };
+  available_budget?: string | number;
+  created_by_id?: number;
+  requester_details?: {
+    id?: number;
+    user?: {
+      id?: number;
+      username?: string;
+      first_name?: string;
+      last_name?: string;
+      email?: string;
+      [key: string]: any;
+    };
+    phone_number?: string;
+    [key: string]: any;
+  };
+  created_by_name?: string;
+  created_by_details?: {
+    id?: number;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+  };
+  location?: string;
+  location_details?: {
+    id: string;
+    location_code?: string;
+    location_name?: string;
+    location_type?: string;
+    address?: string;
+    [key: string]: any;
+  };
+  date_consumed?: string;
+  notes?: string;
   lines: MaterialConsumptionLine[];
-  created_at: string;
+  created_at?: string;
+  [key: string]: any;
 }
 
 export interface CreateMaterialConsumptionRequest {

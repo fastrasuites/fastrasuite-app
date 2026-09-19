@@ -151,12 +151,24 @@ export default function RequestDetailsPage() {
     getProjectName(request?.project || detail?.project);
 
   const requestedBy = 
-    request?.created_by_details
-      ? `${request.created_by_details.first_name || ""} ${request.created_by_details.last_name || ""}`.trim() || request.created_by_details.email
-      : detail?.created_by_name || (request?.created_by ? `User #${request.created_by}` : "N/A");
+    (request?.created_by_details && `${request.created_by_details.first_name || ""} ${request.created_by_details.last_name || ""}`.trim()) ||
+    request?.created_by_details?.username ||
+    request?.created_by_details?.email ||
+    (detail?.requester_details?.user && `${detail.requester_details.user.first_name || ""} ${detail.requester_details.user.last_name || ""}`.trim()) ||
+    detail?.requester_details?.user?.username ||
+    detail?.created_by_name ||
+    (request?.created_by ? `User #${request.created_by}` : "N/A");
 
-  const mainRequestId = request?.reference_id || (request?.id ? `REQ-${request.id}` : "N/A");
-  const subRequestId = detail?.request_id;
+  const specificRefId =
+    detail?.reference_id ||
+    detail?.request_id ||
+    detail?.petty_cash_id ||
+    detail?.subcontractor_id ||
+    detail?.plant_equipment_id ||
+    detail?.labour_id;
+
+  const mainRequestId = specificRefId || request?.reference_id || (request?.id ? `REQ-${request.id}` : "N/A");
+  const subRequestId = specificRefId;
 
   const phaseName = 
     detail?.phase_details?.name || 
@@ -232,7 +244,7 @@ export default function RequestDetailsPage() {
   };
 
   const handleApprove = async () => {
-    const displayRequestId = isMaterialConsumption ? subRequestId || `MCR-${numericId}` : request?.reference_id || `REQ-${numericId}`;
+    const displayRequestId = mainRequestId;
     try {
       await approveRequest({ id: numericId }).unwrap();
       setLocalStatus("approved");
@@ -249,7 +261,7 @@ export default function RequestDetailsPage() {
   };
 
   const handleReject = async () => {
-    const displayRequestId = isMaterialConsumption ? subRequestId || `MCR-${numericId}` : request?.reference_id || `REQ-${numericId}`;
+    const displayRequestId = mainRequestId;
     try {
       await rejectRequest({ id: numericId }).unwrap();
       setLocalStatus("rejected");
@@ -357,7 +369,9 @@ export default function RequestDetailsPage() {
               
               {isMaterialConsumption && (
                 <>
-                  {subRequestId && <DataField label="Material Request ID" value={subRequestId} />}
+                  {subRequestId && subRequestId !== mainRequestId && (
+                    <DataField label="Material Request ID" value={subRequestId} />
+                  )}
                   <DataField 
                     label="Store / Location" 
                     value={detail.location_details?.location_name || detail.location_details?.location_code || detail.location || "N/A"} 
@@ -374,7 +388,7 @@ export default function RequestDetailsPage() {
               {isPettyCash && (
                 <>
                   <DataField label="Purpose / Expense Category" value={detail.purpose || detail.category || "N/A"} />
-                  <DataField label="Description of Expense" value={detail.description || "N/A"} fullWidth />
+                  <DataField label="Description" value={detail.description || "N/A"} fullWidth />
                 </>
               )}
 

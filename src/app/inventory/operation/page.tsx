@@ -162,17 +162,22 @@ export default function OperationPage() {
     return list.filter((i: any) => (i.status || "").toLowerCase() === "draft" && !i.is_backorder).length;
   }, [rawPendingIncoming]);
 
-  const materialConsumptionDraftCount = useMemo(() => {
+  const materialConsumptionApprovedCount = useMemo(() => {
     const list = Array.isArray(rawMaterialConsumptions) ? rawMaterialConsumptions : (rawMaterialConsumptions as any)?.results || [];
     return list.filter((i: any) => {
-      const s = (i.status || "").toLowerCase();
-      const r = (i.release_status || "").toLowerCase();
+      const s = (i.status || "").toLowerCase().trim();
+      const rel = (i.release_status || "").toUpperCase().trim();
+      const prStatus = (
+        typeof i.project_request === "object"
+          ? i.project_request?.status || ""
+          : ""
+      ).toLowerCase().trim();
+
+      if (rel === "RELEASED" || s === "released") return false;
       return (
-        s === "draft" ||
-        s === "partial_release" ||
-        s === "partially_released" ||
-        r === "partial_release" ||
-        r === "partially_released"
+        s === "approved" ||
+        s === "validated" ||
+        ((prStatus === "approved" || prStatus === "validated") && s !== "draft" && s !== "rejected" && s !== "cancelled")
       );
     }).length;
   }, [rawMaterialConsumptions]);
@@ -267,7 +272,7 @@ export default function OperationPage() {
           {/* StatusCards-style tiles */}
           <OperationsNavigationTiles
             incomingCount={incomingDraftCount}
-            materialConsumptionCount={materialConsumptionDraftCount}
+            materialConsumptionCount={materialConsumptionApprovedCount}
             scrapCount={scrapDraftCount}
             returnsCount={returnsDraftCount}
             backordersCount={backordersDraftCount}

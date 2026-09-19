@@ -22,6 +22,8 @@ import { PageGuard } from "@/components/auth/PageGuard";
 import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ModuleWizard, WizardGuideButton } from "@/components/shared/wizard/ModuleWizard";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
 
 const STATUS_TABS = [
   { label: "All", value: "all" },
@@ -107,6 +109,10 @@ export default function ProjectCostingListPage() {
   const [search, setSearch] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+
+  const { canCreateProject, currentProjects, maxProjects, planName } =
+    useSubscriptionLimits();
 
   const {
     data: projects = [],
@@ -200,11 +206,19 @@ export default function ProjectCostingListPage() {
             <WizardGuideButton moduleId="project-costing" />
 
             <PermissionGuard module="project_costing" entitlement="create_project">
-              <Link href="/project-costing/new" data-wizard="pc-new-project">
-                <Button className="bg-[#3B7CED] hover:bg-[#3065c3] text-white h-9 px-4 rounded-md font-medium text-sm shadow-2xs transition-all">
-                  New Project
-                </Button>
-              </Link>
+              <Button
+                onClick={() => {
+                  if (!canCreateProject) {
+                    setIsLimitModalOpen(true);
+                  } else {
+                    router.push("/project-costing/new");
+                  }
+                }}
+                className="bg-[#3B7CED] hover:bg-[#3065c3] text-white h-9 px-4 rounded-md font-medium text-sm shadow-2xs transition-all cursor-pointer"
+                data-wizard="pc-new-project"
+              >
+                New Project
+              </Button>
             </PermissionGuard>
 
             {/* Grid / List View Toggle */}
@@ -498,6 +512,14 @@ export default function ProjectCostingListPage() {
         </motion.div>
       </AnimatePresence>
       <ModuleWizard moduleId="project-costing" />
+      <PlanLimitModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+        limitType="projects"
+        currentCount={currentProjects}
+        maxCount={maxProjects}
+        currentTier={planName}
+      />
     </div>
     </PageGuard>
   );

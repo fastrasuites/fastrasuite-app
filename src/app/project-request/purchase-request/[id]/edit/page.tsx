@@ -21,9 +21,10 @@ import {
   useGetAvailableBudgetQuery,
 } from "@/api/projectApi";
 import {
-  useGetProjectCostingProjectsQuery,
-  useGetProjectCostingProjectQuery,
-} from "@/api/projectCostingApi";
+  useGetProjectOptionsQuery,
+  useGetPhaseOptionsQuery,
+  useGetActivityOptionsQuery,
+} from "@/api/requests/projectRequestApi";
 import { useGetProductsQuery } from "@/api/purchase/productsApi";
 import { useGetInventoryProductsQuery } from "@/api/inventory/productsApi";
 import { useGetCurrenciesQuery } from "@/api/purchase/currencyApi";
@@ -34,6 +35,7 @@ import { useGetActiveLocationsFilteredQuery } from "@/api/inventory/locationApi"
 import { StatusModal } from "@/components/shared/StatusModal";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -52,16 +54,11 @@ interface ItemState {
 export default function EditPurchaseRequestPage() {
   const router = useRouter();
   const { id } = useParams();
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() || loggedInUser.username || "Current User";
-  }, [loggedInUser]);
+  const { fullName: loggedInUserName, user: loggedInUser, tenant_user_id } = useCurrentUser();
 
   // API queries
   const { data: requestData, isLoading: isRequestLoading } = useGetProjectPurchaseRequestQuery(id as string, { skip: !id });
-  const { data: rawCostingProjects = [] } = useGetProjectCostingProjectsQuery({});
+  const { data: rawProjectOptions = [] } = useGetProjectOptionsQuery();
   const { data: rawInventoryProducts = [] } = useGetInventoryProductsQuery({});
   const { data: dbProducts = [] } = useGetProductsQuery({});
   const { data: currencies } = useGetCurrenciesQuery({});
@@ -181,202 +178,88 @@ export default function EditPurchaseRequestPage() {
     }
   }, [requestData]);
 
-  // Filter Phases (parent WBS) from Project Costing
-  const approvedProjects = useMemo(() => {
-    const list = Array.isArray(rawCostingProjects)
-      ? rawCostingProjects
-      : (rawCostingProjects as any)?.results || [];
-    return list.filter((p: any) => {
-      if (!p) return false;
-      const st = String(p.status || "").toUpperCase();
-      return (
-        st === "APPROVED" ||
-        st === "ACTIVE" ||
-        p.is_approved === true ||
-        !p.status
-      );
-    });
-  }, [rawCostingProjects]);
+  const projects = useMemo(() => {
+    return Array.isArray(rawProjectOptions)
+      ? rawProjectOptions
+      : (rawProjectOptions as any)?.results || [];
+  }, [rawProjectOptions]);
 
-  const { data: costingProjectDetail } = useGetProjectCostingProjectQuery(
-    Number(selectedProjectId),
-    { skip: !selectedProjectId || isNaN(Number(selectedProjectId)) },
+  const numericProjectId = Number(selectedProjectId);
+  const isValidProjectId = Boolean(selectedProjectId && !isNaN(numericProjectId) && numericProjectId > 0);
+
+  const { data: rawPhaseOptions = [] } = useGetPhaseOptionsQuery(
+    { project_id: numericProjectId },
+    { skip: !isValidProjectId }
   );
+  const phases = useMemo(() => {
+    return Array.isArray(rawPhaseOptions)
+      ? rawPhaseOptions
+      : (rawPhaseOptions as any)?.results || [];
+  }, [rawPhaseOptions]);
+
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: numericProjectId, phase_id: selectedPhaseId },
+    { skip: !isValidProjectId || !selectedPhaseId }
+  );
+  const tasks = useMemo(() => {
+    return Array.isArray(rawActivityOptions)
+      ? rawActivityOptions
+      : (rawActivityOptions as any)?.results || [];
+  }, [rawActivityOptions]);
 
   const currentProject = useMemo(() => {
-    return (
-      costingProjectDetail ||
-      approvedProjects.find((p: any) => String(p.id) === selectedProjectId)
-    );
-  }, [costingProjectDetail, approvedProjects, selectedProjectId]);
-
-  // Helper to extract numeric budget from multiple potential backend fields
-  const getBudgetValue = (item: any): number => {
-    if (!item) return 0;
-    const val =
-      item.available_budget ??
-      item.remaining_budget ??
-      item.budget ??
-      item.amount ??
-      item.budgeted_amount ??
-      item.total_amount ??
-      (item.quantity && item.rate ? Number(item.quantity) * Number(item.rate) : undefined) ??
-      item.cost ??
-      0;
-    const num = Number(val);
-    return isNaN(num) ? 0 : num;
-  };
-
-  const wbsList = useMemo(() => {
-    if (!currentProject) return [];
-
-    if (Array.isArray((currentProject as any).wbs) && (currentProject as any).wbs.length > 0) {
-      const rawWbs = (currentProject as any).wbs;
-      return rawWbs.map((w: any) => {
-        let budgetVal = getBudgetValue(w);
-        if (budgetVal === 0 && !w.is_activity) {
-          const childSum = rawWbs
-            .filter((c: any) => c.is_activity && String(c.parent) === String(w.id))
-            .reduce((sum: number, c: any) => sum + getBudgetValue(c), 0);
-          if (childSum > 0) budgetVal = childSum;
-        }
-        return {
-          ...w,
-          amount: budgetVal,
-        };
-      });
-    }
-
-    const items: any[] = [];
-    let phasesArray: any[] = [];
-    if (typeof currentProject.phases === "string") {
-      try {
-        phasesArray = JSON.parse(currentProject.phases);
-      } catch (e) {
-        phasesArray = [];
-      }
-    } else if (Array.isArray(currentProject.phases)) {
-      phasesArray = currentProject.phases;
-    } else if (Array.isArray((currentProject as any)?.phase_list)) {
-      phasesArray = (currentProject as any).phase_list;
-    } else if ((currentProject.phases as any)?.results && Array.isArray((currentProject.phases as any).results)) {
-      phasesArray = (currentProject.phases as any).results;
-    }
-
-    phasesArray.forEach((ph: any, idx: number) => {
-      const phaseId = ph.id || ph.phase_id || `phase-${idx + 1}`;
-      const phaseName = ph.name || ph.phase_name || `Phase ${idx + 1}`;
-
-      const acts = Array.isArray(ph.activities)
-        ? ph.activities
-        : Array.isArray(ph.activity_list)
-          ? ph.activity_list
-          : [];
-
-      const actsTotal = acts.reduce((sum: number, act: any) => {
-        return sum + getBudgetValue(act);
-      }, 0);
-
-      const explicitPhaseBudget = getBudgetValue(ph);
-      const phaseAmount = explicitPhaseBudget > 0 ? explicitPhaseBudget : actsTotal;
-
-      items.push({
-        ...ph,
-        id: phaseId,
-        name: phaseName,
-        is_activity: false,
-        amount: phaseAmount,
-      });
-
-      acts.forEach((act: any, actIdx: number) => {
-        const actId =
-          act.id || act.activity_id || `act-${phaseId}-${actIdx + 1}`;
-        const actName =
-          act.name || act.activity_name || `Activity ${actIdx + 1}`;
-        items.push({
-          ...act,
-          id: actId,
-          name: actName,
-          is_activity: true,
-          parent: phaseId,
-          amount: getBudgetValue(act),
-        });
-      });
-    });
-
-    if (Array.isArray((currentProject as any).activities)) {
-      (currentProject as any).activities.forEach((act: any, actIdx: number) => {
-        const actId = act.id || act.activity_id || `act-${actIdx + 1}`;
-        if (!items.some((it) => String(it.id) === String(actId))) {
-          items.push({
-            ...act,
-            id: actId,
-            name: act.name || act.activity_name || `Activity ${actIdx + 1}`,
-            is_activity: true,
-            parent: act.phase || act.phase_id || act.parent || null,
-            amount: getBudgetValue(act),
-          });
-        }
-      });
-    }
-
-    return items;
-  }, [currentProject]);
-
-  const phases = useMemo(() => {
-    return wbsList.filter((w: any) => !w.is_activity);
-  }, [wbsList]);
-
-  // Filter Tasks (activity WBS with selected phase parent)
-  const tasks = useMemo(() => {
-    if (!selectedPhaseId) return [];
-    return wbsList.filter(
-      (w: any) => w.is_activity && String(w.parent) === String(selectedPhaseId),
-    );
-  }, [wbsList, selectedPhaseId]);
+    return projects.find((p: any) => String(p.id) === selectedProjectId);
+  }, [projects, selectedProjectId]);
 
   const selectedPhaseObj = useMemo(() => {
-    return phases.find((p: any) => String(p.id) === String(selectedPhaseId));
+    return phases.find((p: any) => String(p.id) === selectedPhaseId);
   }, [phases, selectedPhaseId]);
 
-  // Selected Activity/Task object from WBS
   const selectedTaskObj = useMemo(() => {
-    return tasks.find((t: any) => String(t.id) === String(selectedTaskId));
+    return tasks.find((t: any) => String(t.id) === selectedTaskId);
   }, [tasks, selectedTaskId]);
 
   const availableBudget = useMemo(() => {
-    // 1. If we have a selected task/activity from WBS/Project Costing, get its budget/amount
     if (selectedTaskObj) {
-      const budgetVal = Number(selectedTaskObj.amount ?? 0);
-      if (!isNaN(budgetVal) && budgetVal !== 0) {
-        return budgetVal;
+      if (selectedTaskObj.available_budget !== undefined && selectedTaskObj.available_budget !== null) {
+        return Number(selectedTaskObj.available_budget);
+      }
+      if (selectedTaskObj.current_budget !== undefined && selectedTaskObj.current_budget !== null) {
+        return Number(selectedTaskObj.current_budget);
+      }
+      if (selectedTaskObj.original_amount !== undefined && selectedTaskObj.original_amount !== null) {
+        return Number(selectedTaskObj.original_amount);
       }
     }
-    // 2. Otherwise if the legacy API returned a non-zero budget, use it
-    if (budgetData?.available_budget && Number(budgetData.available_budget) > 0) {
+    if (selectedPhaseObj) {
+      if (selectedPhaseObj.current_budget !== undefined && selectedPhaseObj.current_budget !== null) {
+        return Number(selectedPhaseObj.current_budget);
+      }
+      if (selectedPhaseObj.original_amount !== undefined && selectedPhaseObj.original_amount !== null) {
+        return Number(selectedPhaseObj.original_amount);
+      }
+    }
+    if (budgetData?.available_budget !== undefined && Number(budgetData.available_budget) > 0) {
       return Number(budgetData.available_budget);
     }
-    // 3. Or check the selected phase if task not picked yet
-    if (selectedPhaseObj) {
-      const phaseBudget = Number(selectedPhaseObj.amount ?? 0);
-      if (!isNaN(phaseBudget) && phaseBudget > 0) return phaseBudget;
-    }
-    // 4. Or check the project-level available budget
-    if (currentProject) {
-      const projBudget = Number(
-        (currentProject as any).financials?.remaining_budget ??
-        (currentProject as any).financials?.budget ??
-        (currentProject as any).available_budget ??
-        (currentProject as any).budget ??
-        (currentProject as any).total_budget ??
-        0
-      );
-      if (!isNaN(projBudget) && projBudget > 0) {
-        return projBudget;
-      }
-    }
     return 0;
-  }, [selectedTaskObj, budgetData, selectedPhaseObj, currentProject]);
+  }, [selectedTaskObj, selectedPhaseObj, budgetData]);
+
+  // Auto-fill site location when current project is loaded or changes
+  useEffect(() => {
+    if (selectedProjectId && currentProject?.site_location) {
+      const siteLoc = currentProject.site_location as any;
+      const locId = typeof siteLoc === "object" ? siteLoc.id : siteLoc;
+      const locName = typeof siteLoc === "object" ? siteLoc.name : String(siteLoc);
+      const locObj = activeLocations?.find(
+        (l: any) => String(l.id) === String(locId) || l.location_name?.toLowerCase() === (locName || "").toLowerCase()
+      );
+      const finalLoc = locObj
+        ? (locObj.location_name || String(locObj.id))
+        : (locName || String(locId || ""));
+      setLocation(finalLoc);
+    }
+  }, [selectedProjectId, currentProject, activeLocations]);
 
   // Normalize inventory products
   const invProductsList = useMemo(() => {
@@ -578,9 +461,9 @@ export default function EditPurchaseRequestPage() {
 
     // Resolve TenantUser profile ID for the requester
     const currentUserProfile = tenantUsers?.find(
-      (tu) => tu.user_id === loggedInUser?.id,
+      (tu) => tu.user_id === loggedInUser?.id || tu.id === tenant_user_id,
     );
-    const requesterId = currentUserProfile?.id || loggedInUser?.id || 1;
+    const requesterId = tenant_user_id || currentUserProfile?.id || loggedInUser?.id || 1;
 
     // Build API payload
     const phaseName = phases.find((p: any) => String(p.id) === selectedPhaseId)?.name || "Phase";
@@ -624,22 +507,10 @@ export default function EditPurchaseRequestPage() {
 
     const purposeStr = `Project: ${projectName} | Phase: ${phaseName} | Activity: ${taskName} | Notes: ${notes}`;
 
-    const ensureValidUUID = (val: string): string => {
-      if (!val) return "";
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (uuidRegex.test(val)) return val;
-      const numericVal = parseInt(val, 10);
-      if (!isNaN(numericVal)) {
-        const hexString = numericVal.toString(16).padStart(12, "0");
-        return `00000000-0000-0000-0000-${hexString}`;
-      }
-      return val;
-    };
-
     const payload: any = {
       project: Number(selectedProjectId) || 1,
-      activity: ensureValidUUID(selectedTaskId),
-      wbs_element: ensureValidUUID(selectedTaskId),
+      activity: selectedTaskId,
+      wbs_element: selectedTaskId,
       site_location: locationName,
       required_by_date: requiredDate,
       notes: purposeStr,
@@ -845,15 +716,18 @@ export default function EditPurchaseRequestPage() {
                   setSelectedPhaseId("");
                   setSelectedTaskId("");
                   
-                  const selectedProj = approvedProjects.find((p: any) => String(p.id) === val);
+                  const selectedProj = projects.find((p: any) => String(p.id) === val);
                   if (selectedProj && selectedProj.site_location) {
+                    const siteLoc = selectedProj.site_location as any;
+                    const locId = typeof siteLoc === "object" ? siteLoc.id : siteLoc;
+                    const locName = typeof siteLoc === "object" ? siteLoc.name : String(siteLoc);
                     const locObj = activeLocations?.find(
-                      (l: any) => String(l.id) === String(selectedProj.site_location)
+                      (l: any) => String(l.id) === String(locId) || l.location_name?.toLowerCase() === (locName || "").toLowerCase()
                     );
                     setLocation(
-                      (locObj as any) 
-                        ? ((locObj as any).location_name || (locObj as any).name || String((locObj as any).id)) 
-                        : selectedProj.site_location
+                      locObj 
+                        ? (locObj.location_name || String(locObj.id)) 
+                        : (locName || String(locId || ""))
                     );
                   } else {
                     setLocation("");
@@ -867,9 +741,9 @@ export default function EditPurchaseRequestPage() {
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {approvedProjects.map((p: any) => (
+                  {projects.map((p: any) => (
                     <SelectItem key={p.id} value={String(p.id)}>
-                      {p.name} {p.project_code ? `(${p.project_code})` : ""}
+                      {p.project_code ? `${p.name} (${p.project_code})` : p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -933,24 +807,29 @@ export default function EditPurchaseRequestPage() {
                       No phases available
                     </div>
                   ) : (
-                    phases.map((ph: any) => (
-                      <SelectItem
-                        key={ph.id}
-                        value={String(ph.id)}
-                        className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
-                      >
-                        <span className="flex items-center justify-between gap-3 w-full min-w-0">
-                          <span className="font-medium text-gray-800 truncate min-w-0">
-                            {ph.name}
+                    phases.map((ph: any) => {
+                      const phaseBudget = ph.current_budget ?? ph.original_amount;
+                      return (
+                        <SelectItem
+                          key={ph.id}
+                          value={String(ph.id)}
+                          className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
+                        >
+                          <span className="flex items-center justify-between gap-3 w-full min-w-0">
+                            <span className="font-medium text-gray-800 truncate min-w-0">
+                              {ph.code ? `${ph.code} - ${ph.name}` : ph.name}
+                            </span>
+                            {phaseBudget !== undefined && phaseBudget !== null && (
+                              <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
+                                ₦{Number(phaseBudget).toLocaleString("en-NG", {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </span>
+                            )}
                           </span>
-                          <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                            ₦{Number(ph.amount || 0).toLocaleString("en-NG", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))
+                        </SelectItem>
+                      );
+                    })
                   )}
                 </SelectContent>
               </Select>
@@ -974,24 +853,31 @@ export default function EditPurchaseRequestPage() {
                       No activities available
                     </div>
                   ) : (
-                    tasks.map((t: any) => (
-                      <SelectItem
-                        key={t.id}
-                        value={String(t.id)}
-                        className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
-                      >
-                        <span className="flex items-center justify-between gap-3 w-full min-w-0">
-                          <span className="font-medium text-gray-800 truncate min-w-0">
-                            {t.name}
+                    tasks.map((t: any) => {
+                      const taskBudget = t.available_budget ?? t.current_budget ?? t.original_amount;
+                      return (
+                        <SelectItem
+                          key={t.id}
+                          value={String(t.id)}
+                          className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
+                        >
+                          <span className="flex items-center justify-between gap-3 w-full min-w-0">
+                            <span className="font-medium text-gray-800 truncate min-w-0">
+                              {t.serial_number !== undefined && t.serial_number !== null
+                                ? `${t.serial_number} - ${t.name}`
+                                : t.name}
+                            </span>
+                            {taskBudget !== undefined && taskBudget !== null && (
+                              <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
+                                ₦{Number(taskBudget).toLocaleString("en-NG", {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </span>
+                            )}
                           </span>
-                          <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                            ₦{Number(t.amount || 0).toLocaleString("en-NG", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))
+                        </SelectItem>
+                      );
+                    })
                   )}
                 </SelectContent>
               </Select>

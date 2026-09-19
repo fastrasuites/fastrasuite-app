@@ -75,6 +75,7 @@ import { vendorBillsApi } from "@/api/invoice/vendorBillsApi";
 import { notificationApi } from "@/api/notificationApi";
 import { accountLedgerApi } from "@/api/invoice/accountLedgerApi";
 import { disbursementsApi } from "@/api/invoice/disbursementApi";
+import { dashboardApi } from "@/api/dashboardApi";
 
 const authPersistConfig = {
   key: "auth",
@@ -159,6 +160,7 @@ const rootReducer = combineReducers({
   [accountLedgerApi.reducerPath]: accountLedgerApi.reducer,
   [disbursementsApi.reducerPath]: disbursementsApi.reducer,
   [subscriptionApi.reducerPath]: subscriptionApi.reducer,
+  [dashboardApi.reducerPath]: dashboardApi.reducer,
 });
 
 export const store = configureStore({
@@ -234,6 +236,7 @@ export const store = configureStore({
       accountLedgerApi.middleware,
       disbursementsApi.middleware,
       subscriptionApi.middleware,
+      dashboardApi.middleware,
     ),
 });
 

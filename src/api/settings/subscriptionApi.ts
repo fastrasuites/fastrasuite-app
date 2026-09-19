@@ -4,22 +4,25 @@ import type { RootState } from "@/lib/store/store";
 export interface Plan {
   id: number;
   name: string;
-  tier: "starter" | "professional" | "enterprise" | "core";
-  interval: "monthly" | "annually";
+  tier: "starter" | "professional" | "enterprise" | "core" | string;
+  interval: "monthly" | "annually" | string;
   amount: string;
   currency: string;
   description: string;
+  max_active_projects?: number;
+  max_active_users?: number;
+  requires_contact?: boolean;
 }
 
 export interface Subscription {
   id: number;
-  status: "trialing" | "active" | "past_due" | "expired" | "canceled";
+  status: "trialing" | "active" | "past_due" | "expired" | "canceled" | string;
   plan?: Plan | null;
   tier?: string | null;
   is_access_granted: boolean;
   trial_days_remaining?: number | null;
-  days_to_renewal?: number | null;
-  allowed_modules: string[];
+  days_to_renewal?: number | string | null;
+  allowed_modules: string[] | string;
   trial_end?: string | null;
   current_period_start?: string | null;
   current_period_end?: string | null;

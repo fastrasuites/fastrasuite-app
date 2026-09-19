@@ -18,6 +18,9 @@ import { GridCardIcon } from "@/components/icons/gridCardIcon";
 import NewUserRoleSelect from "@/components/Settings/form/formRoleSelect";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { PageGuard } from "@/components/auth/PageGuard";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
+import { AlertTriangle } from "lucide-react";
 
 import { z } from "zod";
 import { useCreateUserMutation } from "@/api/settings/usersApi";
@@ -77,6 +80,15 @@ export default function NewUser() {
 
   const statusModal = useStatusModal();
 
+  const {
+    canAddUser,
+    currentUsers,
+    maxUsers,
+    planName,
+    isLoading: isLimitsLoading,
+  } = useSubscriptionLimits();
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+
   const handleModalClose = () => {
     const wasSuccess = statusModal.type === "success";
     statusModal.close();
@@ -126,6 +138,10 @@ export default function NewUser() {
   const userImage = watch("user_image_image");
 
   const onSubmit = async (data: UserCreateInput) => {
+    if (!canAddUser) {
+      setIsLimitModalOpen(true);
+      return;
+    }
     console.log("Submitting form data object:", data);
     const formData = new FormData();
     const fullName = `${data.first_name} ${data.last_name}`.trim();
@@ -327,6 +343,24 @@ export default function NewUser() {
             Module Permissions
           </button>
         </div>
+
+        {!isLimitsLoading && !canAddUser && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 my-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-amber-800 text-xs">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>User Limit Reached:</strong> You have reached your limit of {maxUsers} team members on the {planName} plan ({currentUsers}/{maxUsers}).
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsLimitModalOpen(true)}
+              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-1 px-3 rounded cursor-pointer"
+            >
+              Upgrade Plan
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleFormSubmit}>
           {/* Tab Content */}
@@ -683,6 +717,15 @@ export default function NewUser() {
           message={statusModal.message}
           actionText={statusModal.actionText || (statusModal.type === "success" ? "Back to Users" : "Close")}
           onAction={statusModal.onAction || handleModalClose}
+        />
+
+        <PlanLimitModal
+          isOpen={isLimitModalOpen}
+          onClose={() => setIsLimitModalOpen(false)}
+          limitType="users"
+          currentCount={currentUsers}
+          maxCount={maxUsers}
+          currentTier={planName}
         />
       </div>
     </PageGuard>

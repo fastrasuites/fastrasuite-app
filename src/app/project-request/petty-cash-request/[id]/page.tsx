@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   ArrowLeft,
@@ -14,7 +14,10 @@ import {
   useGetProjectRequestQuery,
   useDeleteProjectRequestMutation,
   useSubmitProjectRequestMutation,
+  useGetPhaseOptionsQuery,
+  useGetActivityOptionsQuery,
 } from "@/api/requests/projectRequestApi";
+import { useGetPettyCashRequestQuery } from "@/api/requests/pettyCashRequestApi";
 import {
   useGetProjectCostingProjectsQuery,
   useGetProjectCostingProjectQuery,
@@ -22,6 +25,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { extractErrorMessage } from "@/lib/utils";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { motion } from "framer-motion";
@@ -36,7 +40,7 @@ interface PettyCashRequestDetail {
   purpose: string;
   description: string;
   amountRequested: number;
-  status: "draft" | "approved" | "pending" | "rejected" | "cancelled";
+  status: "draft" | "approved" | "pending" | "rejected" | "cancelled" | string;
   requester: string;
   date: string;
   phase: string;
@@ -50,96 +54,291 @@ export default function PettyCashRequestDetailPage() {
   const numericId = Number(id);
   const { canDo } = useModulePermissions();
   const statusModal = useStatusModal();
+  const { fullName: currentUserName } = useCurrentUser();
 
   const [deleteRequest, { isLoading: isDeleting }] = useDeleteProjectRequestMutation();
   const [submitRequest, { isLoading: isSubmitting }] = useSubmitProjectRequestMutation();
 
-  const [isConfirmingDelete, setIsConfirmingDelete] = React.useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
-  const { data: apiRequest, isLoading: apiLoading } = useGetProjectRequestQuery(numericId, {
+  // Attempt to fetch from ProjectRequest API
+  const { data: apiProjectRequest, isLoading: isProjectLoading } = useGetProjectRequestQuery(numericId, {
     skip: isNaN(numericId),
   });
 
+  // Attempt to fetch from PettyCashRequest API
+  const { data: apiPettyCash, isLoading: isPettyCashLoading } = useGetPettyCashRequestQuery(numericId, {
+    skip: isNaN(numericId),
+  });
+
+  const apiLoading = isProjectLoading && isPettyCashLoading;
+  const rawRequest: any = apiPettyCash || apiProjectRequest;
+
   const { data: rawProjects } = useGetProjectCostingProjectsQuery({});
-  const projects = React.useMemo(() => {
-    const list = Array.isArray(rawProjects) ? rawProjects : (rawProjects as any)?.results || [];
-    return list;
+  const projects = useMemo(() => {
+    return Array.isArray(rawProjects) ? rawProjects : (rawProjects as any)?.results || [];
   }, [rawProjects]);
 
-  const getProjectName = (projId?: number) => {
-    if (!projId) return "Building project";
-    const proj = projects?.find((p: any) => p.id === projId);
-    return proj ? proj.name || proj.project_name || `Project #${projId}` : "Building project";
-  };
+  const detail: any = useMemo(() => {
+    if (!rawRequest) return {};
+    const d = rawRequest.detail || apiProjectRequest?.detail || apiPettyCash?.detail;
+    if (!d) return {};
+    if (typeof d === "string") {
+      try {
+        return JSON.parse(d);
+      } catch {
+        return {};
+      }
+    }
+    return d;
+  }, [rawRequest, apiProjectRequest, apiPettyCash]);
 
-  const request = React.useMemo<PettyCashRequestDetail | null>(() => {
-    if (!apiRequest) return null;
+  const projectId = useMemo(() => {
+    const p =
+      rawRequest?.project ||
+      rawRequest?.project_id ||
+      rawRequest?.project_details?.id ||
+      detail?.project ||
+      detail?.projectId ||
+      apiProjectRequest?.project;
+    return p ? Number(p) : undefined;
+  }, [rawRequest, detail, apiProjectRequest]);
 
-    let detail: any = {};
-    if (apiRequest.detail) {
-      if (typeof apiRequest.detail === "string") {
-        try {
-          detail = JSON.parse(apiRequest.detail);
-        } catch (e) {
-          detail = {};
+  const phaseId = useMemo(() => {
+    return String(
+      rawRequest?.phase_details?.id ||
+      rawRequest?.phase ||
+      detail?.phase ||
+      ""
+    );
+  }, [rawRequest, detail]);
+
+  const activityId = useMemo(() => {
+    return String(
+      rawRequest?.activity_details?.id ||
+      rawRequest?.activity ||
+      rawRequest?.wbs_element ||
+      detail?.activity ||
+      detail?.task ||
+      detail?.wbs_element ||
+      ""
+    );
+  }, [rawRequest, detail]);
+
+  // Query live phase & activity options
+  const { data: phaseOptions = [] } = useGetPhaseOptionsQuery(
+    { project_id: projectId! },
+    { skip: !projectId || isNaN(projectId) }
+  );
+
+  const { data: activityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: projectId!, phase_id: phaseId },
+    { skip: !projectId || isNaN(projectId) || !phaseId }
+  );
+
+  const { data: projectCosting } = useGetProjectCostingProjectQuery(
+    Number(projectId),
+    { skip: !projectId || isNaN(Number(projectId)) }
+  );
+
+  const request = useMemo<PettyCashRequestDetail | null>(() => {
+    if (!rawRequest) return null;
+
+    // Resolve project name
+    let resolvedProject = "-";
+    if (rawRequest.project_details?.name) {
+      resolvedProject = rawRequest.project_details.name;
+    } else if (rawRequest.project_name) {
+      resolvedProject = rawRequest.project_name;
+    } else if (typeof rawRequest.project_request === "object" && rawRequest.project_request?.project_details?.name) {
+      resolvedProject = rawRequest.project_request.project_details.name;
+    } else if (projectId) {
+      const proj = projects.find((p: any) => p.id === projectId);
+      resolvedProject = proj ? proj.name || proj.project_name || `Project #${projectId}` : `Project #${projectId}`;
+    }
+
+    // Resolve phase name
+    let resolvedPhase = "-";
+    if (rawRequest.phase_details?.name) {
+      resolvedPhase = rawRequest.phase_details.name;
+    } else if (rawRequest.phase_name) {
+      resolvedPhase = rawRequest.phase_name;
+    } else if (detail.phase_name) {
+      resolvedPhase = detail.phase_name;
+    } else if (phaseOptions.length > 0 && phaseId) {
+      const match = phaseOptions.find((p: any) => String(p.id) === phaseId);
+      if (match) resolvedPhase = match.name;
+    }
+
+    if (resolvedPhase === "-" && projectCosting?.phases) {
+      const phasesArr = Array.isArray(projectCosting.phases)
+        ? projectCosting.phases
+        : Array.isArray((projectCosting as any).phase_list)
+        ? (projectCosting as any).phase_list
+        : [];
+      if (phaseId) {
+        const pMatch = phasesArr.find((p: any) => String(p.id || p.phase_id) === phaseId);
+        if (pMatch) resolvedPhase = pMatch.name || pMatch.phase_name;
+      }
+      if (resolvedPhase === "-" && activityId) {
+        for (const ph of phasesArr) {
+          const acts = ph.activities || ph.activity_list || [];
+          const aMatch = acts.find((a: any) => String(a.id || a.activity_id) === activityId);
+          if (aMatch) {
+            resolvedPhase = ph.name || ph.phase_name;
+            break;
+          }
         }
-      } else {
-        detail = apiRequest.detail;
       }
     }
 
-    const matchedProject = projects.find((p: any) => p.id === apiRequest.project);
-    let phaseName = detail.phase_name || detail.phase || "Roofing";
-    let taskName = detail.task_name || detail.task || "P.O.P";
-
-    if (matchedProject && matchedProject.wbs) {
-      const matchPhase = matchedProject.wbs.find((w: any) => String(w.id) === String(detail.phase));
-      if (matchPhase) phaseName = matchPhase.name;
-      const matchTask = matchedProject.wbs.find((w: any) => String(w.id) === String(detail.task));
-      if (matchTask) taskName = matchTask.name;
+    if (resolvedPhase === "-" && detail.phase && !detail.phase.includes("-") && isNaN(Number(detail.phase))) {
+      resolvedPhase = detail.phase;
     }
 
-    const refId =
-      apiRequest.reference_id ||
-      `PC${String(apiRequest.id || id).padStart(5, "0")}`;
+    // Resolve activity name
+    let resolvedActivity = "-";
+    if (rawRequest.activity_details?.name) {
+      resolvedActivity = rawRequest.activity_details.name;
+    } else if (rawRequest.activity_name) {
+      resolvedActivity = rawRequest.activity_name;
+    } else if (detail.task_name) {
+      resolvedActivity = detail.task_name;
+    } else if (detail.activity_name) {
+      resolvedActivity = detail.activity_name;
+    } else if (activityOptions.length > 0 && activityId) {
+      const match = activityOptions.find((a: any) => String(a.id) === activityId);
+      if (match) resolvedActivity = match.name;
+    }
 
-    const requesterName = apiRequest.created_by_details
-      ? `${apiRequest.created_by_details.first_name || ""} ${apiRequest.created_by_details.last_name || ""}`.trim() ||
-        apiRequest.created_by_details.username
-      : "Firstname Lastname";
+    if (resolvedActivity === "-" && projectCosting?.phases && activityId) {
+      const phasesArr = Array.isArray(projectCosting.phases)
+        ? projectCosting.phases
+        : Array.isArray((projectCosting as any).phase_list)
+        ? (projectCosting as any).phase_list
+        : [];
+      for (const ph of phasesArr) {
+        const acts = ph.activities || ph.activity_list || [];
+        const aMatch = acts.find((a: any) => String(a.id || a.activity_id) === activityId);
+        if (aMatch) {
+          resolvedActivity = aMatch.name || aMatch.activity_name;
+          break;
+        }
+      }
+    }
+
+    if (resolvedActivity === "-" && detail.task && !detail.task.includes("-") && isNaN(Number(detail.task))) {
+      resolvedActivity = detail.task;
+    }
+
+    // Resolve reference ID
+    const refId =
+      (rawRequest.reference_id && String(rawRequest.reference_id).trim()) ||
+      (detail?.reference_id && String(detail.reference_id).trim()) ||
+      (rawRequest.project_request?.reference_id && String(rawRequest.project_request.reference_id).trim()) ||
+      (numericId ? `PC${String(numericId).padStart(4, "0")}` : "-");
+
+    // Resolve requester name
+    let requesterName = "-";
+    if (rawRequest.requester_details?.user) {
+      const u = rawRequest.requester_details.user;
+      const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+      requesterName = fullName || u.username || u.email || "-";
+    } else if (typeof rawRequest.project_request === "object" && rawRequest.project_request?.requester_details?.user) {
+      const u = rawRequest.project_request.requester_details.user;
+      const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+      requesterName = fullName || u.username || u.email || "-";
+    } else {
+      const userObj =
+        rawRequest.created_by_details ||
+        (typeof rawRequest.project_request === "object" && rawRequest.project_request?.created_by_details) ||
+        apiProjectRequest?.created_by_details;
+
+      if (userObj && typeof userObj === "object") {
+        const fullName = `${userObj.first_name || ""} ${userObj.last_name || ""}`.trim();
+        requesterName = fullName || userObj.username || userObj.email || "-";
+      } else if (rawRequest.created_by_name) {
+        requesterName = rawRequest.created_by_name;
+      } else if (rawRequest.requester_name) {
+        requesterName = rawRequest.requester_name;
+      } else if (rawRequest.requester && typeof rawRequest.requester === "string" && isNaN(Number(rawRequest.requester))) {
+        requesterName = rawRequest.requester;
+      } else if (rawRequest.created_by) {
+        requesterName = `User #${rawRequest.created_by}`;
+      }
+    }
+
+    // Amount requested
+    const amountRequested =
+      parseFloat(String(rawRequest.amount_requested ?? "")) ||
+      parseFloat(String(rawRequest.amount ?? "")) ||
+      parseFloat(String(detail.amount_requested ?? "")) ||
+      parseFloat(String(detail.amountRequested ?? "")) ||
+      parseFloat(String(detail.amount ?? "")) ||
+      parseFloat(String(typeof rawRequest.project_request === "object" ? rawRequest.project_request?.request_amount ?? "" : "")) ||
+      0;
+
+    // Status
+    const rawStatus = (
+      rawRequest.status ||
+      (typeof rawRequest.project_request === "object" && rawRequest.project_request?.status) ||
+      apiProjectRequest?.status ||
+      "pending"
+    ).toLowerCase();
+    const status = rawStatus === "cancelled" ? "rejected" : rawStatus;
+
+    // Date
+    const rawDate =
+      rawRequest.created_at ||
+      rawRequest.date_created ||
+      (typeof rawRequest.project_request === "object" && rawRequest.project_request?.created_at);
+    const dateFormatted = rawDate
+      ? new Date(rawDate).toLocaleDateString("en-GB", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : "-";
 
     return {
-      id: String(apiRequest.id),
+      id: String(rawRequest.id || id),
       reference_id: refId,
-      project: apiRequest.project_details?.name || getProjectName(apiRequest.project),
-      projectId: apiRequest.project,
-      activityId: detail.task || detail.activity,
-      purpose: detail.purpose || "Engineer",
-      description: detail.description || "This is a short description of the expense",
-      amountRequested:
-        parseFloat(detail.amount_requested) || detail.amountRequested || detail.amount || 500000,
-      status: (apiRequest.status as any) || "approved",
+      project: resolvedProject,
+      projectId: projectId,
+      activityId: activityId,
+      purpose: rawRequest.purpose || detail.purpose || "-",
+      description: rawRequest.description || detail.description || "-",
+      amountRequested,
+      status,
       requester: requesterName,
-      date: new Date(apiRequest.created_at || Date.now()).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-      phase: phaseName,
-      task: taskName,
-      notes: detail.notes || detail.justification_notes || "-",
+      date: dateFormatted,
+      phase: resolvedPhase,
+      task: resolvedActivity,
+      notes: rawRequest.notes || detail.notes || detail.justification_notes || "-",
     };
-  }, [apiRequest, projects, id]);
+  }, [rawRequest, apiProjectRequest, detail, projectId, phaseId, activityId, phaseOptions, activityOptions, projectCosting, projects, id, numericId]);
 
-  const { data: projectCosting } = useGetProjectCostingProjectQuery(
-    Number(request?.projectId),
-    { skip: !request?.projectId || isNaN(Number(request.projectId)) }
-  );
-
+  // Compute live available budget without dummy fallback
   const availableBudget = useMemo(() => {
-    if (!projectCosting) return 5000000;
+    // 0. Try rawRequest.available_budget directly from backend
+    if (rawRequest?.available_budget !== undefined && rawRequest?.available_budget !== null && rawRequest?.available_budget !== "") {
+      const parsed = parseFloat(String(rawRequest.available_budget));
+      if (!isNaN(parsed)) return parsed;
+    }
 
-    if (request?.activityId) {
+    // 1. Try activityOptions (live from activity-options endpoint)
+    if (activityId && activityOptions?.length) {
+      const act = activityOptions.find((a: any) => String(a.id) === activityId);
+      if (act && act.available_budget !== undefined && act.available_budget !== null) {
+        return Number(act.available_budget);
+      }
+      if (act && act.current_budget !== undefined && act.current_budget !== null) {
+        return Number(act.current_budget);
+      }
+    }
+
+    // 2. Try projectCosting phases and activities
+    if (projectCosting && activityId) {
       const phasesArr = Array.isArray(projectCosting.phases)
         ? projectCosting.phases
         : Array.isArray((projectCosting as any).phase_list)
@@ -152,7 +351,7 @@ export default function PettyCashRequestDetailPage() {
           : Array.isArray(ph.activity_list)
           ? ph.activity_list
           : [];
-        const act = acts.find((a: any) => String(a.id || a.activity_id) === String(request.activityId));
+        const act = acts.find((a: any) => String(a.id || a.activity_id) === String(activityId));
         if (act) {
           if (act.available_budget !== undefined && act.available_budget !== null)
             return Number(act.available_budget);
@@ -163,7 +362,8 @@ export default function PettyCashRequestDetailPage() {
       }
     }
 
-    if (projectCosting.financials) {
+    // 3. Try projectCosting financials
+    if (projectCosting?.financials) {
       if (
         projectCosting.financials.remaining_budget !== undefined &&
         projectCosting.financials.remaining_budget !== null
@@ -176,8 +376,8 @@ export default function PettyCashRequestDetailPage() {
         return Number(projectCosting.financials.budget);
     }
 
-    return 5000000;
-  }, [projectCosting, request?.activityId]);
+    return 0;
+  }, [rawRequest, activityOptions, projectCosting, activityId]);
 
   const isDraft = request?.status === "draft";
   const canEdit = isDraft && canDo("project_request", "edit");
@@ -188,9 +388,18 @@ export default function PettyCashRequestDetailPage() {
     router.push(`/project-request/petty-cash-request/${id}/edit`);
   };
 
+  const effectiveProjectRequestId = useMemo(() => {
+    return (
+      (typeof rawRequest?.project_request === "object" ? rawRequest?.project_request?.id : rawRequest?.project_request) ||
+      rawRequest?.project_request_id ||
+      apiProjectRequest?.id ||
+      numericId
+    );
+  }, [rawRequest, apiProjectRequest, numericId]);
+
   const handleDelete = async () => {
     try {
-      await deleteRequest(numericId).unwrap();
+      await deleteRequest(effectiveProjectRequestId).unwrap();
       setIsConfirmingDelete(false);
       statusModal.showSuccess("Request Deleted", "The petty cash request has been deleted.");
     } catch (err) {
@@ -200,7 +409,7 @@ export default function PettyCashRequestDetailPage() {
 
   const handleSubmit = async () => {
     try {
-      await submitRequest({ id: numericId }).unwrap();
+      await submitRequest({ id: effectiveProjectRequestId }).unwrap();
       statusModal.showSuccess("Request Submitted", "The petty cash request has been submitted for approval.");
     } catch (err) {
       statusModal.showError("Submit Failed", extractErrorMessage(err, "Failed to submit the request."));
@@ -215,7 +424,7 @@ export default function PettyCashRequestDetailPage() {
   };
 
   const renderStatusBadge = (status: string) => {
-    const s = (status || "approved").toLowerCase();
+    const s = (status || "pending").toLowerCase();
     switch (s) {
       case "approved":
         return (
@@ -243,14 +452,14 @@ export default function PettyCashRequestDetailPage() {
         );
       default:
         return (
-          <span className="bg-[#D8F5E5] text-[#22C55E] text-[12px] font-normal px-3 py-0.5 rounded-full inline-flex items-center justify-center capitalize">
+          <span className="bg-gray-100 text-gray-700 text-[12px] font-normal px-3 py-0.5 rounded-full inline-flex items-center justify-center capitalize">
             {status}
           </span>
         );
     }
   };
 
-  if (apiLoading || !request) {
+  if (apiLoading || (!request && (isProjectLoading || isPettyCashLoading))) {
     return (
       <div className="min-h-screen bg-white font-['Open_Sans',sans-serif]">
         <header className="w-full bg-white px-5 h-16 flex items-center justify-between">
@@ -275,6 +484,17 @@ export default function PettyCashRequestDetailPage() {
             ))}
           </div>
         </main>
+      </div>
+    );
+  }
+
+  if (!request) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-4">
+        <p className="text-gray-600 mb-4">Petty cash request not found.</p>
+        <Button onClick={() => router.push("/project-request/petty-cash-request")}>
+          Back to List
+        </Button>
       </div>
     );
   }
@@ -356,10 +576,10 @@ export default function PettyCashRequestDetailPage() {
                 </div>
               </div>
 
-              {/* Description of Expense */}
+              {/* Description */}
               <div className="mt-4">
                 <span className="block text-[13px] text-[#8C9BAE] font-normal mb-0.5">
-                  Description of Expense
+                  Description
                 </span>
                 <span className="block text-[14px] font-semibold text-black/80">{request.description}</span>
               </div>

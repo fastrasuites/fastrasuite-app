@@ -11,6 +11,9 @@ import { useDispatch, useSelector } from "react-redux";
 import { setArchive } from "@/components/Settings/viewModeSlice";
 import { RootState } from "@/lib/store/store";
 import { PageGuard } from "@/components/auth/PageGuard";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
+import { useState } from "react";
 
 type SettingsSection =
   | "company"
@@ -33,6 +36,23 @@ export default function SettingsLayout({
   const router = useRouter();
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("search") ?? "";
+
+  const {
+    canAddUser,
+    currentUsers,
+    maxUsers,
+    canCreateCustomRoles,
+    planName,
+  } = useSubscriptionLimits();
+
+  const [limitModalConfig, setLimitModalConfig] = useState<{
+    isOpen: boolean;
+    limitType: "users" | "feature";
+    featureName?: string;
+    customTitle?: string;
+    customDescription?: string;
+    requiredTier?: "professional" | "enterprise";
+  } | null>(null);
 
   if (pathname.startsWith("/settings/change-password")) {
     return (
@@ -156,6 +176,13 @@ export default function SettingsLayout({
         newPath += "/company/updatecompany";
         break;
       case "user":
+        if (!canAddUser) {
+          setLimitModalConfig({
+            isOpen: true,
+            limitType: "users",
+          });
+          return;
+        }
         newPath += "/users/newUser";
         break;
       // case "accessgroup":
@@ -165,6 +192,18 @@ export default function SettingsLayout({
         newPath += "/application/newApplication";
         break;
       case "permissiontemplates":
+        if (!canCreateCustomRoles) {
+          setLimitModalConfig({
+            isOpen: true,
+            limitType: "feature",
+            featureName: "Custom Permission Templates",
+            requiredTier: "professional",
+            customTitle: "Custom Permission Templates",
+            customDescription:
+              "Creating custom permission templates requires a Professional or Enterprise plan. Starter plans include standard predefined roles.",
+          });
+          return;
+        }
         newPath += "/permission-templates/new";
         break;
       default:
@@ -231,6 +270,21 @@ export default function SettingsLayout({
 
       {/* Page content */}
       <main>{children}</main>
+
+      {limitModalConfig && (
+        <PlanLimitModal
+          isOpen={limitModalConfig.isOpen}
+          onClose={() => setLimitModalConfig(null)}
+          limitType={limitModalConfig.limitType}
+          currentCount={currentUsers}
+          maxCount={maxUsers}
+          currentTier={planName}
+          requiredTier={limitModalConfig.requiredTier}
+          featureName={limitModalConfig.featureName}
+          customTitle={limitModalConfig.customTitle}
+          customDescription={limitModalConfig.customDescription}
+        />
+      )}
     </PageGuard>
   );
 }

@@ -7,12 +7,11 @@ import { Switch } from "@/components/ui/switch";
 import { useStatusModal, StatusModal } from "@/components/shared/StatusModal";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { extractErrorMessage } from "@/lib/utils";
-import {
-  useGetMultiLocationStatusQuery,
-  usePatchMultiLocationStatusMutation,
-} from "@/api/inventory/multilocationApi";
+import { useGetMultiLocationStatusQuery, usePatchMultiLocationStatusMutation } from "@/api/inventory/multilocationApi";
 import { useGetLocationsQuery } from "@/api/inventory/locationApi";
 import type { MultiLocationStatusRequest } from "@/types/multilocation";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
 
 const MAX_LOCATIONS_FOR_DEACTIVATION = 3;
 
@@ -31,6 +30,14 @@ export default function MultiLocationSettingsPage() {
   // Fetch locations to check active count
   const { data: locations, isLoading: isLoadingLocations } =
     useGetLocationsQuery({});
+
+  const {
+    isMultiLocationAllowed,
+    maxWarehouses,
+    currentWarehouses,
+    planName,
+  } = useSubscriptionLimits();
+  const [isLimitModalOpen, setIsLimitModalOpen] = React.useState(false);
 
   // Mutation for updating multi-location status
   const [updateMultiLocationStatus, { isLoading: isUpdating }] =
@@ -54,6 +61,12 @@ export default function MultiLocationSettingsPage() {
 
   // Handle toggle change
   const handleToggleChange = async (checked: boolean) => {
+    // Check plan restriction for multi-location
+    if (checked && !isMultiLocationAllowed) {
+      setIsLimitModalOpen(true);
+      return;
+    }
+
     // If trying to deactivate, check location count first
     if (!checked && !canDeactivate) {
       statusModal.showWarning(
@@ -194,7 +207,43 @@ export default function MultiLocationSettingsPage() {
               </p>
             </div>
           )}
+
+          {/* Plan capacity notice for Starter or Professional */}
+          {!isMultiLocationAllowed && (
+            <div className="flex items-start justify-between p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex items-start gap-3">
+                <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">
+                    Single Warehouse Plan ({planName})
+                  </p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Your current plan is limited to 1 warehouse with single-location inventory. Multi-location support is available on Professional (up to 3 warehouses) and Enterprise (multiple warehouses).
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLimitModalOpen(true)}
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-1.5 px-3 rounded shrink-0 cursor-pointer"
+              >
+                Upgrade Plan
+              </button>
+            </div>
+          )}
         </div>
+
+        <PlanLimitModal
+          isOpen={isLimitModalOpen}
+          onClose={() => setIsLimitModalOpen(false)}
+          limitType="warehouses"
+          currentCount={currentWarehouses}
+          maxCount={maxWarehouses}
+          currentTier={planName}
+          requiredTier="professional"
+          customTitle="Multi-Location Inventory Requires Professional"
+          customDescription="The Starter plan is designed for single-location inventory (1 warehouse). Upgrade to Professional to unlock multi-location inventory and manage up to 3 warehouses."
+        />
       </div>
     </PageGuard>
   );

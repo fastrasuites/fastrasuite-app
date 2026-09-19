@@ -14,6 +14,9 @@ import {
 } from "@/utils/modulePermissionsStore";
 import StatusModal, { useStatusModal } from "@/components/shared/StatusModal";
 import { useCreatePermissionTemplateMutation } from "@/api/settings/permissionsTemplateApi";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
+import { AlertTriangle } from "lucide-react";
 
 export default function NewPermissionTemplatePage() {
   const router = useRouter();
@@ -24,8 +27,17 @@ export default function NewPermissionTemplatePage() {
   const statusModal = useStatusModal();
   const [createTemplate] = useCreatePermissionTemplateMutation();
 
+  const { canCreateCustomRoles, planName, isLoading: isLimitsLoading } =
+    useSubscriptionLimits();
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!canCreateCustomRoles) {
+      setIsLimitModalOpen(true);
+      return;
+    }
 
     if (!name.trim()) {
       statusModal.showError("Validation Error", "Template name is required.");
@@ -65,6 +77,24 @@ export default function NewPermissionTemplatePage() {
         </button>
         <h1 className="text-xl text-[#1A1A1A] font-normal">Create Permission Template</h1>
       </div>
+
+      {!isLimitsLoading && !canCreateCustomRoles && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-amber-800 text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Professional Feature:</strong> Creating custom permission templates requires a Professional or Enterprise plan. Starter plans include standard predefined roles.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsLimitModalOpen(true)}
+            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold py-1 px-3 rounded cursor-pointer"
+          >
+            Upgrade Plan
+          </button>
+        </div>
+      )}
 
       <Form onSubmit={handleSave} className="p-6">
         <FormSection title="Template Information" className="mb-6">
@@ -116,6 +146,17 @@ export default function NewPermissionTemplatePage() {
         type={statusModal.type}
         title={statusModal.title}
         message={statusModal.message}
+      />
+
+      <PlanLimitModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+        limitType="feature"
+        featureName="Custom Permission Templates"
+        requiredTier="professional"
+        currentTier={planName}
+        customTitle="Custom Permission Templates"
+        customDescription="Creating custom permission templates requires a Professional or Enterprise plan. Starter plans include standard predefined roles."
       />
     </div>
   );

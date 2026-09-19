@@ -7,11 +7,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, Plus, Trash2, AlertCircle } from "lucide-react";
 import { useGetAvailableBudgetQuery } from "@/api/projectApi";
 import {
-  useGetProjectCostingProjectsQuery,
-  useGetProjectCostingProjectQuery,
-} from "@/api/projectCostingApi";
+  useGetProjectOptionsQuery,
+  useGetPhaseOptionsQuery,
+  useGetActivityOptionsQuery,
+} from "@/api/requests/projectRequestApi";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -176,7 +178,7 @@ function BudgetIndicator({ config, values }: { config: any; values: any }) {
   const { data: budget, isLoading } = useGetAvailableBudgetQuery(
     {
       project_id: Number(projectId),
-      wbs_id: Number(wbsId),
+      wbs_id: wbsId,
       cost_code: config.costCode,
     },
     { skip: !projectId || !wbsId },
@@ -238,13 +240,7 @@ export function RequestForm<T extends Record<string, any>>({
 }: RequestFormProps<T>) {
   const router = useRouter();
   const statusModal = useStatusModal();
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const currentUserName = React.useMemo(() => {
-    if (!loggedInUser) return "";
-    const anyUser = loggedInUser as any;
-    const fullName = `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim();
-    return fullName || loggedInUser.username || "";
-  }, [loggedInUser]);
+  const currentUserName = useCurrentUserName();
 
   const {
     control,
@@ -259,179 +255,112 @@ export function RequestForm<T extends Record<string, any>>({
     mode: "onBlur",
   });
 
-  React.useEffect(() => {
-    if (config.defaultValues) {
-      reset(config.defaultValues as any);
-    }
-  }, [config.defaultValues, reset]);
-
   const currentValues = watch();
-  const projectedCost = config.calculateProjectedCost
-    ? config.calculateProjectedCost(currentValues)
-    : null;
-
   const projectVal = currentValues["project"] || currentValues["project_id"] || "";
   const phaseVal = currentValues["phase"] || "";
   const taskVal = currentValues["task"] || currentValues["activity"] || currentValues["wbsElement"] || "";
 
-  const { data: rawProjects = [] } = useGetProjectCostingProjectsQuery({});
-  const allProjects = Array.isArray(rawProjects)
-    ? rawProjects
-    : (rawProjects as any)?.results || [];
-  const approvedProjects = allProjects.filter((p: any) => {
-    const st = String(p.status || "").toUpperCase();
-    return st === "APPROVED" || st === "ACTIVE" || p.is_approved === true || !p.status;
-  });
-  const approvedProjectsOptions = approvedProjects.map((p: any) => ({
-    label: p.name || p.project_name || `Project #${p.id}`,
+  const prevProjectRef = React.useRef(projectVal);
+  const prevPhaseRef = React.useRef(phaseVal);
+
+  React.useEffect(() => {
+    if (config.defaultValues) {
+      const defaultProject = (config.defaultValues as any)["project"] || (config.defaultValues as any)["project_id"] || "";
+      const defaultPhase = (config.defaultValues as any)["phase"] || "";
+      prevProjectRef.current = defaultProject;
+      prevPhaseRef.current = defaultPhase;
+      reset(config.defaultValues as any);
+    }
+  }, [config.defaultValues, reset]);
+
+  const projectedCost = config.calculateProjectedCost
+    ? config.calculateProjectedCost(currentValues)
+    : null;
+
+  const { data: rawProjectOptions = [] } = useGetProjectOptionsQuery();
+  const projectOptionsList = Array.isArray(rawProjectOptions)
+    ? rawProjectOptions
+    : (rawProjectOptions as any)?.results || [];
+  const projectSelectOptions = projectOptionsList.map((p: any) => ({
+    label: p.project_code ? `${p.name} (${p.project_code})` : p.name,
     value: String(p.id),
   }));
 
-  const { data: projectData } = useGetProjectCostingProjectQuery(
-    Number(projectVal),
-    { skip: !projectVal || isNaN(Number(projectVal)) }
+  const numericProjectId = Number(projectVal);
+  const isValidProjectId = Boolean(projectVal && !isNaN(numericProjectId) && numericProjectId > 0);
+
+  const { data: rawPhaseOptions = [] } = useGetPhaseOptionsQuery(
+    { project_id: numericProjectId },
+    { skip: !isValidProjectId }
   );
-  const activeProject = projectData || allProjects.find((p: any) => String(p.id) === String(projectVal));
+  const phaseOptionsList = Array.isArray(rawPhaseOptions)
+    ? rawPhaseOptions
+    : (rawPhaseOptions as any)?.results || [];
+  const phaseSelectOptions = phaseOptionsList.map((ph: any) => ({
+    label: ph.code ? `${ph.code} - ${ph.name}` : ph.name,
+    value: String(ph.id),
+    amount: ph.current_budget ?? ph.original_amount,
+  }));
 
-  const getBudgetValue = (item: any): number => {
-    if (!item) return 0;
-    const val =
-      item.available_budget ??
-      item.remaining_budget ??
-      item.budget ??
-      item.amount ??
-      item.budgeted_amount ??
-      item.total_amount ??
-      (item.quantity && item.rate ? Number(item.quantity) * Number(item.rate) : undefined) ??
-      item.cost ??
-      0;
-    const num = Number(val);
-    return isNaN(num) ? 0 : num;
-  };
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: numericProjectId, phase_id: String(phaseVal) },
+    { skip: !isValidProjectId || !phaseVal }
+  );
+  const activityOptionsList = Array.isArray(rawActivityOptions)
+    ? rawActivityOptions
+    : (rawActivityOptions as any)?.results || [];
+  const activitySelectOptions = activityOptionsList.map((act: any) => ({
+    label:
+      act.serial_number !== undefined && act.serial_number !== null
+        ? `${act.serial_number} - ${act.name}`
+        : act.name,
+    value: String(act.id),
+    amount: act.available_budget ?? act.current_budget ?? act.original_amount,
+  }));
 
-  const buildWbsListHelper = (proj: any): any[] => {
-    if (!proj) return [];
-    if (Array.isArray(proj.wbs) && proj.wbs.length > 0) {
-      const rawWbs = proj.wbs;
-      return rawWbs.map((w: any) => {
-        let budgetVal = getBudgetValue(w);
-        if (budgetVal === 0 && !w.is_activity) {
-          const childSum = rawWbs
-            .filter((c: any) => c.is_activity && String(c.parent) === String(w.id))
-            .reduce((sum: number, c: any) => sum + getBudgetValue(c), 0);
-          if (childSum > 0) budgetVal = childSum;
-        }
-        return {
-          ...w,
-          amount: budgetVal,
-        };
-      });
-    }
+  const budgetCostCode = config.budgetConfig?.costCode || (config as any).costCode || "";
+  const { data: budgetData } = useGetAvailableBudgetQuery(
+    {
+      project_id: numericProjectId,
+      wbs_id: taskVal,
+      cost_code: budgetCostCode || "CC-01",
+    },
+    { skip: !isValidProjectId || !taskVal }
+  );
 
-    const items: any[] = [];
-    let phasesArr: any[] = [];
-    if (typeof proj.phases === "string") {
-      try {
-        phasesArr = JSON.parse(proj.phases);
-      } catch (e) {
-        phasesArr = [];
-      }
-    } else if (Array.isArray(proj.phases)) {
-      phasesArr = proj.phases;
-    } else if (Array.isArray(proj.phase_list)) {
-      phasesArr = proj.phase_list;
-    } else if (proj.phases?.results && Array.isArray(proj.phases.results)) {
-      phasesArr = proj.phases.results;
-    }
-
-    phasesArr.forEach((ph: any, pi: number) => {
-      const phId = ph.id || ph.phase_id || `phase-${pi + 1}`;
-      const phName = ph.name || ph.phase_name || `Phase ${pi + 1}`;
-
-      const acts = Array.isArray(ph.activities) ? ph.activities
-        : Array.isArray(ph.activity_list) ? ph.activity_list : [];
-
-      const actsTotal = acts.reduce((sum: number, act: any) => sum + getBudgetValue(act), 0);
-      const explicitPhaseBudget = getBudgetValue(ph);
-      const phaseAmount = explicitPhaseBudget > 0 ? explicitPhaseBudget : actsTotal;
-
-      items.push({
-        ...ph,
-        id: phId,
-        name: phName,
-        is_activity: false,
-        amount: phaseAmount,
-      });
-
-      acts.forEach((act: any, ai: number) => {
-        items.push({
-          ...act,
-          id: act.id || act.activity_id || `act-${phId}-${ai + 1}`,
-          name: act.name || act.activity_name || `Activity ${ai + 1}`,
-          is_activity: true,
-          parent: phId,
-          amount: getBudgetValue(act),
-        });
-      });
-    });
-
-    if (Array.isArray(proj.activities)) {
-      proj.activities.forEach((act: any, ai: number) => {
-        const actId = act.id || act.activity_id || `act-${ai + 1}`;
-        if (!items.some((it) => String(it.id) === String(actId))) {
-          items.push({
-            ...act,
-            id: actId,
-            name: act.name || act.activity_name || `Activity ${ai + 1}`,
-            is_activity: true,
-            parent: act.phase || act.phase_id || act.parent || null,
-            amount: getBudgetValue(act),
-          });
-        }
-      });
-    }
-
-    return items;
-  };
-
-  const wbsList = activeProject ? buildWbsListHelper(activeProject) : [];
-
-  // Auto-detect phase from selected activity if phase is not set yet
-  React.useEffect(() => {
-    if (taskVal && !phaseVal && wbsList.length > 0) {
-      const matchingAct = wbsList.find(
-        (w: any) => w.is_activity && String(w.id) === String(taskVal)
-      );
-      if (matchingAct && matchingAct.parent) {
-        setValue("phase" as any, String(matchingAct.parent) as any);
-      }
-    }
-  }, [taskVal, phaseVal, wbsList, setValue]);
-
-  const selectedActivity = wbsList.find((w: any) => String(w.id) === String(taskVal) && w.is_activity);
-
-  let availableBudgetAmount = 0;
-  if (selectedActivity) {
-    availableBudgetAmount = selectedActivity.available_budget !== undefined && selectedActivity.available_budget !== null
+  const selectedActivity = activityOptionsList.find((a: any) => String(a.id) === String(taskVal));
+  const availableBudgetAmount =
+    selectedActivity?.available_budget !== undefined && selectedActivity.available_budget !== null
       ? Number(selectedActivity.available_budget)
-      : selectedActivity.remaining_budget !== undefined && selectedActivity.remaining_budget !== null
-      ? Number(selectedActivity.remaining_budget)
-      : selectedActivity.amount !== undefined && selectedActivity.amount !== null
-      ? Number(selectedActivity.amount)
-      : activeProject?.financials?.remaining_budget !== undefined && activeProject?.financials?.remaining_budget !== null
-      ? Number(activeProject.financials.remaining_budget)
-      : activeProject?.financials?.budget !== undefined && activeProject?.financials?.budget !== null
-      ? Number(activeProject.financials.budget)
+      : selectedActivity?.current_budget !== undefined && selectedActivity.current_budget !== null
+      ? Number(selectedActivity.current_budget)
+      : budgetData?.available_budget !== undefined && budgetData.available_budget !== null
+      ? Number(budgetData.available_budget)
       : 0;
-  } else if (activeProject?.financials) {
-    availableBudgetAmount = activeProject.financials.remaining_budget !== undefined && activeProject.financials.remaining_budget !== null
-      ? Number(activeProject.financials.remaining_budget)
-      : activeProject.financials.budget !== undefined && activeProject.financials.budget !== null
-      ? Number(activeProject.financials.budget)
-      : 0;
-  }
 
-  const selectedCostCode = selectedActivity?.cost_code || selectedActivity?.code || config.costCode || "-";
+  const selectedCostCode =
+    (selectedActivity as any)?.cost_code || (selectedActivity as any)?.code || budgetCostCode || "-";
+
+  // Cascading reset: clear phase and task when project changes
+  React.useEffect(() => {
+    if (prevProjectRef.current && prevProjectRef.current !== projectVal) {
+      setValue("phase" as any, "" as any);
+      setValue("task" as any, "" as any);
+      setValue("activity" as any, "" as any);
+      setValue("wbsElement" as any, "" as any);
+    }
+    prevProjectRef.current = projectVal;
+  }, [projectVal, setValue]);
+
+  // Cascading reset: clear task when phase changes
+  React.useEffect(() => {
+    if (prevPhaseRef.current && prevPhaseRef.current !== phaseVal) {
+      setValue("task" as any, "" as any);
+      setValue("activity" as any, "" as any);
+      setValue("wbsElement" as any, "" as any);
+    }
+    prevPhaseRef.current = phaseVal;
+  }, [phaseVal, setValue]);
 
   const onSubmit = async (data: T) => {
     try {
@@ -624,49 +553,45 @@ export function RequestForm<T extends Record<string, any>>({
                           if (field.type === "select") {
                             let options = field.options || [];
 
-                            if (field.name === "project" && options.length === 0) {
-                              options = approvedProjectsOptions;
+                            if (field.name === "project" && (!field.options || field.options.length === 0)) {
+                              options = projectSelectOptions;
                             }
 
-                            if (field.name === "phase" && field.dependsOn) {
-                              options = wbsList
-                                .filter((w: any) => !w.is_activity)
-                                .map((w: any) => ({ label: w.name, value: String(w.id), amount: w.amount }));
+                            if (field.name === "phase") {
+                              options = phaseSelectOptions;
                             }
 
-                            if (field.name === "task" && field.dependsOn) {
-                              if (phaseVal) {
-                                options = wbsList
-                                  .filter((w: any) => w.is_activity && String(w.parent) === String(phaseVal))
-                                  .map((w: any) => ({ label: w.name, value: String(w.id), amount: w.amount }));
-                              } else {
-                                options = wbsList
-                                  .filter((w: any) => w.is_activity)
-                                  .map((w: any) => ({ label: w.name, value: String(w.id), amount: w.amount }));
-                              }
+                            if (field.name === "task" || field.name === "wbsElement" || field.name === "activity") {
+                              options = activitySelectOptions;
                             }
 
-                            if (field.name === "wbsElement" && field.dependsOn) {
-                              options = wbsList
-                                .filter((w: any) => w.is_activity)
-                                .map((w: any) => ({ label: w.name, value: String(w.id), amount: w.amount }));
-                            }
+                            const isFieldDisabled =
+                              field.disabled ||
+                              (field.name === "phase" && !projectVal) ||
+                              ((field.name === "task" || field.name === "wbsElement" || field.name === "activity") && !phaseVal);
+
+                            const computedPlaceholder =
+                              field.name === "phase" && !projectVal
+                                ? "Select a project first"
+                                : (field.name === "task" || field.name === "wbsElement" || field.name === "activity") && !phaseVal
+                                ? "Select a phase first"
+                                : dynamicPlaceholder;
 
                             return (
                               <Select
                                 onValueChange={controllerField.onChange}
                                 value={controllerField.value}
-                                disabled={field.disabled}
+                                disabled={isFieldDisabled}
                               >
                                 <SelectTrigger
                                   id={field.name}
                                   className={cn(
                                     "w-full [&>span]:w-full",
-                                    field.disabled && "bg-gray-50 text-gray-400 cursor-not-allowed opacity-75"
+                                    isFieldDisabled && "bg-gray-50 text-gray-400 cursor-not-allowed opacity-75"
                                   )}
                                 >
                                   <SelectValue
-                                    placeholder={dynamicPlaceholder}
+                                    placeholder={computedPlaceholder}
                                   />
                                 </SelectTrigger>
                                 <SelectContent className="max-h-72">

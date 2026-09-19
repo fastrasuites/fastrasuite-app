@@ -12,8 +12,7 @@ import { useCreateSubcontractorRequestMutation } from "@/api/subcontractorReques
 import { useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
 import { useGetAvailableBudgetQuery } from "@/api/projectApi";
 import { useRouter } from "next/navigation";
-import { useSelector } from "react-redux";
-import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
 
 const milestoneSchema = z.object({
@@ -75,12 +74,7 @@ export default function NewSubcontractorRequestPage() {
     refetchOnFocus: true,
     refetchOnMountOrArgChange: true,
   });
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = React.useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() || loggedInUser.username || "Current User";
-  }, [loggedInUser]);
+  const loggedInUserName = useCurrentUserName();
 
   const [requestId] = React.useState("Auto-generated");
 

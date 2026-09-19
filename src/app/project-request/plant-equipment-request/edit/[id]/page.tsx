@@ -23,8 +23,7 @@ import {
   useGetPlantEquipmentRequestQuery,
   useUpdatePlantEquipmentRequestMutation 
 } from "@/api/requests/plantEquipmentRequestApi";
-import { useSelector } from "react-redux";
-import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { motion, AnimatePresence } from "framer-motion";
 import { StatusModal } from "@/components/shared/StatusModal";
 import { PageGuard } from "@/components/auth/PageGuard";
@@ -35,12 +34,7 @@ export default function EditPlantEquipmentRequestPage() {
   const params = useParams();
   const id = Number(params.id);
 
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = React.useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() || loggedInUser.username || "Current User";
-  }, [loggedInUser]);
+  const loggedInUserName = useCurrentUserName();
 
   // Queries
   const { data: existingRequest, isLoading: isLoadingRequest } = useGetPlantEquipmentRequestQuery(id, { skip: !id || isNaN(id) });

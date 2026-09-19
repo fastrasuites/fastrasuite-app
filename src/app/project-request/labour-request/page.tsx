@@ -44,7 +44,7 @@ export default function LabourRequestPage() {
   });
 
   useEffect(() => {
-    refetch();
+    refetch?.();
   }, [refetch]);
 
   const { data: projectsData } = useGetProjectCostingProjectsQuery({});

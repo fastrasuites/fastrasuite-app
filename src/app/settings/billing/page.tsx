@@ -1,8 +1,8 @@
 "use client";
-
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, AlertTriangle, X, Loader2, ArrowRight, Download } from "lucide-react";
+import { Check, AlertTriangle, X, Loader2, ArrowRight, Download, Layers, Users, Warehouse, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStatusModal, StatusModal, extractErrorMessage } from "@/components/shared/StatusModal";
 import { useSelector } from "react-redux";
@@ -14,9 +14,11 @@ import {
   useSelfServeCheckoutMutation,
   useGetSubscriptionInvoicesQuery,
   useGeneratePaymentLinkMutation,
+  useVerifyInvoicePaymentMutation,
   useCancelSubscriptionMutation,
   Plan,
 } from "@/api/settings/subscriptionApi";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
 
 interface PlanFeature {
   text: string;
@@ -112,6 +114,63 @@ export default function BillingPage() {
   const [checkout, { isLoading: isCheckingOut }] = useSelfServeCheckoutMutation();
   const [cancelSub, { isLoading: isCanceling }] = useCancelSubscriptionMutation();
   const [generatePaymentLink, { isLoading: isGeneratingLink }] = useGeneratePaymentLinkMutation();
+  const [verifyInvoice, { isLoading: isVerifying }] = useVerifyInvoicePaymentMutation();
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const {
+    currentProjects,
+    maxProjects,
+    currentUsers,
+    maxUsers,
+    currentWarehouses,
+    maxWarehouses,
+  } = useSubscriptionLimits();
+
+  // Automatic Paystack return payment verification
+  const verifiedRefs = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    const reference = searchParams.get("reference") || searchParams.get("trxref");
+    if (!reference || verifiedRefs.current.has(reference)) return;
+
+    const invoiceIdParam = searchParams.get("verify_invoice") || searchParams.get("invoice_id");
+    let invoiceId = invoiceIdParam ? parseInt(invoiceIdParam, 10) : undefined;
+    if (!invoiceId && invoices.length > 0) {
+      const matched = invoices.find(
+        (inv) => inv.reference === reference || inv.status === "pending"
+      );
+      if (matched) invoiceId = matched.id;
+    }
+
+    if (invoiceId) {
+      verifiedRefs.current.add(reference);
+      verifyInvoice({ invoice_id: invoiceId, reference })
+        .unwrap()
+        .then(() => {
+          statusModal.showSuccess(
+            "Payment Confirmed!",
+            "Your subscription payment has been verified successfully. Your plan quotas and access have been updated."
+          );
+          refetchStatus();
+          refetchInvoices();
+          router.replace("/settings/billing");
+        })
+        .catch((err: any) => {
+          statusModal.showError(
+            "Payment Notice",
+            extractErrorMessage(
+              err,
+              "Payment verification in progress. If your account was debited, your invoice will update automatically."
+            )
+          );
+          refetchStatus();
+          refetchInvoices();
+          router.replace("/settings/billing");
+        });
+    }
+  }, [searchParams, invoices, verifyInvoice, refetchStatus, refetchInvoices, router, statusModal]);
 
   // Current Subscription Properties
   const isTrial = subStatus?.status === "trialing" || !subStatus?.plan;
@@ -150,9 +209,14 @@ export default function BillingPage() {
     }
 
     try {
+      const callbackUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}${window.location.pathname}`
+          : undefined;
+
       const res = await checkout({
         plan_id: targetPlan.id,
-        callback_url: window.location.href,
+        callback_url: callbackUrl,
       }).unwrap();
 
       setCreatedInvoice(res);
@@ -191,9 +255,14 @@ export default function BillingPage() {
     }
 
     try {
+      const callbackUrl =
+        typeof window !== "undefined"
+          ? `${window.location.origin}${window.location.pathname}?verify_invoice=${invoiceId}`
+          : undefined;
+
       const res = await generatePaymentLink({
         invoice_id: invoiceId,
-        callback_url: window.location.href,
+        callback_url: callbackUrl,
       }).unwrap();
 
       if (res.payment_url) {
@@ -203,6 +272,28 @@ export default function BillingPage() {
       }
     } catch (err: any) {
       statusModal.showError("Payment Failed", extractErrorMessage(err, "Could not generate payment link."));
+    }
+  };
+
+  const handleVerifyPendingInvoice = async (invoiceId: number, reference?: string) => {
+    try {
+      await verifyInvoice({ invoice_id: invoiceId, reference: reference || "" }).unwrap();
+      statusModal.showSuccess(
+        "Payment Confirmed!",
+        "Your payment has been verified with Paystack. Your plan quotas and subscription status have been updated."
+      );
+      refetchStatus();
+      refetchInvoices();
+    } catch (err: any) {
+      statusModal.showError(
+        "Verification Status",
+        extractErrorMessage(
+          err,
+          "Paystack has not confirmed this payment yet. If you were debited, please wait a few seconds and try clicking Verify again."
+        )
+      );
+      refetchStatus();
+      refetchInvoices();
     }
   };
 
@@ -598,6 +689,151 @@ export default function BillingPage() {
               </div>
             </div>
 
+            {/* Resource Usage Section */}
+            <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">
+                    Plan Resource Usage
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Live usage for your organization under the {currentPlanName} tier
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => handleOpenPlanModal()}
+                  className="text-xs font-semibold text-[#3B7CED] border-[#3B7CED] hover:bg-blue-50 h-8 cursor-pointer"
+                >
+                  Upgrade Limits
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                {/* Projects Metric */}
+                <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-[#3B7CED]">
+                        <Layers className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-700">Active Projects</span>
+                    </div>
+                    <span className="text-xs font-bold text-gray-900">
+                      {currentProjects} / {maxProjects >= 9999 ? "Unlimited" : maxProjects}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        maxProjects < 9999 && currentProjects >= maxProjects
+                          ? "bg-red-500"
+                          : maxProjects < 9999 && currentProjects / maxProjects >= 0.8
+                          ? "bg-amber-500"
+                          : "bg-[#3B7CED]"
+                      }`}
+                      style={{
+                        width: `${
+                          maxProjects >= 9999
+                            ? Math.min((currentProjects / 20) * 100, 100)
+                            : Math.min((currentProjects / maxProjects) * 100, 100)
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    {maxProjects >= 9999
+                      ? "Unlimited active projects included"
+                      : `${Math.max(0, maxProjects - currentProjects)} project slot${
+                          maxProjects - currentProjects === 1 ? "" : "s"
+                        } remaining`}
+                  </p>
+                </div>
+
+                {/* Users Metric */}
+                <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-[#3B7CED]">
+                        <Users className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-700">Team Members</span>
+                    </div>
+                    <span className="text-xs font-bold text-gray-900">
+                      {currentUsers} / {maxUsers >= 9999 ? "Unlimited" : maxUsers}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        maxUsers < 9999 && currentUsers >= maxUsers
+                          ? "bg-red-500"
+                          : maxUsers < 9999 && currentUsers / maxUsers >= 0.8
+                          ? "bg-amber-500"
+                          : "bg-[#3B7CED]"
+                      }`}
+                      style={{
+                        width: `${
+                          maxUsers >= 9999
+                            ? Math.min((currentUsers / 50) * 100, 100)
+                            : Math.min((currentUsers / maxUsers) * 100, 100)
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    {maxUsers >= 9999
+                      ? "50+ / Unlimited team seats included"
+                      : `${Math.max(0, maxUsers - currentUsers)} user seat${
+                          maxUsers - currentUsers === 1 ? "" : "s"
+                        } remaining`}
+                  </p>
+                </div>
+
+                {/* Warehouses Metric */}
+                <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-100 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-[#3B7CED]">
+                        <Warehouse className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-semibold text-gray-700">Warehouses</span>
+                    </div>
+                    <span className="text-xs font-bold text-gray-900">
+                      {currentWarehouses} / {maxWarehouses >= 9999 ? "Unlimited" : maxWarehouses}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        maxWarehouses < 9999 && currentWarehouses >= maxWarehouses
+                          ? "bg-red-500"
+                          : maxWarehouses < 9999 && currentWarehouses / maxWarehouses >= 0.8
+                          ? "bg-amber-500"
+                          : "bg-[#3B7CED]"
+                      }`}
+                      style={{
+                        width: `${
+                          maxWarehouses >= 9999
+                            ? Math.min((currentWarehouses / 10) * 100, 100)
+                            : Math.min((currentWarehouses / maxWarehouses) * 100, 100)
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    {maxWarehouses >= 9999
+                      ? "Multi-location unlimited inventory"
+                      : maxWarehouses === 1
+                      ? "Single warehouse (Starter plan)"
+                      : `${Math.max(0, maxWarehouses - currentWarehouses)} location slot${
+                          maxWarehouses - currentWarehouses === 1 ? "" : "s"
+                        } remaining`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Available Plans Section */}
             <div className="space-y-6 pt-2">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -944,14 +1180,31 @@ export default function BillingPage() {
                               <td className="py-4 px-5 text-right">
                                 <div className="flex items-center justify-end gap-2.5">
                                   {isPending ? (
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handlePayInvoice(inv.id, inv.payment_url)}
-                                      disabled={isGeneratingLink}
-                                      className="bg-[#3B7CED] hover:bg-[#2d63c7] text-white text-xs h-7 px-3"
-                                    >
-                                      Pay Now
-                                    </Button>
+                                    <div className="flex items-center gap-2 justify-end">
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handlePayInvoice(inv.id, inv.payment_url)}
+                                        disabled={isGeneratingLink || isVerifying}
+                                        className="bg-[#3B7CED] hover:bg-[#2d63c7] text-white text-xs h-7 px-3 cursor-pointer"
+                                      >
+                                        Pay Now
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleVerifyPendingInvoice(inv.id, inv.reference)}
+                                        disabled={isVerifying}
+                                        className="border-emerald-500 text-emerald-600 hover:bg-emerald-50 text-xs h-7 px-2.5 flex items-center gap-1 cursor-pointer"
+                                        title="Verify payment with Paystack if you already paid"
+                                      >
+                                        {isVerifying ? (
+                                          <Loader2 className="w-3 h-3 animate-spin" />
+                                        ) : (
+                                          <RefreshCw className="w-3 h-3" />
+                                        )}
+                                        Verify
+                                      </Button>
+                                    </div>
                                   ) : inv.payment_url ? (
                                     <a
                                       href={inv.payment_url}
