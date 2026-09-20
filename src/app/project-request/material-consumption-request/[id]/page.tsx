@@ -18,6 +18,7 @@ import {
 } from "@/api/requests/materialConsumptionRequestApi";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +39,7 @@ export default function MaterialConsumptionRequestDetailPage() {
   const id = Number(params.id);
   const statusModal = useStatusModal();
   const { canDo } = useModulePermissions();
+  const { fullName: currentUserName } = useCurrentUser();
 
   const { data: request, isLoading, error, refetch } = useGetMaterialConsumptionQuery(id, {
     skip: isNaN(id),
@@ -147,15 +149,26 @@ export default function MaterialConsumptionRequestDetailPage() {
   const reqObj: any = request;
   const parentPR: any = typeof reqObj.project_request === "object" ? reqObj.project_request : null;
 
-  let requesterName = "Firstname Lastname";
-  if (reqObj.created_by_name) {
-    requesterName = reqObj.created_by_name;
+  // Resolve requester name accurately
+  let requesterName = "-";
+  if (reqObj.requester_details?.user) {
+    const u = reqObj.requester_details.user;
+    const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+    requesterName = fullName || u.username || u.email || "-";
   } else if (reqObj.created_by_details) {
     const fullName = `${reqObj.created_by_details.first_name || ""} ${reqObj.created_by_details.last_name || ""}`.trim();
-    requesterName = fullName || reqObj.created_by_details.username || "Firstname Lastname";
+    requesterName = fullName || reqObj.created_by_details.username || "-";
   } else if (parentPR?.created_by_details) {
     const fullName = `${parentPR.created_by_details.first_name || ""} ${parentPR.created_by_details.last_name || ""}`.trim();
-    requesterName = fullName || parentPR.created_by_details.username || "Firstname Lastname";
+    requesterName = fullName || parentPR.created_by_details.username || "-";
+  } else if (reqObj.created_by_name) {
+    requesterName = reqObj.created_by_name;
+  } else if (reqObj.requester_name) {
+    requesterName = reqObj.requester_name;
+  } else if (reqObj.requester && typeof reqObj.requester === "string") {
+    requesterName = reqObj.requester;
+  } else if (reqObj.created_by_id) {
+    requesterName = `User #${reqObj.created_by_id}`;
   }
 
   const refId =
@@ -164,38 +177,41 @@ export default function MaterialConsumptionRequestDetailPage() {
     parentPR?.reference_id ||
     `MC${String(reqObj.id || id).padStart(5, "0")}`;
 
-  const createdDateRaw = reqObj.date_consumed || reqObj.created_at || reqObj.date || Date.now();
-  const formattedDate = new Date(createdDateRaw).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const createdDateRaw = reqObj.date_consumed || reqObj.created_at || reqObj.date;
+  const formattedDate = createdDateRaw
+    ? new Date(createdDateRaw).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "-";
 
   const projectName =
     reqObj.project_details?.name ||
     reqObj.project_name ||
     parentPR?.project_details?.name ||
     parentPR?.project_name ||
-    (typeof reqObj.project === "number" ? `Project #${reqObj.project}` : "Constructions Project");
+    (typeof reqObj.project === "number" ? `Project #${reqObj.project}` : "-");
 
   const locationName =
     reqObj.location_details?.location_name ||
+    reqObj.location_details?.name ||
     reqObj.site_location ||
     parentPR?.site_location ||
-    (typeof reqObj.location === "object" ? reqObj.location?.name : null) ||
-    "Lagos";
+    (typeof reqObj.location === "object" ? reqObj.location?.location_name || reqObj.location?.name : null) ||
+    "-";
 
   const phaseName =
     reqObj.phase_details?.name ||
     reqObj.phase_name ||
     (typeof reqObj.phase === "string" && !reqObj.phase.includes("-") ? reqObj.phase : null) ||
-    "Site Prep";
+    "-";
 
   const activityName =
     reqObj.activity_details?.name ||
     reqObj.activity_name ||
     (typeof reqObj.activity === "string" && !reqObj.activity.includes("-") ? reqObj.activity : null) ||
-    "Land Leveling";
+    "-";
 
   const rawLines = reqObj.lines || reqObj.items || [];
   const materials: MaterialItem[] = rawLines.map((item: any, idx: number) => {
@@ -203,14 +219,20 @@ export default function MaterialConsumptionRequestDetailPage() {
     const cost = Number(item.unit_cost || item.standard_cost || item.estimated_unit_cost || 0);
     const total = Number(item.total_cost || qty * cost || 0);
     const pName =
+      item.product_details?.name ||
       item.product_details?.product_name ||
       item.product_name ||
       (typeof item.product === "number" ? `Product #${item.product}` : "Product");
+    const uomObj =
+      (typeof item.product_details?.unit_of_measure === "object" ? item.product_details?.unit_of_measure : null) ||
+      item.product_details?.unit_of_measure_details ||
+      (typeof item.unit_of_measure === "object" ? item.unit_of_measure : null) ||
+      item.unit_of_measure_details;
     const uom =
-      item.product_details?.unit_of_measure_details?.unit_symbol ||
-      item.product_details?.unit_of_measure_details?.unit_name ||
-      item.unit_of_measure_details?.unit_symbol ||
-      item.unit_of_measure_details?.unit_name ||
+      uomObj?.symbol ||
+      uomObj?.unit_symbol ||
+      uomObj?.name ||
+      uomObj?.unit_name ||
       (typeof item.unit_of_measure === "string" ? item.unit_of_measure : "");
     return {
       id: item.id || idx,
@@ -222,25 +244,38 @@ export default function MaterialConsumptionRequestDetailPage() {
     };
   });
 
+  const totalCost =
+    materials.reduce((sum, item) => sum + item.lineTotal, 0) ||
+    Number(parentPR?.request_amount || 0);
+
+  const availableBudget =
+    parseFloat(String(reqObj.available_budget ?? "")) || 0;
+
   const noteText =
     reqObj.notes ||
     reqObj.consumption_reason ||
     reqObj.justification_notes ||
     "-";
 
-  const statusVal = reqObj.status || parentPR?.status || "approved";
-  const isDraft = statusVal.toLowerCase() === "draft";
+  const statusVal = (reqObj.status || parentPR?.status || "pending").toLowerCase();
+  const isDraft = statusVal === "draft";
   const canEdit = isDraft && canDo("project_request", "edit");
   const canDelete = isDraft && canDo("project_request", "delete");
   const canSubmit = isDraft;
 
   const renderStatusBadge = (status?: string) => {
-    const s = (status || "approved").toLowerCase();
+    const s = (status || "pending").toLowerCase();
     switch (s) {
       case "approved":
         return (
           <span className="bg-[#D8F5E5] text-[#22C55E] text-[12px] font-normal px-3 py-0.5 rounded-full inline-flex items-center justify-center">
             Approved
+          </span>
+        );
+      case "released":
+        return (
+          <span className="bg-[#D8F5E5] text-[#22C55E] text-[12px] font-normal px-3 py-0.5 rounded-full inline-flex items-center justify-center">
+            Released
           </span>
         );
       case "pending":
@@ -264,8 +299,8 @@ export default function MaterialConsumptionRequestDetailPage() {
         );
       default:
         return (
-          <span className="bg-[#D8F5E5] text-[#22C55E] text-[12px] font-normal px-3 py-0.5 rounded-full inline-flex items-center justify-center capitalize">
-            {status || "Approved"}
+          <span className="bg-gray-100 text-gray-700 text-[12px] font-normal px-3 py-0.5 rounded-full inline-flex items-center justify-center capitalize">
+            {status || "Pending"}
           </span>
         );
     }
@@ -323,7 +358,7 @@ export default function MaterialConsumptionRequestDetailPage() {
                   </span>
                 </div>
                 <div className="pt-1">
-                  {renderStatusBadge(statusVal)}
+                  {renderStatusBadge(reqObj.release_status === "RELEASED" ? "released" : statusVal)}
                 </div>
               </div>
 
@@ -338,7 +373,9 @@ export default function MaterialConsumptionRequestDetailPage() {
                 </div>
                 <div>
                   <span className="block text-[13px] text-[#8C9BAE] font-normal mb-0.5">Date</span>
-                  <span className="block text-[14px] font-semibold text-black/80">{formattedDate}</span>
+                  <span className="block text-[14px] font-semibold text-black/80">
+                    {formattedDate}
+                  </span>
                 </div>
               </div>
             </section>
@@ -402,13 +439,13 @@ export default function MaterialConsumptionRequestDetailPage() {
                     <div className="flex justify-between items-start mb-1">
                       <span className="text-[14px] font-semibold text-black/80">{item.productName}</span>
                       <span className="text-[14px] font-semibold text-black/80">
-                        N{item.lineTotal.toLocaleString("en-NG")}
+                        ₦{item.lineTotal.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-[12px] text-[#8C9BAE]">
-                      <span>Unit Cost: N{item.unitCost.toLocaleString("en-NG")}</span>
+                      <span>Unit Cost: ₦{item.unitCost.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                       <span>
-                        Quantity: {item.quantity} {item.unitOfMeasure || "bags"}
+                        Quantity: {item.quantity}{item.unitOfMeasure ? ` ${item.unitOfMeasure}` : ""}
                       </span>
                     </div>
                   </div>

@@ -82,26 +82,39 @@ export default function ApproveRequestPage() {
     }
   };
 
-  const handleApprove = async (id: number) => {
-    const request = apiRequests.find((r: any) => r.id === id);
-    let displayId = `REQ-${id}`;
-    if (request) {
-      if (request.request_type === "material_consumption") {
-        let detail = {};
-        if (request.detail) {
-          if (typeof request.detail === "string") {
-            try {
-              detail = JSON.parse(request.detail);
-            } catch (e) {}
-          } else {
-            detail = request.detail;
-          }
+  const getRequestReferenceId = (request: any): string => {
+    if (!request) return "N/A";
+    let detail: any = {};
+    if (request.detail) {
+      if (typeof request.detail === "string") {
+        try {
+          detail = JSON.parse(request.detail);
+        } catch (e) {
+          detail = {};
         }
-        displayId = (detail as any)?.request_id || request.reference_id || `MCR-${id}`;
       } else {
-        displayId = request.reference_id || `REQ-${id}`;
+        detail = request.detail;
       }
     }
+
+    const specificId =
+      detail.reference_id ||
+      detail.request_id ||
+      detail.petty_cash_id ||
+      detail.subcontractor_id ||
+      detail.plant_equipment_id ||
+      detail.labour_id;
+
+    if (specificId && String(specificId).trim()) {
+      return String(specificId).trim();
+    }
+
+    return request.reference_id || (request.id ? `REQ-${request.id}` : "N/A");
+  };
+
+  const handleApprove = async (id: number) => {
+    const request = apiRequests.find((r: any) => r.id === id);
+    const displayId = getRequestReferenceId(request);
 
     // Optimistically remove from view immediately
     setRemovedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -124,24 +137,7 @@ export default function ApproveRequestPage() {
 
   const handleReject = async (id: number) => {
     const request = apiRequests.find((r: any) => r.id === id);
-    let displayId = `REQ-${id}`;
-    if (request) {
-      if (request.request_type === "material_consumption") {
-        let detail = {};
-        if (request.detail) {
-          if (typeof request.detail === "string") {
-            try {
-              detail = JSON.parse(request.detail);
-            } catch (e) {}
-          } else {
-            detail = request.detail;
-          }
-        }
-        displayId = (detail as any)?.request_id || request.reference_id || `MCR-${id}`;
-      } else {
-        displayId = request.reference_id || `REQ-${id}`;
-      }
-    }
+    const displayId = getRequestReferenceId(request);
 
     // Optimistically remove from view immediately
     setRemovedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
@@ -250,10 +246,10 @@ export default function ApproveRequestPage() {
                 <div className="flex flex-col gap-4">
                   <div>
                     <span className="text-xs font-bold text-[#3B7CED] mb-0.5 block">
-                      {request.reference_id || `REQ-${request.id}`}
+                      {getRequestReferenceId(request)}
                     </span>
                     <h3 className="text-base font-bold text-gray-900 leading-tight">
-                      {getProjectName(request.project)}
+                      {request.project_details?.name || (typeof request.detail === "object" ? request.detail?.project_details?.name : null) || getProjectName(request.project)}
                     </h3>
                   </div>
 
@@ -271,9 +267,13 @@ export default function ApproveRequestPage() {
                         Requester
                       </p>
                       <p className="text-sm font-semibold text-gray-900">
-                        {request.created_by_details 
-                          ? `${request.created_by_details.first_name} ${request.created_by_details.last_name}` 
-                          : `User #${request.created_by}`}
+                        {(request.created_by_details && `${request.created_by_details.first_name || ""} ${request.created_by_details.last_name || ""}`.trim()) ||
+                          request.created_by_details?.username ||
+                          request.created_by_details?.email ||
+                          (typeof request.detail === "object" && request.detail?.requester_details?.user && `${request.detail.requester_details.user.first_name || ""} ${request.detail.requester_details.user.last_name || ""}`.trim()) ||
+                          (typeof request.detail === "object" && request.detail?.requester_details?.user?.username) ||
+                          (typeof request.detail === "object" && request.detail?.created_by_name) ||
+                          (request.created_by ? `User #${request.created_by}` : "Requester")}
                       </p>
                     </div>
                   </div>

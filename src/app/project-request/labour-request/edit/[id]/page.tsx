@@ -13,8 +13,7 @@ import {
 import { StatusModal } from "@/components/shared/StatusModal";
 import { format } from "date-fns";
 import extractErrorMessage from "@/components/requests/utils/RequestErrorHandler";
-import { useSelector } from "react-redux";
-import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 
 const formSchema = z.object({
   project: z.string().min(1, "Please select a project"),
@@ -48,12 +47,7 @@ type FormValues = z.infer<typeof formSchema>;
 export default function EditLabourRequestPage() {
   const params = useParams();
   const router = useRouter();
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = React.useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() || loggedInUser.username || "Current User";
-  }, [loggedInUser]);
+  const loggedInUserName = useCurrentUserName();
   const id = parseInt(params.id as string);
 
   const {

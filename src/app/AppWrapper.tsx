@@ -38,6 +38,27 @@ export const SidebarContext = createContext<{
 
 export const useSidebarContext = () => useContext(SidebarContext);
 
+function AuthCookieSync() {
+  useEffect(() => {
+    try {
+      const state = store.getState();
+      const token = state.auth?.access_token;
+      const refreshToken = state.auth?.refresh_token;
+      if (token) {
+        fetch("/api/auth/set-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ access_token: token, refresh_token: refreshToken }),
+        }).catch(() => {});
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  return null;
+}
+
 export default function AppWrapper({
   children,
 }: {
@@ -104,14 +125,21 @@ export default function AppWrapper({
   return (
     <Provider store={store}>
       <PersistGate loading={null} persistor={persistor}>
+        <AuthCookieSync />
         <PermissionProvider>
           <NotificationProvider>
             <SidebarContext.Provider
-              value={{ toggleSidebar, isOpen: sidebarOpen, isExpanded: sidebarExpanded, toggleExpanded }}
+              value={{
+                toggleSidebar,
+                isOpen: sidebarOpen,
+                isExpanded: sidebarExpanded,
+                toggleExpanded,
+              }}
             >
               <SessionTimeoutWrapper>
-                <DatabaseInitializer />
-                <div className="flex bg-gray-100 min-h-screen">
+                <div className="flex min-h-screen bg-gray-50">
+                  <DatabaseInitializer />
+                  {/* Left Sidebar */}
                   {!isAuthPage && (
                     <Sidebar
                       isOpen={sidebarOpen}

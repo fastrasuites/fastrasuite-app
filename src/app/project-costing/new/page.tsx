@@ -23,6 +23,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ModuleWizard } from "@/components/shared/wizard/ModuleWizard";
 import { ToastNotification } from "@/components/shared/ToastNotification";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
+import { AlertTriangle } from "lucide-react";
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -51,6 +54,15 @@ export default function NewProjectPage() {
   const [createPendingProject, { isLoading: isSubmittingPending }] = useCreatePendingProjectCostingProjectMutation();
   const [addProjectDocument] = useAddProjectDocumentMutation();
   const statusModal = useStatusModal();
+
+  const {
+    canCreateProject,
+    currentProjects,
+    maxProjects,
+    planName,
+    isLoading: isLimitsLoading,
+  } = useSubscriptionLimits();
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
 
   const [toast, setToast] = useState<{
     show: boolean;
@@ -319,6 +331,11 @@ export default function NewProjectPage() {
       return;
     }
 
+    if (!canCreateProject) {
+      setIsLimitModalOpen(true);
+      return;
+    }
+
     setIsSubmitting(true);
 
     // Map Phase structure to backend schema
@@ -470,6 +487,25 @@ export default function NewProjectPage() {
           <span>Documents & Links ({documents.length})</span>
         </Button>
       </div>
+
+      {!isLimitsLoading && !canCreateProject && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-amber-800 text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Project Limit Reached:</strong> You have reached your limit of {maxProjects} active projects on the {planName} plan ({currentProjects}/{maxProjects}).
+            </span>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setIsLimitModalOpen(true)}
+            className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-7 px-3"
+          >
+            Upgrade Plan
+          </Button>
+        </div>
+      )}
 
       <div className="p-6 max-w-[1400px] mx-auto w-full flex flex-col gap-10 overflow-y-auto">
         <div data-wizard="pc-basic-info">
@@ -787,6 +823,14 @@ export default function NewProjectPage() {
         onClose={() => setToast((prev) => ({ ...prev, show: false }))}
       />
       <ModuleWizard moduleId="project-costing" />
+      <PlanLimitModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+        limitType="projects"
+        currentCount={currentProjects}
+        maxCount={maxProjects}
+        currentTier={planName}
+      />
     </div>
     </PageGuard>
   );

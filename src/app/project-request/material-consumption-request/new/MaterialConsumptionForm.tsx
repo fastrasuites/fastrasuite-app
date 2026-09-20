@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -44,15 +44,16 @@ import {
   usePatchMaterialConsumptionMutation,
 } from "@/api/requests/materialConsumptionRequestApi";
 import {
-  useGetProjectCostingProjectsQuery,
-  useGetProjectCostingProjectQuery,
-} from "@/api/projectCostingApi";
+  useGetProjectOptionsQuery,
+  useGetPhaseOptionsQuery,
+  useGetActivityOptionsQuery,
+} from "@/api/requests/projectRequestApi";
+import { useGetAvailableBudgetQuery } from "@/api/projectApi";
 import { useGetActiveLocationsFilteredQuery } from "@/api/inventory/locationApi";
 import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useGetInventoryProductsQuery } from "@/api/inventory/productsApi";
-import { useSelector } from "react-redux";
-import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 
 // --- Schema ---
 const productLineSchema = z.object({
@@ -96,18 +97,7 @@ interface FormValues {
   productLines: ProductLine[];
 }
 
-// Helper to convert numeric WBS ID to UUID
-const toUUID = (val: string): string => {
-  const uuidRegex =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (uuidRegex.test(val)) return val;
-  const num = parseInt(val, 10);
-  if (!isNaN(num)) {
-    const hex = num.toString(16).padStart(12, "0");
-    return `00000000-0000-0000-0000-${hex}`;
-  }
-  return "00000000-0000-0000-0000-000000000000";
-};
+
 
 const NativeSelect = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement>>(({ className, ...props }, ref) => {
   return (
@@ -132,32 +122,32 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
   const router = useRouter();
   const [isProductLinesCollapsed, setIsProductLinesCollapsed] = useState(false);
   const statusModal = useStatusModal();
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = React.useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() || loggedInUser.username || "Current User";
-  }, [loggedInUser]);
+  const loggedInUserName = useCurrentUserName();
 
   // --- API Queries ---
-  const { data: rawCostingProjects = [] } = useGetProjectCostingProjectsQuery({});
+  // --- API Queries ---
+  const { data: rawProjectOptions = [] } = useGetProjectOptionsQuery();
 
-  // Filter approved/active projects only
   const projects = useMemo(() => {
-    const list = Array.isArray(rawCostingProjects)
-      ? rawCostingProjects
-      : (rawCostingProjects as any)?.results || [];
-    return list.filter((p: any) => {
-      const st = String(p.status || "").toUpperCase();
-      return st === "APPROVED" || st === "ACTIVE" || p.is_approved === true || !p.status;
-    });
-  }, [rawCostingProjects]);
+    return Array.isArray(rawProjectOptions)
+      ? rawProjectOptions
+      : (rawProjectOptions as any)?.results || [];
+  }, [rawProjectOptions]);
 
   const isLoadingProjects = false;
   const { data: locations = [], isLoading: isLoadingLocations } =
     useGetActiveLocationsFilteredQuery();
-  const { data: inventoryProducts = [], isLoading: isLoadingProducts } =
+  const { data: rawInventoryProducts, isLoading: isLoadingProducts } =
     useGetInventoryProductsQuery({});
+
+  const inventoryProducts = useMemo((): any[] => {
+    if (!rawInventoryProducts) return [];
+    if (Array.isArray(rawInventoryProducts)) return rawInventoryProducts;
+    if ((rawInventoryProducts as any)?.results && Array.isArray((rawInventoryProducts as any).results)) {
+      return (rawInventoryProducts as any).results;
+    }
+    return [];
+  }, [rawInventoryProducts]);
 
   // --- Mutations & Async Data ---
   const [createMaterialConsumption, { isLoading: isCreating }] =
@@ -186,8 +176,6 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
     mode: "onBlur",
   });
 
-  // Note: Form reset logic, including project-detail based warehouse handling, is implemented in the effect starting at line 263.
-
   const { fields, append, remove } = useFieldArray({
     control: form.control,
     name: "productLines",
@@ -196,162 +184,118 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
   const projectId = form.watch("project");
   const phaseId = form.watch("phase");
   const wbsElement = form.watch("wbsElement");
-  const productLines = form.watch("productLines");
+  const watchedProductLines = useWatch({
+    control: form.control,
+    name: "productLines",
+  });
+  const productLines = watchedProductLines || form.watch("productLines");
 
-  // Fetch selected project detail for WBS (declared after projectId is available)
-  const { data: selectedProjectDetail } = useGetProjectCostingProjectQuery(
-    Number(projectId),
-    { skip: !projectId || isNaN(Number(projectId)) },
+  const numericProjectId = Number(projectId);
+  const isValidProjectId = Boolean(projectId && !isNaN(numericProjectId) && numericProjectId > 0);
+
+  const { data: rawPhaseOptions = [] } = useGetPhaseOptionsQuery(
+    { project_id: numericProjectId },
+    { skip: !isValidProjectId }
   );
 
-
-
-  const getBudgetValue = (item: any): number => {
-    if (!item) return 0;
-    const val =
-      item.available_budget ??
-      item.remaining_budget ??
-      item.budget ??
-      item.amount ??
-      item.budgeted_amount ??
-      item.total_amount ??
-      (item.quantity && item.rate ? Number(item.quantity) * Number(item.rate) : undefined) ??
-      item.cost ??
-      0;
-    const num = Number(val);
-    return isNaN(num) ? 0 : num;
-  };
-
-  // --- Derived WBS options (from project-costing data) ---
-  const buildWbsList = (proj: any): any[] => {
-    if (!proj) return [];
-    if (Array.isArray(proj.wbs) && proj.wbs.length > 0) {
-      const rawWbs = proj.wbs;
-      return rawWbs.map((w: any) => {
-        let budgetVal = getBudgetValue(w);
-        if (budgetVal === 0 && !w.is_activity) {
-          const childSum = rawWbs
-            .filter((c: any) => c.is_activity && String(c.parent) === String(w.id || w.uuid))
-            .reduce((sum: number, c: any) => sum + getBudgetValue(c), 0);
-          if (childSum > 0) budgetVal = childSum;
-        }
-        return {
-          ...w,
-          id: w.uuid || w.id || w.activity_id || w.phase_id,
-          parent: w.parent || w.phase || w.phase_id || w.parent_id,
-          amount: budgetVal,
-        };
-      });
-    }
-    const items: any[] = [];
-    let phasesArr: any[] = [];
-    if (typeof proj.phases === "string") {
-      try {
-        phasesArr = JSON.parse(proj.phases);
-      } catch (e) {
-        phasesArr = [];
-      }
-    } else if (Array.isArray(proj.phases)) {
-      phasesArr = proj.phases;
-    } else if (Array.isArray(proj.phase_list)) {
-      phasesArr = proj.phase_list;
-    } else if (proj.phases?.results && Array.isArray(proj.phases.results)) {
-      phasesArr = proj.phases.results;
-    }
-
-    phasesArr.forEach((ph: any, pi: number) => {
-      const phId = ph.uuid || ph.id || ph.phase_id || `phase-${pi + 1}`;
-      const phName = ph.name || ph.phase_name || `Phase ${pi + 1}`;
-
-      const acts = Array.isArray(ph.activities) ? ph.activities
-        : Array.isArray(ph.activity_list) ? ph.activity_list : [];
-
-      const actsTotal = acts.reduce((sum: number, act: any) => sum + getBudgetValue(act), 0);
-      const explicitPhaseBudget = getBudgetValue(ph);
-      const phaseAmount = explicitPhaseBudget > 0 ? explicitPhaseBudget : actsTotal;
-
-      items.push({
-        ...ph,
-        id: phId,
-        name: phName,
-        is_activity: false,
-        amount: phaseAmount,
-      });
-
-      acts.forEach((act: any, ai: number) => {
-        items.push({ 
-          ...act, 
-          id: act.uuid || act.id || `act-${phId}-${ai + 1}`, 
-          name: act.name || `Activity ${ai + 1}`, 
-          is_activity: true, 
-          parent: phId,
-          amount: getBudgetValue(act),
-        });
-      });
-    });
-
-    if (Array.isArray(proj.activities)) {
-      proj.activities.forEach((act: any, ai: number) => {
-        const actId = act.uuid || act.id || `act-${ai + 1}`;
-        if (!items.some((it) => String(it.id) === String(actId))) {
-          items.push({
-            ...act,
-            id: actId,
-            name: act.name || `Activity ${ai + 1}`,
-            is_activity: true,
-            parent: act.phase || act.phase_id || act.parent || null,
-            amount: getBudgetValue(act),
-          });
-        }
-      });
-    }
-
-    return items;
-  };
-
-  const wbsList = useMemo(() => buildWbsList(selectedProjectDetail), [selectedProjectDetail]);
-
-  // Determine if we are in edit mode
   const isEdit = !!requestId;
 
   const phases = useMemo(() => {
-    const list = wbsList.filter((w: any) => !w.is_activity);
+    const list = Array.isArray(rawPhaseOptions)
+      ? [...rawPhaseOptions]
+      : (rawPhaseOptions as any)?.results
+      ? [...(rawPhaseOptions as any).results]
+      : [];
     if (isEdit && requestData) {
       const pd = (requestData as any).phase_details;
       if (pd && pd.id && pd.name) {
-        if (!list.find((p: any) => String(p.id) === String(pd.id) || String(p.uuid) === String(pd.id))) {
-          list.unshift({ id: pd.id, name: pd.name, is_activity: false });
+        if (!list.find((p: any) => String(p.id) === String(pd.id))) {
+          list.unshift({ id: pd.id, name: pd.name, code: pd.code || "" });
         }
       }
     }
     return list;
-  }, [wbsList, isEdit, requestData]);
+  }, [rawPhaseOptions, isEdit, requestData]);
+
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: numericProjectId, phase_id: phaseId },
+    { skip: !isValidProjectId || !phaseId }
+  );
 
   const activities = useMemo(() => {
     if (!phaseId) return [];
-    const list = wbsList.filter((w: any) => w.is_activity && String(w.parent) === String(phaseId));
+    const list = Array.isArray(rawActivityOptions)
+      ? [...rawActivityOptions]
+      : (rawActivityOptions as any)?.results
+      ? [...(rawActivityOptions as any).results]
+      : [];
     if (isEdit && requestData) {
       const ad = (requestData as any).activity_details;
       const pd = (requestData as any).phase_details;
-      // If the current phase matches the requestData's phase, inject the activity fallback
       if (ad && ad.id && ad.name && pd && String(pd.id) === String(phaseId)) {
-        if (!list.find((a: any) => String(a.id) === String(ad.id) || String(a.uuid) === String(ad.id))) {
-          list.unshift({ id: ad.id, name: ad.name, is_activity: true, parent: pd.id });
+        if (!list.find((a: any) => String(a.id) === String(ad.id))) {
+          list.unshift({ id: ad.id, name: ad.name, serial_number: ad.serial_number });
         }
       }
     }
     return list;
-  }, [wbsList, phaseId, isEdit, requestData]);
+  }, [rawActivityOptions, phaseId, isEdit, requestData]);
+
+  // Cascading reset: clear phase and wbsElement when project changes
+  const prevProjectRef = React.useRef(projectId);
+  useEffect(() => {
+    if (prevProjectRef.current && prevProjectRef.current !== projectId) {
+      form.setValue("phase", "");
+      form.setValue("wbsElement", "");
+    }
+    prevProjectRef.current = projectId;
+  }, [projectId, form]);
+
+  // Cascading reset: clear wbsElement when phase changes
+  const prevPhaseRef = React.useRef(phaseId);
+  useEffect(() => {
+    if (prevPhaseRef.current && prevPhaseRef.current !== phaseId) {
+      form.setValue("wbsElement", "");
+    }
+    prevPhaseRef.current = phaseId;
+  }, [phaseId, form]);
+
+  const { data: budgetData } = useGetAvailableBudgetQuery(
+    {
+      project_id: Number(projectId),
+      wbs_id: wbsElement,
+      cost_code: "CC-04",
+    },
+    { skip: !projectId || !wbsElement }
+  );
 
   const availableBudget = useMemo(() => {
-    if (!wbsElement) return 0;
-    // First try activities list, then wbsList
-    let task = activities.find((w: any) => String(w.id) === String(wbsElement) || String(w.uuid) === String(wbsElement));
-    if (!task) {
-      task = wbsList.find((w: any) => String(w.id) === String(wbsElement) || String(w.uuid) === String(wbsElement));
+    const selectedAct = activities.find((a: any) => String(a.id) === String(wbsElement));
+    if (selectedAct) {
+      if (selectedAct.available_budget !== undefined && selectedAct.available_budget !== null) {
+        return Number(selectedAct.available_budget);
+      }
+      if (selectedAct.current_budget !== undefined && selectedAct.current_budget !== null) {
+        return Number(selectedAct.current_budget);
+      }
+      if (selectedAct.original_amount !== undefined && selectedAct.original_amount !== null) {
+        return Number(selectedAct.original_amount);
+      }
     }
-    return task?.amount || 0;
-  }, [wbsElement, activities, wbsList]);
+    const selectedPh = phases.find((p: any) => String(p.id) === String(phaseId));
+    if (selectedPh) {
+      if (selectedPh.current_budget !== undefined && selectedPh.current_budget !== null) {
+        return Number(selectedPh.current_budget);
+      }
+      if (selectedPh.original_amount !== undefined && selectedPh.original_amount !== null) {
+        return Number(selectedPh.original_amount);
+      }
+    }
+    if (budgetData?.available_budget !== undefined && Number(budgetData.available_budget) > 0) {
+      return Number(budgetData.available_budget);
+    }
+    return 0;
+  }, [activities, wbsElement, phases, phaseId, budgetData]);
 
   const hasInitialized = React.useRef(false);
   // Effect to initialise form values when request data is loaded
@@ -362,8 +306,8 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
       const getId = (val: any) => (val && typeof val === "object" ? String(val.id || val.uuid || val.project_id || val.phase_id || val.activity_id || val.location_id || "") : String(val || ""));
       form.reset({
         project: getId(req.project_request || req.project),
-        phase: getId(req.phase),
-        wbsElement: getId(req.activity),
+        phase: getId(req.phase || req.phase_details?.id),
+        wbsElement: getId(req.activity || req.activity_details?.id),
         dateConsumed: req.date_consumed || new Date().toISOString().split("T")[0],
         warehouse: getId(req.location),
         notes: req.notes || "",
@@ -378,80 +322,31 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
     }
   }, [requestData, form]);
 
+  const selectedProject = useMemo(() => {
+    return projects.find((p: any) => String(p.id) === String(projectId));
+  }, [projects, projectId]);
+
   // Auto-fill warehouse based on the selected project
   useEffect(() => {
-    if (projectId && selectedProjectDetail) {
-      const proj = selectedProjectDetail as any;
-      if (proj.site_location) {
-        form.setValue("warehouse", String(proj.site_location));
-      }
+    if (selectedProject?.site_location) {
+      const siteLoc = selectedProject.site_location as any;
+      const locId = typeof siteLoc === "object" ? String(siteLoc.id || "") : String(siteLoc);
+      const locName = typeof siteLoc === "object" ? String(siteLoc.name || "") : String(siteLoc);
+      const matched = locations.find(
+        (l: any) => String(l.id) === locId || l.location_name?.toLowerCase() === locName.toLowerCase()
+      );
+      form.setValue("warehouse", matched ? String(matched.id) : (locId || locName));
     }
-  }, [projectId, selectedProjectDetail, form]);
-
-  const fromUUID = (uuid: string): string => {
-    if (!uuid) return "";
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-([0-9a-f]{12})$/i;
-    const match = uuid.match(uuidRegex);
-    if (match) {
-      const hex = match[1];
-      return parseInt(hex, 16).toString();
-    }
-    return uuid;
-  };
-
-  // Derive exact phase and activity IDs from wbsList to fix UUID vs Numeric mismatches
-  useEffect(() => {
-    if (isEdit && requestData && wbsList.length > 0) {
-      const req = requestData as any;
-      const getId = (val: any) => (val && typeof val === "object" ? String(val.id || val.uuid || val.project_id || val.phase_id || val.activity_id || val.location_id || "") : String(val || ""));
-      const reqPhaseVal = getId(req.phase);
-      const reqActVal = getId(req.activity);
-      
-      const foundPhase = wbsList.find((w: any) => {
-        if (w.is_activity) return false;
-        if (String(w.id) === reqPhaseVal || String(w.uuid) === reqPhaseVal || String(w.phase_id) === reqPhaseVal) return true;
-        if (req.phase_details?.name && w.name === req.phase_details.name) return true;
-        return false;
-      });
-
-      if (foundPhase) {
-        if (form.getValues("phase") !== String(foundPhase.id)) {
-          form.setValue("phase", String(foundPhase.id));
-        }
-      }
-
-      const foundAct = wbsList.find((w: any) => {
-        if (!w.is_activity) return false;
-        if (String(w.id) === reqActVal || String(w.uuid) === reqActVal || String(w.activity_id) === reqActVal) return true;
-        if (toUUID(String(w.id)) === reqActVal || String(w.id) === fromUUID(reqActVal)) return true;
-        if (req.activity_details?.name && w.name === req.activity_details.name) return true;
-        return false;
-      });
-
-      if (foundAct) {
-        if (form.getValues("wbsElement") !== String(foundAct.id)) {
-          form.setValue("wbsElement", String(foundAct.id));
-        }
-        if (foundAct.parent && form.getValues("phase") !== String(foundAct.parent)) {
-          form.setValue("phase", String(foundAct.parent));
-        }
-      }
-    }
-  }, [wbsList, requestData, isEdit, form]);
-
-  // Reset activity when phase changes – only for new requests
-  useEffect(() => {
-    if (!isEdit) {
-      form.setValue("wbsElement", "");
-    }
-  }, [phaseId, form, isEdit]);
+  }, [selectedProject, locations, form]);
 
   // --- Calculate totals when product lines change ---
   useEffect(() => {
-    productLines.forEach((line, index) => {
-      if (!line.productId) return;
+    (productLines || []).forEach((line, index) => {
+      if (!line?.productId) return;
       
-      const totalCost = (Number(line.quantity) || 0) * (Number(line.unitCost) || 0);
+      const qty = Number(line.quantity) || 0;
+      const uCost = Number(line.unitCost) || 0;
+      const totalCost = qty * uCost;
 
       if (line.totalCost !== totalCost) {
         form.setValue(`productLines.${index}.totalCost`, totalCost, {
@@ -461,27 +356,49 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
     });
   }, [productLines, form]);
 
-  const totalRequestCost = productLines.reduce(
-    (sum, line) => sum + (line.totalCost || 0),
-    0,
-  );
+  const totalRequestCost = useMemo(() => {
+    const lines = Array.isArray(productLines) ? productLines : [];
+    return lines.reduce((sum, line) => {
+      const qty = Number(line?.quantity) || 0;
+      const uCost = Number(line?.unitCost) || 0;
+      const lineCost = qty * uCost > 0 ? (qty * uCost) : (Number(line?.totalCost) || 0);
+      return sum + lineCost;
+    }, 0);
+  }, [productLines]);
 
   const successRedirectId = React.useRef<number | null>(null);
 
   const onSubmit = async (data: FormValues) => {
     try {
+      const ensureValidUUID = (val: string): string => {
+        if (!val) return "";
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(val)) return val;
+        const numericVal = parseInt(val, 10);
+        if (!isNaN(numericVal)) {
+          const hexString = numericVal.toString(16).padStart(12, "0");
+          return `00000000-0000-0000-0000-${hexString}`;
+        }
+        return val;
+      };
+
       const payload = {
         project: Number(data.project),
-        activity: toUUID(data.wbsElement),
+        activity: ensureValidUUID(data.wbsElement),
         location: data.warehouse,
         date_consumed: data.dateConsumed,
         notes: data.notes || "",
-        lines: data.productLines.map((line) => ({
-          product: Number(line.productId),
-          quantity: line.quantity,
-          unit_cost: line.unitCost.toFixed(2),
-          total_cost: line.totalCost.toFixed(2),
-        })),
+        lines: data.productLines.map((line) => {
+          const qty = Number(line.quantity) || 0;
+          const uCost = Number(line.unitCost) || 0;
+          const lineTotal = qty * uCost > 0 ? qty * uCost : (Number(line.totalCost) || 0);
+          return {
+            product: Number(line.productId),
+            quantity: qty,
+            unit_cost: uCost.toFixed(2),
+            total_cost: lineTotal.toFixed(2),
+          };
+        }),
       };
 
       if (requestId) {
@@ -592,7 +509,9 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                         <NativeSelect value={field.value} onChange={field.onChange} className={form.formState.errors.project ? "border-red-500 focus:ring-red-500/20" : ""}>
                           <option value="" disabled>{isLoadingProjects ? "Loading projects..." : "Select active project"}</option>
                           {projects.map((p: any) => (
-                            <option key={p.id} value={String(p.id)}>{p.name}</option>
+                            <option key={p.id} value={String(p.id)}>
+                              {p.project_code ? `${p.name} (${p.project_code})` : p.name}
+                            </option>
                           ))}
                         </NativeSelect>
                       </FormControl>
@@ -611,7 +530,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                         <SelectContent>
                           {projects.map((p: any) => (
                             <SelectItem key={p.id} value={String(p.id)}>
-                              {p.name}
+                              {p.project_code ? `${p.name} (${p.project_code})` : p.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -708,7 +627,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           <option value="" disabled>{!projectId ? "Select a project first" : "Select a phase"}</option>
                           {phases.map((p) => (
                             <option key={p.id} value={String(p.id)}>
-                              {p.name} {p.amount !== undefined ? `— ₦${Number(p.amount || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : ""}
+                              {p.code ? `${p.code} - ${p.name}` : p.name}
                             </option>
                           ))}
                         </NativeSelect>
@@ -726,24 +645,29 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent className="max-h-72">
-                          {phases.map((p) => (
-                            <SelectItem
-                              key={p.id}
-                              value={String(p.id)}
-                              className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
-                            >
-                              <span className="flex items-center justify-between gap-3 w-full min-w-0">
-                                <span className="font-medium text-gray-800 truncate min-w-0">
-                                  {p.name}
+                          {phases.map((p: any) => {
+                            const phaseBudget = p.current_budget ?? p.original_amount;
+                            return (
+                              <SelectItem
+                                key={p.id}
+                                value={String(p.id)}
+                                className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
+                              >
+                                <span className="flex items-center justify-between gap-3 w-full min-w-0">
+                                  <span className="font-medium text-gray-800 truncate min-w-0">
+                                    {p.code ? `${p.code} - ${p.name}` : p.name}
+                                  </span>
+                                  {phaseBudget !== undefined && phaseBudget !== null && (
+                                    <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
+                                      ₦{Number(phaseBudget).toLocaleString("en-NG", {
+                                        minimumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                  )}
                                 </span>
-                                <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                                  ₦{Number(p.amount || 0).toLocaleString("en-NG", {
-                                    minimumFractionDigits: 2,
-                                  })}
-                                </span>
-                              </span>
-                            </SelectItem>
-                          ))}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     )}
@@ -765,7 +689,9 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           <option value="" disabled>{!phaseId ? "Select a phase first" : "Select an activity"}</option>
                           {activities.map((a) => (
                             <option key={a.id} value={String(a.id)}>
-                              {a.name} {a.amount !== undefined ? `— ₦${Number(a.amount || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : ""}
+                              {a.serial_number !== undefined && a.serial_number !== null
+                                ? `${a.serial_number} - ${a.name}`
+                                : a.name}
                             </option>
                           ))}
                         </NativeSelect>
@@ -783,24 +709,31 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent className="max-h-72">
-                          {activities.map((a) => (
-                            <SelectItem
-                              key={a.id}
-                              value={String(a.id)}
-                              className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
-                            >
-                              <span className="flex items-center justify-between gap-3 w-full min-w-0">
-                                <span className="font-medium text-gray-800 truncate min-w-0">
-                                  {a.name}
+                          {activities.map((a: any) => {
+                            const actBudget = a.available_budget ?? a.current_budget ?? a.original_amount;
+                            return (
+                              <SelectItem
+                                key={a.id}
+                                value={String(a.id)}
+                                className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
+                              >
+                                <span className="flex items-center justify-between gap-3 w-full min-w-0">
+                                  <span className="font-medium text-gray-800 truncate min-w-0">
+                                    {a.serial_number !== undefined && a.serial_number !== null
+                                      ? `${a.serial_number} - ${a.name}`
+                                      : a.name}
+                                  </span>
+                                  {actBudget !== undefined && actBudget !== null && (
+                                    <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
+                                      ₦{Number(actBudget).toLocaleString("en-NG", {
+                                        minimumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                  )}
                                 </span>
-                                <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                                  ₦{Number(a.amount || 0).toLocaleString("en-NG", {
-                                    minimumFractionDigits: 2,
-                                  })}
-                                </span>
-                              </span>
-                            </SelectItem>
-                          ))}
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     )}
@@ -842,9 +775,10 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
             {!isProductLinesCollapsed && (
               <div className="space-y-4">
                 {fields.map((fieldItem, index) => {
-                  const isEditing = form.watch(`productLines.${index}.isEditing`);
-                  const prodId = form.watch(`productLines.${index}.productId`);
-                  const prod = inventoryProducts.find((p) => String(p.id) === String(prodId));
+                  const currentLine = (productLines && productLines[index]) || fieldItem;
+                  const isEditing = currentLine?.isEditing ?? true;
+                  const prodId = currentLine?.productId;
+                  const prod = inventoryProducts.find((p: any) => String(p.id) === String(prodId));
                   const availableStock = prod
                     ? Number(
                         prod.available_stock ??
@@ -861,9 +795,9 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                     "units";
 
                   if (!isEditing) {
-                    const qty = form.watch(`productLines.${index}.quantity`) || 0;
-                    const uCost = form.watch(`productLines.${index}.unitCost`) || 0;
-                    const tCost = qty * uCost;
+                    const qty = Number(currentLine?.quantity) || 0;
+                    const uCost = Number(currentLine?.unitCost) || 0;
+                    const tCost = qty * uCost > 0 ? (qty * uCost) : (Number(currentLine?.totalCost) || 0);
 
                     return (
                       <div
@@ -916,7 +850,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                     );
                   }
 
-                  const enteredQty = form.watch(`productLines.${index}.quantity`) || 0;
+                  const enteredQty = Number(currentLine?.quantity) || 0;
                   const isOverStock = prod && enteredQty > availableStock;
 
                   return (
@@ -957,15 +891,25 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                     onChange={(e) => {
                                       const val = e.target.value;
                                       field.onChange(val);
-                                      const selectedProd = inventoryProducts.find((p) => String(p.id) === val);
+                                      const selectedProd = inventoryProducts.find((p: any) => String(p.id) === val);
                                       if (selectedProd) {
-                                        form.setValue(`productLines.${index}.unitCost`, Number(selectedProd.standard_cost) || 0, { shouldValidate: true });
+                                        const cost = Number(
+                                          selectedProd.standard_cost ??
+                                          selectedProd.unit_cost ??
+                                          selectedProd.cost ??
+                                          selectedProd.estimated_unit_cost ??
+                                          selectedProd.price ??
+                                          0
+                                        ) || 0;
+                                        form.setValue(`productLines.${index}.unitCost`, cost, { shouldValidate: true, shouldDirty: true });
+                                        const currentQty = Number(form.getValues(`productLines.${index}.quantity`)) || 0;
+                                        form.setValue(`productLines.${index}.totalCost`, cost * currentQty, { shouldValidate: true, shouldDirty: true });
                                       }
                                     }}
                                     className={form.formState.errors.productLines?.[index]?.productId ? "border-red-500 focus:ring-red-500/20" : ""}
                                   >
                                     <option value="" disabled>{isLoadingProducts ? "Loading inventory..." : "Search inventory..."}</option>
-                                    {inventoryProducts.map((p) => {
+                                    {inventoryProducts.map((p: any) => {
                                       const pStock = Number(
                                         p.available_stock ??
                                           p.available_product_quantity ??
@@ -988,9 +932,19 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                   key={`product-select-${index}-${inventoryProducts.length}`}
                                   onValueChange={(val) => {
                                     field.onChange(val);
-                                    const selectedProd = inventoryProducts.find((p) => String(p.id) === val);
+                                    const selectedProd = inventoryProducts.find((p: any) => String(p.id) === val);
                                     if (selectedProd) {
-                                      form.setValue(`productLines.${index}.unitCost`, Number(selectedProd.standard_cost) || 0, { shouldValidate: true });
+                                      const cost = Number(
+                                        selectedProd.standard_cost ??
+                                        selectedProd.unit_cost ??
+                                        selectedProd.cost ??
+                                        selectedProd.estimated_unit_cost ??
+                                        selectedProd.price ??
+                                        0
+                                      ) || 0;
+                                      form.setValue(`productLines.${index}.unitCost`, cost, { shouldValidate: true, shouldDirty: true });
+                                      const currentQty = Number(form.getValues(`productLines.${index}.quantity`)) || 0;
+                                      form.setValue(`productLines.${index}.totalCost`, cost * currentQty, { shouldValidate: true, shouldDirty: true });
                                     }
                                   }}
                                   value={field.value ? String(field.value) : undefined}
@@ -1013,7 +967,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                     </SelectTrigger>
                                   </FormControl>
                                   <SelectContent>
-                                    {inventoryProducts.map((p) => {
+                                    {inventoryProducts.map((p: any) => {
                                       const pStock = Number(
                                         p.available_stock ??
                                           p.available_product_quantity ??
@@ -1079,6 +1033,18 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                     isOverStock && "border-amber-400 focus:ring-amber-400/20"
                                   )}
                                   {...field}
+                                  value={field.value !== undefined && field.value !== null ? field.value : ""}
+                                  onChange={(e) => {
+                                    const rawVal = e.target.value;
+                                    const numVal = rawVal === "" ? "" : Number(rawVal);
+                                    field.onChange(numVal);
+                                    const currentUnitCost = Number(form.getValues(`productLines.${index}.unitCost`)) || 0;
+                                    form.setValue(
+                                      `productLines.${index}.totalCost`,
+                                      (Number(numVal) || 0) * currentUnitCost,
+                                      { shouldValidate: true, shouldDirty: true }
+                                    );
+                                  }}
                                 />
                               </FormControl>
                               {prod && (
@@ -1113,9 +1079,17 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                       "border-red-500 focus:ring-red-500/20"
                                   )}
                                   {...field}
+                                  value={field.value !== undefined && field.value !== null ? field.value : ""}
                                   onChange={(e) => {
-                                    const val = e.target.value;
-                                    field.onChange(val === "" ? undefined : Number(val));
+                                    const rawVal = e.target.value;
+                                    const numVal = rawVal === "" ? "" : Number(rawVal);
+                                    field.onChange(numVal);
+                                    const currentQty = Number(form.getValues(`productLines.${index}.quantity`)) || 0;
+                                    form.setValue(
+                                      `productLines.${index}.totalCost`,
+                                      currentQty * (Number(numVal) || 0),
+                                      { shouldValidate: true, shouldDirty: true }
+                                    );
                                   }}
                                 />
                               </FormControl>
@@ -1129,11 +1103,13 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                         type="button"
                         onClick={() => {
                           const pId = form.getValues(`productLines.${index}.productId`);
-                          const qty = form.getValues(`productLines.${index}.quantity`);
+                          const qty = Number(form.getValues(`productLines.${index}.quantity`));
                           if (!pId || !qty || qty <= 0) {
                             form.trigger(`productLines.${index}`);
                             return;
                           }
+                          const uCost = Number(form.getValues(`productLines.${index}.unitCost`)) || 0;
+                          form.setValue(`productLines.${index}.totalCost`, qty * uCost, { shouldValidate: true });
                           form.setValue(`productLines.${index}.isEditing`, false);
                         }}
                         className="w-full h-11 bg-[#2BA24D] hover:bg-[#238c41] text-white rounded-lg text-sm font-semibold flex items-center justify-center transition-colors mt-2"

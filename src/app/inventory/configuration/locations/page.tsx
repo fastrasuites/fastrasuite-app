@@ -9,12 +9,15 @@ import { AutoSaveIcon } from "@/components/shared/icons";
 import { ViewToggle } from "@/components/inventory/location/ViewToggle";
 import { LocationCards } from "@/components/inventory/location/LocationCards";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { useGetLocationsQuery } from "@/api/inventory/locationApi";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import type { Location } from "@/types/location";
 import { extractErrorMessage } from "@/lib/utils";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
 // Error state component
 interface ErrorStateProps {
   error: unknown;
@@ -175,16 +178,16 @@ export default function InventoryLocationPage() {
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
 
   // Fetch locations from API
-  const {
-    data: locations = [],
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useGetLocationsQuery({
-    search: searchQuery || undefined,
-  });
+  const { data: locations = [], isLoading, isError, error, refetch } =
+    useGetLocationsQuery({
+      search: searchQuery || undefined,
+    });
   const queryLoading = isLoading as boolean;
+
+  const router = useRouter();
+  const { canAddWarehouse, currentWarehouses, maxWarehouses, planName } =
+    useSubscriptionLimits();
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
 
   const items: BreadcrumbItem[] = [
     { label: "Home", href: "/" },
@@ -268,9 +271,19 @@ export default function InventoryLocationPage() {
 
               <div className="flex items-center space-x-3">
                 <PermissionGuard module="inventory" entitlement="add_location">
-                  <Link href="/inventory/configuration/locations/new">
-                    <Button variant={"contained"}>Create Location</Button>
-                  </Link>
+                  <Button
+                    variant={"contained"}
+                    onClick={() => {
+                      if (!canAddWarehouse) {
+                        setIsLimitModalOpen(true);
+                      } else {
+                        router.push("/inventory/configuration/locations/new");
+                      }
+                    }}
+                    className="cursor-pointer"
+                  >
+                    Create Location
+                  </Button>
                 </PermissionGuard>
 
                 <ViewToggle
@@ -343,6 +356,16 @@ export default function InventoryLocationPage() {
             </div>
           </div>
         </div>
+
+        <PlanLimitModal
+          isOpen={isLimitModalOpen}
+          onClose={() => setIsLimitModalOpen(false)}
+          limitType="warehouses"
+          currentCount={currentWarehouses}
+          maxCount={maxWarehouses}
+          currentTier={planName}
+          requiredTier="professional"
+        />
       </div>
     </PageGuard>
   );

@@ -12,8 +12,7 @@ import {
 } from "@/api/subcontractorRequestApi";
 import { useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
 import { useParams, useRouter } from "next/navigation";
-import { useSelector } from "react-redux";
-import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { Loader2 } from "lucide-react";
 
@@ -77,12 +76,7 @@ export default function EditSubcontractorRequestPage() {
 
   const [updateRequest, { isLoading: isSubmitting }] = useUpdateSubcontractorRequestMutation();
   const { data: vendors = [], isLoading: isLoadingVendors } = useGetActiveVendorsQuery();
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = React.useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() || loggedInUser.username || "Current User";
-  }, [loggedInUser]);
+  const loggedInUserName = useCurrentUserName();
 
   const vendorOptions = useMemo(() => {
     return vendors.map((vendor) => ({

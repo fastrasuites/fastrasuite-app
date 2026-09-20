@@ -45,7 +45,7 @@ describe("NewUser Page Error Handling & StatusModal", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (useRouter as jest.Mock).mockReturnValue(mockRouter);
-    (useSelector as jest.Mock).mockImplementation((selector: any) =>
+    (useSelector as unknown as jest.Mock).mockImplementation((selector: any) =>
       selector({
         auth: {
           tenant_company_name: "Acme Corp",

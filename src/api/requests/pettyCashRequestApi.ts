@@ -3,6 +3,7 @@ import type { RootState } from "../../lib/store/store";
 
 export interface PettyCashRequest {
   id: number;
+  available_budget?: string | number;
   reference_id?: string;
   amount_requested?: string | number;
   amount?: string | number;
@@ -23,6 +24,7 @@ export interface PettyCashRequest {
     request_amount?: number;
     created_by?: number;
     created_by_details?: any;
+    requester_details?: any;
     [key: string]: any;
   };
   project_request_id?: number;
@@ -50,6 +52,18 @@ export interface PettyCashRequest {
     first_name?: string;
     last_name?: string;
     email?: string;
+  };
+  requester_details?: {
+    id: number;
+    user?: {
+      id: number;
+      username?: string;
+      first_name?: string;
+      last_name?: string;
+      email?: string;
+      [key: string]: any;
+    };
+    [key: string]: any;
   };
   status?: string;
   detail?: any;

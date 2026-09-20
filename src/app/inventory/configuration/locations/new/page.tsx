@@ -20,6 +20,9 @@ import { useGetTenantUsersQuery } from "@/api/settings/tenantUserApi";
 import { useStatusModal, StatusModal } from "@/components/shared/StatusModal";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { extractErrorMessage } from "@/lib/utils";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
+import { AlertTriangle } from "lucide-react";
 import {
   locationSchema,
   type LocationFormData,
@@ -75,6 +78,15 @@ export default function NewLocationPage() {
     useGetTenantUsersQuery({});
 
   const statusModal = useStatusModal();
+
+  const {
+    canAddWarehouse,
+    currentWarehouses,
+    maxWarehouses,
+    planName,
+    isLoading: isLimitsLoading,
+  } = useSubscriptionLimits();
+  const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
 
   // React Hook Form setup
   const {
@@ -142,6 +154,10 @@ export default function NewLocationPage() {
   };
 
   async function onSubmit(data: LocationFormData): Promise<void> {
+    if (!canAddWarehouse) {
+      setIsLimitModalOpen(true);
+      return;
+    }
     try {
       console.log("data", data);
       // Call the API mutation
@@ -235,6 +251,26 @@ export default function NewLocationPage() {
           </div>
         </motion.div>
       </>
+
+      {/* Warning banner if limit reached */}
+      {!isLimitsLoading && !canAddWarehouse && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-amber-800 text-xs">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>Warehouse Limit Reached:</strong> You have reached your limit of {maxWarehouses} warehouse locations on the {planName} plan ({currentWarehouses}/{maxWarehouses}).
+            </span>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setIsLimitModalOpen(true)}
+            className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-7 px-3"
+          >
+            Upgrade Plan
+          </Button>
+        </div>
+      )}
 
       {/* Form Content */}
       <form
@@ -452,6 +488,16 @@ export default function NewLocationPage() {
         onAction={statusModal.onAction}
         secondaryText={statusModal.secondaryText}
         onSecondary={statusModal.onSecondary}
+      />
+
+      <PlanLimitModal
+        isOpen={isLimitModalOpen}
+        onClose={() => setIsLimitModalOpen(false)}
+        limitType="warehouses"
+        currentCount={currentWarehouses}
+        maxCount={maxWarehouses}
+        currentTier={planName}
+        requiredTier="professional"
       />
       </div>
     </PageGuard>

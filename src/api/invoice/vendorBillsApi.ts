@@ -160,14 +160,32 @@ export interface GetVendorBillsParams {
 /* -------------------------------------------------------------------------- */
 
 const getTenantBaseUrl = (state: RootState): string => {
-  const tenantSchemaName = state.auth.tenant_schema_name;
+  let tenantSchemaName = state.auth?.tenant_schema_name;
+  if (!tenantSchemaName && typeof window !== "undefined") {
+    try {
+      tenantSchemaName = localStorage.getItem("tenant_schema_name");
+      if (!tenantSchemaName) {
+        const persistedAuth = localStorage.getItem("persist:auth");
+        if (persistedAuth) {
+          const parsed = JSON.parse(persistedAuth);
+          tenantSchemaName = parsed.tenant_schema_name
+            ? JSON.parse(parsed.tenant_schema_name)
+            : null;
+        }
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
   const apiDomain =
     process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
   const protocol =
     apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
       ? "http"
       : "https";
-  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
+  return tenantSchemaName
+    ? `${protocol}://${tenantSchemaName}.${apiDomain}`
+    : `${protocol}://app.${apiDomain}`;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -179,7 +197,22 @@ export const vendorBillsApi = createApi({
   baseQuery: async (args, api, _extraOptions) => {
     const state = api.getState() as RootState;
     const baseUrl = getTenantBaseUrl(state);
-    const token = state.auth.access_token;
+
+    let token = state.auth?.access_token;
+    if (!token && typeof window !== "undefined") {
+      try {
+        token = localStorage.getItem("access_token");
+        if (!token) {
+          const persistedAuth = localStorage.getItem("persist:auth");
+          if (persistedAuth) {
+            const parsed = JSON.parse(persistedAuth);
+            token = parsed.access_token ? JSON.parse(parsed.access_token) : null;
+          }
+        }
+      } catch {
+        // Ignore localStorage errors
+      }
+    }
 
     const headers = new Headers();
     if (token) {

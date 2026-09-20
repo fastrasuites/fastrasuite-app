@@ -11,8 +11,7 @@ import {
   useGetProjectRequestQuery,
   usePatchProjectRequestMutation,
 } from "@/api/requests/projectRequestApi";
-import { useSelector } from "react-redux";
-import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
 
 const formSchema = z.object({
@@ -34,16 +33,7 @@ export default function EditPettyCashRequestPage() {
   const params = useParams();
   const router = useRouter();
   const id = parseInt(params.id as string);
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return (
-      `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() ||
-      loggedInUser.username ||
-      "Current User"
-    );
-  }, [loggedInUser]);
+  const loggedInUserName = useCurrentUserName();
 
   const { data: request, isLoading } = useGetProjectRequestQuery(id, {
     skip: isNaN(id),
@@ -137,9 +127,9 @@ export default function EditPettyCashRequestPage() {
           },
           {
             name: "description",
-            label: "Description of Expense",
+            label: "Description",
             type: "text",
-            placeholder: "Enter description of expense",
+            placeholder: "Enter description",
           },
         ],
       },

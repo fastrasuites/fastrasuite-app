@@ -50,11 +50,68 @@ export interface CancelProjectRequest {
   cancellation_notes?: string;
 }
 
+export interface SiteLocationOption {
+  id?: string | number;
+  name?: string;
+}
+
+export interface ProjectOption {
+  id: number;
+  project_code: string;
+  name: string;
+  site_location?: SiteLocationOption | string | number | null;
+}
+
+export interface PhaseOption {
+  id: string;
+  name: string;
+  code: string;
+  sequence?: number;
+  original_amount?: number;
+  approved_adjustment?: number;
+  current_budget?: number;
+}
+
+export interface ActivityOption {
+  id: string;
+  serial_number?: number;
+  name: string;
+  original_amount?: number;
+  approved_adjustment?: number;
+  current_budget?: number;
+  committed?: number;
+  actual_spent?: number;
+  available_budget?: number;
+}
+
+export interface GetPhaseOptionsParams {
+  project_id: number;
+}
+
+export interface GetActivityOptionsParams {
+  project_id: number;
+  phase_id: string;
+}
+
 const getTenantBaseUrl = (state: RootState): string => {
-  const tenantSchemaName = state.auth.tenant_schema_name;
+  let tenantSchemaName = state.auth.tenant_schema_name;
+  if (!tenantSchemaName && typeof window !== "undefined") {
+    try {
+      tenantSchemaName = localStorage.getItem("tenant_schema_name");
+      if (!tenantSchemaName) {
+        const persistedAuth = localStorage.getItem("persist:auth");
+        if (persistedAuth) {
+          const parsed = JSON.parse(persistedAuth);
+          tenantSchemaName = parsed.tenant_schema_name ? JSON.parse(parsed.tenant_schema_name) : null;
+        }
+      }
+    } catch {
+      // Ignore localStorage read errors
+    }
+  }
   const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
   const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
-  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
+  return tenantSchemaName ? `${protocol}://${tenantSchemaName}.${apiDomain}` : "";
 };
 
 export const projectRequestApi = createApi({
@@ -63,7 +120,30 @@ export const projectRequestApi = createApi({
   baseQuery: async (args, api, extraOptions) => {
     const state = api.getState() as RootState;
     const baseUrl = getTenantBaseUrl(state);
-    const token = state.auth.access_token;
+    let token = state.auth.access_token;
+    if (!token && typeof window !== "undefined") {
+      try {
+        token = localStorage.getItem("access_token");
+        if (!token) {
+          const persistedAuth = localStorage.getItem("persist:auth");
+          if (persistedAuth) {
+            const parsed = JSON.parse(persistedAuth);
+            token = parsed.access_token ? JSON.parse(parsed.access_token) : null;
+          }
+        }
+      } catch {
+        // Ignore localStorage read errors
+      }
+    }
+
+    if (!baseUrl) {
+      return {
+        error: {
+          status: "CUSTOM_ERROR" as const,
+          data: { message: "Tenant schema name is missing" },
+        },
+      };
+    }
 
     const headers = new Headers();
     if (token) {
@@ -95,16 +175,40 @@ export const projectRequestApi = createApi({
         body: typeof args === "string" ? undefined : args.body ? JSON.stringify(args.body) : undefined,
       });
 
+      const contentType = response.headers.get("content-type") || "";
+      const isJson = contentType.includes("application/json");
+
       if (!response.ok) {
+        let errorData: any = {};
+        if (isJson) {
+          errorData = await response.json().catch(() => ({}));
+        } else {
+          const text = await response.text().catch(() => "");
+          errorData = { message: text || response.statusText };
+        }
         return {
           error: {
             status: response.status,
-            data: await response.json(),
+            data: errorData,
           },
         };
       }
 
-      const data = await response.json();
+      if (response.status === 204) {
+        return { data: undefined };
+      }
+
+      let data: any = null;
+      if (isJson) {
+        data = await response.json().catch(() => null);
+      } else {
+        const text = await response.text().catch(() => null);
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = text;
+        }
+      }
       return { data };
     } catch (error) {
       return {
@@ -221,6 +325,21 @@ export const projectRequestApi = createApi({
         "ProjectRequest",
       ],
     }),
+    getProjectOptions: builder.query<ProjectOption[], void>({
+      query: () => "/project-requests/project-requests/project-options/",
+    }),
+    getPhaseOptions: builder.query<PhaseOption[], GetPhaseOptionsParams>({
+      query: (params) => ({
+        url: "/project-requests/project-requests/phase-options/",
+        params,
+      }),
+    }),
+    getActivityOptions: builder.query<ActivityOption[], GetActivityOptionsParams>({
+      query: (params) => ({
+        url: "/project-requests/project-requests/activity-options/",
+        params,
+      }),
+    }),
   }),
 });
 
@@ -234,4 +353,7 @@ export const {
   useUpdateProjectRequestMutation,
   usePatchProjectRequestMutation,
   useDeleteProjectRequestMutation,
+  useGetProjectOptionsQuery,
+  useGetPhaseOptionsQuery,
+  useGetActivityOptionsQuery,
 } = projectRequestApi;

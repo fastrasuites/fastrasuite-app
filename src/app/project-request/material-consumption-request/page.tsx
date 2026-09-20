@@ -21,14 +21,16 @@ interface MaterialConsumptionRequest {
 
 const statusMap: Record<string, RequestStatus> = {
   APPROVED: "approved",
-  PENDING: "pending",
-  DRAFT: "draft",
-  REJECTED: "rejected",
-  CANCELLED: "rejected",
   approved: "approved",
+  RELEASED: "approved",
+  released: "approved",
+  PENDING: "pending",
   pending: "pending",
+  DRAFT: "draft",
   draft: "draft",
+  REJECTED: "rejected",
   rejected: "rejected",
+  CANCELLED: "rejected",
   cancelled: "rejected",
 };
 
@@ -39,13 +41,13 @@ export default function MaterialConsumptionRequestPage() {
   });
 
   React.useEffect(() => {
-    refetch();
+    refetch?.();
   }, [refetch]);
 
   const requests: MaterialConsumptionRequest[] = React.useMemo(() => {
     const rawList = Array.isArray(apiData)
       ? apiData
-      : (apiData as any).results ?? [];
+      : (apiData as any)?.results ?? [];
 
     const sortedList = [...rawList].sort((a: any, b: any) => {
       const dateA = new Date(a.created_at || a.date_consumed || a.date || 0).getTime();
@@ -57,18 +59,64 @@ export default function MaterialConsumptionRequestPage() {
     });
 
     return sortedList.map((req: any) => {
-      const totalCost = (req.lines ?? []).reduce(
-        (sum: number, line: any) => sum + (parseFloat(line.total_cost) || 0),
+      // 1. Calculate total cost from lines or project_request
+      const calculatedLinesCost = (req.lines ?? []).reduce(
+        (sum: number, line: any) => {
+          const lineTotal =
+            parseFloat(line.total_cost) ||
+            (parseFloat(line.quantity) || 0) * (parseFloat(line.unit_cost) || 0) ||
+            0;
+          return sum + lineTotal;
+        },
         0,
       );
 
+      const totalCost =
+        calculatedLinesCost > 0
+          ? calculatedLinesCost
+          : parseFloat(req.project_request?.request_amount) ||
+            parseFloat(req.total_cost) ||
+            parseFloat(req.estimated_cost) ||
+            0;
+
+      // 2. Resolve requester from requester_details.user, created_by_details, etc.
+      let requester = "—";
+      if (req.requester_details?.user) {
+        const u = req.requester_details.user;
+        const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+        requester = fullName || u.username || u.email || "—";
+      } else if (req.created_by_details) {
+        const u = req.created_by_details;
+        const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+        requester = fullName || u.username || u.email || "—";
+      } else if (req.created_by_name) {
+        requester = req.created_by_name;
+      } else if (req.requester_name) {
+        requester = req.requester_name;
+      } else if (req.requester && typeof req.requester === "string") {
+        requester = req.requester;
+      } else if (req.created_by_id) {
+        requester = `User #${req.created_by_id}`;
+      }
+
+      // 3. Resolve status
+      const rawStatus = (req.status || req.project_request?.status || "pending").toLowerCase();
+      const status: RequestStatus = statusMap[rawStatus] ?? "pending";
+
+      // 4. Resolve project
+      const project =
+        req.project_details?.name ||
+        (typeof req.project_request === "object" ? req.project_request?.project_details?.name : null) ||
+        req.project_name ||
+        (req.project ? `Project #${req.project}` : "—");
+
       return {
-        id: req.request_id || `MCR-${req.id}`,
-        project: req.project_details?.name || "—",
+        id: req.request_id || req.reference_id || req.project_request?.reference_id || `MCR-${req.id}`,
+        project,
         itemsCount: (req.lines ?? []).length,
         totalCost,
-        requester: req.created_by_name || "—",
-        status: statusMap[req.status] ?? "pending",
+        requester,
+        status,
         realId: req.id,
       };
     });

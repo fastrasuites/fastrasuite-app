@@ -71,17 +71,28 @@ export default function PettyCashRequestPage() {
         }
       }
 
-      let requesterName = "Requester";
-      if (req.created_by_details && typeof req.created_by_details === "object") {
+      let requesterName = "—";
+      if (req.requester_details?.user) {
+        const u = req.requester_details.user;
+        const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+        requesterName = fullName || u.username || u.email || "—";
+      } else if (req.created_by_details && typeof req.created_by_details === "object") {
         const fullName = `${req.created_by_details.first_name || ""} ${req.created_by_details.last_name || ""}`.trim();
-        requesterName = fullName || req.created_by_details.username || req.created_by_details.email || "Requester";
+        requesterName = fullName || req.created_by_details.username || req.created_by_details.email || "—";
+      } else if (
+        typeof req.project_request === "object" &&
+        req.project_request?.requester_details?.user
+      ) {
+        const u = req.project_request.requester_details.user;
+        const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+        requesterName = fullName || u.username || u.email || "—";
       } else if (
         typeof req.project_request === "object" &&
         req.project_request?.created_by_details
       ) {
         const prCreatedBy = req.project_request.created_by_details;
         const fullName = `${prCreatedBy.first_name || ""} ${prCreatedBy.last_name || ""}`.trim();
-        requesterName = fullName || prCreatedBy.username || prCreatedBy.email || "Requester";
+        requesterName = fullName || prCreatedBy.username || prCreatedBy.email || "—";
       } else if (req.created_by_name && typeof req.created_by_name === "string") {
         requesterName = req.created_by_name;
       } else if (req.requester && typeof req.requester === "string" && isNaN(Number(req.requester))) {
@@ -108,7 +119,8 @@ export default function PettyCashRequestPage() {
         req.project_details?.name ||
         req.project_name ||
         (typeof req.project_request === "object" && req.project_request?.project_details?.name) ||
-        "General Project";
+        (typeof req.project_request === "object" && req.project_request?.project_name) ||
+        (req.project ? `Project #${req.project}` : "—");
 
       const amount =
         parseFloat(String(req.amount_requested ?? "")) ||
@@ -120,9 +132,9 @@ export default function PettyCashRequestPage() {
         0;
 
       const realId =
+        req.id ||
         (typeof req.project_request === "object" ? req.project_request?.id : req.project_request) ||
-        req.project_request_id ||
-        req.id;
+        req.project_request_id;
 
       return {
         id: itemRefId,

@@ -200,7 +200,7 @@ export const invoicesApi = createApi({
         return {
           error: {
             status: response.status,
-            data: await response.json(),
+            data: await response.json().catch(() => null),
           },
         };
       }
@@ -209,7 +209,7 @@ export const invoicesApi = createApi({
         return { data: null };
       }
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
       return { data };
     } catch (error) {
       return {

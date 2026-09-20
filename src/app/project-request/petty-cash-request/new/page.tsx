@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { useCreatePettyCashRequestMutation } from "@/api/requests/pettyCashRequestApi";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
+import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
 
 const formSchema = z.object({
@@ -28,12 +29,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 export default function NewPettyCashRequestPage() {
   const [createPettyCashRequest] = useCreatePettyCashRequestMutation();
-  const loggedInUser = useSelector((state: RootState) => state.auth.user);
-  const loggedInUserName = React.useMemo(() => {
-    if (!loggedInUser) return "Current User";
-    const anyUser = loggedInUser as any;
-    return `${anyUser.first_name || ""} ${anyUser.last_name || ""}`.trim() || loggedInUser.username || "Current User";
-  }, [loggedInUser]);
+  const loggedInUserName = useCurrentUserName();
 
   const [requestId] = React.useState("Auto-generated");
 
@@ -88,9 +84,9 @@ export default function NewPettyCashRequestPage() {
           },
           {
             name: "description",
-            label: "Description of Expense",
+            label: "Description",
             type: "text",
-            placeholder: "Enter description of expense",
+            placeholder: "Enter description",
           },
         ],
       },
