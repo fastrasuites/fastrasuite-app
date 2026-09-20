@@ -1,8 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import {
+  Search,
+  ShoppingCart,
+  HardHat,
+  Truck,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import { useGetApprovedProjectRequestsQuery } from "@/api/invoice/approvedProjectRequestsApi";
 import { useConvertRequestToPurchaseOrderMutation } from "@/api/invoice/projectPurchaseOrdersApi";
 import ConvertToPOModal from "@/components/invoice/ConvertToPOModal";
@@ -10,15 +18,17 @@ import ConvertToPOSubcontractorModal from "@/components/invoice/subcontractor/Co
 import CreateVendorBillLabourModal from "@/components/invoice/labour-request/CreateVendorBillLabourReqModal";
 import CreateDisbursementModal from "@/components/invoice/petty-cash/CreateDisbursementModal";
 import ConvertToPOPlantEquipmentModal from "@/components/invoice/plant-and-equipment/ConvertToPOPlantEquipmentModal";
-import {
-  useCreateDisbursementMutation,
-  type CreateDisbursementRequest,
-} from "@/api/invoice/disbursementApi";
+import { useCreateDisbursementMutation } from "@/api/invoice/disbursementApi";
+import type { CreateDisbursementBody } from "@/api/invoice/disbursementApi";
 import Breadcrumbs from "@/components/shared/BreadScrumbs";
 import { BreadcrumbItem } from "@/components/shared/types";
 import { ToastNotification } from "@/components/shared/ToastNotification";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
+
+/* -------------------------------------------------------------------------- */
+/*                              Type helpers                                  */
+/* -------------------------------------------------------------------------- */
 
 const getTypeColor = (type: string) => {
   switch (type) {
@@ -55,7 +65,6 @@ function extractErrorMessage(err: unknown): string {
   if (data?.detail && typeof data.detail === "string") return data.detail;
   if (data?.error && typeof data.error === "string") return data.error;
 
-  // {"error":[{"detail":"..."}]}
   if (Array.isArray(data?.error) && data.error.length > 0) {
     const first = data.error[0];
     if (typeof first === "string") return first;
@@ -119,6 +128,69 @@ function TableSkeleton({ rows = 6 }: { rows?: number }) {
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/*                         Summary cards config                               */
+/* -------------------------------------------------------------------------- */
+
+type SummaryCardConfig = {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  /** Tailwind classes for icon colour */
+  iconClass: string;
+  /** Tailwind classes for the count number */
+  countClass: string;
+  /** Matches the mapped `type` string on each request */
+  matchType: string;
+};
+
+const SUMMARY_CARDS: SummaryCardConfig[] = [
+  {
+    key: "purchase",
+    label: "Purchase",
+    icon: ShoppingCart,
+    iconClass: "text-blue-600",
+    countClass: "text-blue-600",
+    matchType: "Purchase",
+  },
+  {
+    key: "subcontractor",
+    label: "Subcontractor",
+    icon: HardHat,
+    iconClass: "text-amber-500",
+    countClass: "text-amber-500",
+    matchType: "Subcontractor",
+  },
+  {
+    key: "plant_equipment",
+    label: "Plant & Equipment",
+    icon: Truck,
+    iconClass: "text-red-500",
+    countClass: "text-red-500",
+    matchType: "Plant and Equipment",
+  },
+  {
+    key: "labour",
+    label: "Labour Request",
+    icon: Users,
+    iconClass: "text-purple-600",
+    countClass: "text-purple-600",
+    matchType: "Labour Request",
+  },
+  {
+    key: "petty_cash",
+    label: "Petty Cash",
+    icon: Wallet,
+    iconClass: "text-emerald-600",
+    countClass: "text-emerald-600",
+    matchType: "Petty Cash Request",
+  },
+];
+
+/* -------------------------------------------------------------------------- */
+/*                                 Page                                       */
+/* -------------------------------------------------------------------------- */
+
 export default function ApprovedRequestsPage() {
   const router = useRouter();
 
@@ -181,7 +253,7 @@ export default function ApprovedRequestsPage() {
   };
 
   const handlePettyCashSubmitDisbursement = async (
-    payload: CreateDisbursementRequest,
+    payload: CreateDisbursementBody,
   ) => {
     try {
       if (process.env.NODE_ENV === "development")
@@ -196,7 +268,6 @@ export default function ApprovedRequestsPage() {
       handleClosePettyCashDisbursementModal();
       refetch();
 
-      // Give the toast a moment to appear, then navigate
       setTimeout(() => {
         router.push("/invoice/payment-queue");
       }, 900);
@@ -207,6 +278,7 @@ export default function ApprovedRequestsPage() {
       showToast("error", extractErrorMessage(err));
     }
   };
+
   const handleConvertToPlantEquipment = (request: any) => {
     if (process.env.NODE_ENV === "development")
       console.log("Convert to Plant & Equipment →", request);
@@ -294,7 +366,6 @@ export default function ApprovedRequestsPage() {
       if (process.env.NODE_ENV === "development")
         console.log("Convert to PO response →", created);
 
-      // Capture the new PO id from the response (common shapes)
       const newId = (created as any)?.purchase_order?.id ?? null;
 
       handleCloseModal();
@@ -303,12 +374,10 @@ export default function ApprovedRequestsPage() {
 
       showToast("success", "Purchase Order created successfully");
 
-      // Give the toast a moment to appear, then go to the detail page
       setTimeout(() => {
         if (newId) {
           router.push(`/invoice/purchase-order/${newId}`);
         } else {
-          // Fallback if response shape is unexpected
           router.push("/invoice/purchase-order");
         }
       }, 900);
@@ -338,6 +407,7 @@ export default function ApprovedRequestsPage() {
       id: req.reference_id || `REQ-${req.id}`,
       backendId: req.id,
       sourceId: req.id,
+      requestReference: req.request_reference || req.reference_id,
       originalType: req.request_type,
       type: typeMap[req.request_type] || req.request_type,
       wbs: req.activity_name || req.phase_name || `Project #${req.id}`,
@@ -356,9 +426,27 @@ export default function ApprovedRequestsPage() {
     };
   });
 
+  /* ---------- Summary counts (from full list, not filtered) ---------- */
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const card of SUMMARY_CARDS) {
+      counts[card.key] = 0;
+    }
+    for (const req of requests) {
+      const card = SUMMARY_CARDS.find((c) => c.matchType === req.type);
+      if (card) {
+        counts[card.key] = (counts[card.key] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [requests]);
+
   const filteredRequests = requests.filter(
     (request) =>
       request.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      request.requestReference
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
       request.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.wbs.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.approvalDate.includes(searchTerm),
@@ -377,18 +465,52 @@ export default function ApprovedRequestsPage() {
       <div className="p-6">
         <Breadcrumbs items={items} className="pl-0 mb-6" />
 
-        {/* Header */}
-        <div className="flex flex-col md:flex-row gap-4 md:items-center mb-6 bg-white rounded px-4 py-2">
+        {/* ── Summary cards (mirrors Inventory Operation style) ─────────── */}
+        <div className="bg-white rounded-xl border border-gray-200 mb-6 overflow-hidden">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-gray-100">
+            {SUMMARY_CARDS.map((card) => {
+              const Icon = card.icon;
+              const count = typeCounts[card.key] ?? 0;
+              return (
+                <div
+                  key={card.key}
+                  className="flex flex-col items-start gap-3 px-5 py-4 min-h-[96px]"
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className={`w-4 h-4 shrink-0 ${card.iconClass}`} />
+                    <span className="text-sm font-medium text-gray-600 leading-tight">
+                      {card.label}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-2xl font-semibold tabular-nums ${card.countClass}`}
+                  >
+                    {isLoading ? (
+                      <span className="inline-block h-7 w-8 bg-gray-200 rounded animate-pulse" />
+                    ) : (
+                      count
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Header + search */}
+        <div className="flex flex-col md:flex-row gap-4 md:items-center mb-6 bg-white rounded-lg px-4 py-3 border border-gray-200">
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-semibold text-gray-900">Invoicing</h1>
+            <h1 className="text-xl font-semibold text-gray-900">
+              Approved Requests
+            </h1>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 flex-1 md:justify-end">
             <div className="relative flex-1 max-w-lg">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search …"
+                placeholder="Search request ID, type, or WBS…"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white"
@@ -460,7 +582,7 @@ export default function ApprovedRequestsPage() {
                       className="hover:bg-gray-50 transition-colors"
                     >
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
-                        {request.id}
+                        {request.requestReference}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span
@@ -558,7 +680,10 @@ export default function ApprovedRequestsPage() {
                           )}
 
                           {request.type === "Petty Cash Request" && (
-                            <PermissionGuard module="invioice">
+                            <PermissionGuard
+                              module="invoice"
+                              entitlement="manage_accounts_payable_queue"
+                            >
                               <button
                                 type="button"
                                 onClick={() =>

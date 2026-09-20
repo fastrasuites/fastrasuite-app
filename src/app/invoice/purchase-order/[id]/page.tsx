@@ -110,6 +110,8 @@ export default function PurchaseOrderDetailPage() {
   const isDraft = status === "draft";
   const isCancelled = status === "cancelled" || status === "canceled";
   const isFullybilled = status === "fully_billed";
+  /** Backend flag — preferred over status alone to prevent duplicate bills */
+  const isAlreadyBilled = poDetail?.is_billed === true;
 
   const isPlantAndEquipment =
     poDetail?.source_request_type === "plant_and_equipment";
@@ -123,7 +125,8 @@ export default function PurchaseOrderDetailPage() {
     (line) => Number(line.quantity_received) > 0,
   );
 
-  const canCreateBill = !isDraft && !isCancelled && !isFullybilled;
+  const canCreateBill =
+    !isDraft && !isCancelled && !isFullybilled && !isAlreadyBilled;
 
   const isCreateBillEnabled = isPlantAndEquipment
     ? !isSettingsLoading && canCreateBill
@@ -315,18 +318,28 @@ export default function PurchaseOrderDetailPage() {
               </PermissionGuard>
             )}
 
-          {canCreateBill && (
-            <PermissionGuard module="invoice" entitlement="edit_invoice">
-              <button
-                type="button"
-                onClick={() => setIsBillModalOpen(true)}
-                disabled={!isCreateBillEnabled}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <FileText className="h-4 w-4" />
-                Create Bill
-              </button>
-            </PermissionGuard>
+          {isAlreadyBilled ? (
+            <span
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-500"
+              title="A vendor bill has already been created from this purchase order"
+            >
+              <FileText className="h-4 w-4" />
+              Bill created
+            </span>
+          ) : (
+            canCreateBill && (
+              <PermissionGuard module="invoice" entitlement="edit_invoice">
+                <button
+                  type="button"
+                  onClick={() => setIsBillModalOpen(true)}
+                  disabled={!isCreateBillEnabled}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FileText className="h-4 w-4" />
+                  Create Bill
+                </button>
+              </PermissionGuard>
+            )
           )}
         </div>
       </div>
