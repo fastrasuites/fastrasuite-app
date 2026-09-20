@@ -10,10 +10,16 @@ import {
   Filter,
   X,
   Loader2,
+  FileEdit,
+  Send,
+  PackageOpen,
+  PackageCheck,
+  Receipt,
+  Ban,
+  type LucideIcon,
 } from "lucide-react";
 import { useGetPurchaseOrdersQuery } from "@/api/invoice/projectPurchaseOrdersApi";
 import { PageGuard } from "@/components/auth/PageGuard";
-import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
@@ -61,7 +67,6 @@ function resolveWbsLabel(order: any): string | null {
     if (name) return String(name);
   }
 
-  // Plain string that is not a UUID
   const raw = order.wbs_element;
   if (typeof raw === "string" && raw.trim()) {
     const isUuid =
@@ -121,6 +126,73 @@ const STATUS_OPTIONS = [
   { value: "fully_billed", label: "Fully Billed" },
   { value: "closed", label: "Closed" },
   { value: "cancelled", label: "Cancelled" },
+];
+
+/* -------------------------------------------------------------------------- */
+/*                         Summary cards config                               */
+/* Status-focused — more useful than type for a PO list                       */
+/* -------------------------------------------------------------------------- */
+
+type SummaryCardConfig = {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  iconClass: string;
+  countClass: string;
+  /** Status values this card aggregates (lowercased) */
+  matchStatuses: string[];
+};
+
+const SUMMARY_CARDS: SummaryCardConfig[] = [
+  {
+    key: "draft",
+    label: "Draft",
+    icon: FileEdit,
+    iconClass: "text-amber-500",
+    countClass: "text-amber-600",
+    matchStatuses: ["draft"],
+  },
+  {
+    key: "issued",
+    label: "Issued",
+    icon: Send,
+    iconClass: "text-blue-600",
+    countClass: "text-blue-600",
+    matchStatuses: ["issued"],
+  },
+  {
+    key: "partially_received",
+    label: "Partially Received",
+    icon: PackageOpen,
+    iconClass: "text-teal-600",
+    countClass: "text-teal-600",
+    matchStatuses: ["partially_received"],
+  },
+  {
+    key: "fully_received",
+    label: "Fully Received",
+    icon: PackageCheck,
+    iconClass: "text-emerald-600",
+    countClass: "text-emerald-600",
+    matchStatuses: ["fully_received"],
+  },
+  {
+    key: "billed",
+    label: "Billed",
+    icon: Receipt,
+    iconClass: "text-violet-600",
+    countClass: "text-violet-600",
+    // Group partially + fully billed for a cleaner row
+    matchStatuses: ["partially_billed", "fully_billed"],
+  },
+  {
+    key: "cancelled",
+    label: "Cancelled",
+    icon: Ban,
+    iconClass: "text-red-500",
+    countClass: "text-red-500",
+    matchStatuses: ["cancelled", "canceled"],
+  },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -190,6 +262,24 @@ export default function PurchaseOrderPage() {
     return Array.from(set).sort();
   }, [orders]);
 
+  /* ---------- Status summary counts (from full list) ---------- */
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const card of SUMMARY_CARDS) {
+      counts[card.key] = 0;
+    }
+    for (const order of orders) {
+      const s = (order.status || "").toLowerCase();
+      for (const card of SUMMARY_CARDS) {
+        if (card.matchStatuses.includes(s)) {
+          counts[card.key] = (counts[card.key] || 0) + 1;
+          break;
+        }
+      }
+    }
+    return counts;
+  }, [orders]);
+
   const filteredOrders = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return orders.filter((order: any) => {
@@ -228,6 +318,27 @@ export default function PurchaseOrderPage() {
     setSearchTerm("");
     setStatusFilter("");
     setTypeFilter("");
+  };
+
+  // Clicking a summary card applies that status filter (toggle off if same)
+  const handleCardClick = (card: SummaryCardConfig) => {
+    // For the "Billed" card which groups two statuses, set filter to first
+    // or clear if already filtering one of them
+    if (card.key === "billed") {
+      if (
+        statusFilter === "partially_billed" ||
+        statusFilter === "fully_billed"
+      ) {
+        setStatusFilter("");
+      } else {
+        // Default to fully_billed when clicking the grouped card;
+        // user can refine via Filters dropdown
+        setStatusFilter("fully_billed");
+      }
+      return;
+    }
+    const target = card.matchStatuses[0];
+    setStatusFilter((prev) => (prev === target ? "" : target));
   };
 
   // Show WBS column only if at least one row has a readable label
@@ -270,6 +381,54 @@ export default function PurchaseOrderPage() {
             />
             Refresh
           </button>
+        </div>
+
+        {/* ── Status summary cards ───────────────────────────────────────── */}
+        <div className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-y sm:divide-y-0 divide-gray-100">
+            {SUMMARY_CARDS.map((card) => {
+              const Icon = card.icon;
+              const count = statusCounts[card.key] ?? 0;
+              const isActive =
+                card.key === "billed"
+                  ? statusFilter === "partially_billed" ||
+                    statusFilter === "fully_billed"
+                  : statusFilter === card.matchStatuses[0];
+
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => handleCardClick(card)}
+                  className={`flex flex-col items-start gap-3 px-5 py-4 min-h-[96px] text-left transition-colors hover:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                    isActive ? "bg-blue-50/60" : ""
+                  }`}
+                  aria-pressed={isActive}
+                  title={
+                    isActive
+                      ? "Click to clear status filter"
+                      : `Filter by ${card.label}`
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className={`w-4 h-4 shrink-0 ${card.iconClass}`} />
+                    <span className="text-sm font-medium text-gray-600 leading-tight">
+                      {card.label}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-2xl font-semibold tabular-nums ${card.countClass}`}
+                  >
+                    {isLoading ? (
+                      <span className="inline-block h-7 w-8 rounded bg-gray-200 animate-pulse" />
+                    ) : (
+                      count
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Search + filters */}
@@ -483,7 +642,7 @@ export default function PurchaseOrderPage() {
                           )}
                         </td>
 
-                        {/* Request Type – never wraps */}
+                        {/* Request Type */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${getTypeColor(
@@ -499,7 +658,7 @@ export default function PurchaseOrderPage() {
                           {order.vendor_name || "—"}
                         </td>
 
-                        {/* WBS Element – truncated + tooltip */}
+                        {/* WBS Element */}
                         {showWbsColumn && (
                           <td className="px-4 py-3.5 text-sm text-gray-600 max-w-[200px]">
                             {wbsLabel ? (
@@ -520,7 +679,7 @@ export default function PurchaseOrderPage() {
                           {formatCurrency(Number(order.total_amount || 0))}
                         </td>
 
-                        {/* Status – never wraps */}
+                        {/* Status */}
                         <td className="px-4 py-3.5 whitespace-nowrap">
                           {getStatusBadge(order.status)}
                         </td>

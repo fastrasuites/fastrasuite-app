@@ -2,13 +2,11 @@
 import React, { useState } from "react";
 import {
   useGetAccountLedgerQuery,
-  useGetAccountLedgerByIdQuery,
   useLazyGetAccountLedgerByIdQuery,
 } from "@/api/invoice/accountLedgerApi";
 import type {
   AccountLedgerSummary,
   AccountLedgerDetail,
-  AccountLedgerEntry,
 } from "@/api/invoice/accountLedgerApi";
 import {
   Search,
@@ -21,7 +19,6 @@ import {
   Loader2,
   Calendar,
   Hash,
-  DollarSign,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import { PageGuard } from "@/components/auth/PageGuard";
@@ -57,7 +54,7 @@ const SkeletonDetailRow = () => (
       <div className="h-3 bg-gray-200 rounded w-36 animate-pulse" />
     </td>
     <td className="py-3 px-4">
-      <div className="h-3 bg-gray-200 rounded w-28 animate-pulse" />
+      <div className="h-3 bg-gray-200 rounded w-20 animate-pulse" />
     </td>
     <td className="py-3 px-4">
       <div className="h-3 bg-gray-200 rounded w-20 animate-pulse ml-auto" />
@@ -76,7 +73,10 @@ const formatCurrency = (value: number | string | null) => {
   if (value === null || value === undefined) return "-";
   const num = typeof value === "string" ? parseFloat(value) : value;
   if (isNaN(num)) return "-";
-  return `N${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `N${num.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 };
 
 const formatDate = (dateString: string) => {
@@ -87,41 +87,6 @@ const formatDate = (dateString: string) => {
     month: "short",
     day: "numeric",
   });
-};
-
-const shortenWBS = (wbs: string | null) => {
-  if (!wbs || wbs === "-") return "-";
-  if (wbs.length > 25)
-    return `${wbs.substring(0, 12)}...${wbs.substring(wbs.length - 10)}`;
-  return wbs;
-};
-
-// Tooltip Component
-const Tooltip = ({
-  children,
-  content,
-}: {
-  children: React.ReactNode;
-  content: string;
-}) => {
-  const [isVisible, setIsVisible] = useState(false);
-  return (
-    <div
-      className="relative inline-block"
-      onMouseEnter={() => setIsVisible(true)}
-      onMouseLeave={() => setIsVisible(false)}
-    >
-      {children}
-      {isVisible && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50">
-          <div className="bg-gray-900 text-white text-xs rounded py-2 px-3 max-w-xs whitespace-normal shadow-lg">
-            {content}
-            <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900" />
-          </div>
-        </div>
-      )}
-    </div>
-  );
 };
 
 // Transaction Type Badge
@@ -148,7 +113,9 @@ const TransactionTypeBadge = ({ type }: { type: string }) => {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${colors[type] || "bg-gray-100 text-gray-700"}`}
+      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+        colors[type] || "bg-gray-100 text-gray-700"
+      }`}
     >
       {labels[type] || type}
     </span>
@@ -190,7 +157,7 @@ const handleExportPDF = (
     doc.setFont("helvetica", "bold");
     doc.text("Date", 14, y);
     doc.text("Description", 45, y);
-    doc.text("WBS", 100, y);
+    doc.text("Type", 110, y);
     doc.text("Debit", 140, y);
     doc.text("Credit", 165, y);
     doc.text("Balance", 190, y);
@@ -205,8 +172,8 @@ const handleExportPDF = (
         y = 20;
       }
       doc.text(formatDate(tx.transaction_date), 14, y);
-      doc.text(tx.description.substring(0, 30), 45, y);
-      doc.text(shortenWBS(tx.wbs), 100, y);
+      doc.text(tx.description.substring(0, 35), 45, y);
+      doc.text(tx.transaction_type.replace("_", " "), 110, y);
       doc.text(formatCurrency(tx.debit), 140, y);
       doc.text(formatCurrency(tx.credit), 165, y);
       doc.text(formatCurrency(tx.running_balance), 190, y);
@@ -249,9 +216,9 @@ const handleExportExcel = (
   let csvContent = "";
   if (selectedAccount) {
     csvContent =
-      "Date,Description,WBS,Reference,Type,Debit,Credit,Running Balance\n";
+      "Date,Description,Reference,Type,Debit,Credit,Running Balance\n";
     selectedAccount.entries.forEach((tx) => {
-      csvContent += `${formatDate(tx.transaction_date)},"${tx.description}",${tx.wbs || "-"},${tx.reference_number},${tx.transaction_type},${tx.debit},${tx.credit},${tx.running_balance}\n`;
+      csvContent += `${formatDate(tx.transaction_date)},"${tx.description}",${tx.reference_number},${tx.transaction_type},${tx.debit},${tx.credit},${tx.running_balance}\n`;
     });
   } else {
     csvContent = "Code,Account Name,Debits,Credits,Balance\n";
@@ -281,6 +248,7 @@ export default function AccountLedgerPage() {
     isError,
     error,
   } = useGetAccountLedgerQuery({ search: searchTerm || undefined });
+
   const [
     fetchAccountById,
     { data: selectedAccount, isLoading: isLoadingDetail },
@@ -299,15 +267,6 @@ export default function AccountLedgerPage() {
       setExpandedRowId(id);
       fetchAccountById(id);
     }
-  };
-
-  const handleCloseDetail = () => {
-    setExpandedRowId(null);
-  };
-
-  const getSelectedAccountSummary = (): AccountLedgerSummary | null => {
-    if (!expandedRowId) return null;
-    return ledgers.find((l) => l.id === expandedRowId) || null;
   };
 
   if (isError) {
@@ -350,7 +309,11 @@ export default function AccountLedgerPage() {
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 border px-4 py-2.5 rounded text-sm font-medium transition-all ${showFilters ? "border-blue-500 bg-blue-50 text-blue-600" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}
+              className={`flex items-center gap-2 border px-4 py-2.5 rounded text-sm font-medium transition-all ${
+                showFilters
+                  ? "border-blue-500 bg-blue-50 text-blue-600"
+                  : "border-gray-200 text-gray-700 hover:bg-gray-50"
+              }`}
             >
               <Filter className="w-4 h-4" />
               <span className="hidden sm:inline">Filter</span>
@@ -404,6 +367,7 @@ export default function AccountLedgerPage() {
             </div>
           </div>
         </div>
+
         {/* Filter Panel */}
         {showFilters && (
           <div className="bg-white rounded border border-gray-200 p-4 shadow-sm">
@@ -456,6 +420,7 @@ export default function AccountLedgerPage() {
             </div>
           </div>
         )}
+
         {/* Stats Cards */}
         {!isLoading && filtered.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -491,6 +456,7 @@ export default function AccountLedgerPage() {
             </div>
           </div>
         )}
+
         {/* Loading State */}
         {isLoading && (
           <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden">
@@ -523,7 +489,8 @@ export default function AccountLedgerPage() {
             </table>
           </div>
         )}
-        {/* Main Table */}
+
+        {/* Empty State */}
         {!isLoading && filtered.length === 0 && (
           <div className="bg-white rounded border border-gray-200 shadow-sm p-12 text-center">
             <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -535,6 +502,8 @@ export default function AccountLedgerPage() {
             </p>
           </div>
         )}
+
+        {/* Main Table */}
         {!isLoading && filtered.length > 0 && (
           <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
@@ -564,13 +533,19 @@ export default function AccountLedgerPage() {
                     return (
                       <React.Fragment key={account.id}>
                         <tr
-                          className={`border-b border-gray-100 cursor-pointer transition-all ${isExpanded ? "bg-blue-50/60" : "hover:bg-gray-50"}`}
+                          className={`border-b border-gray-100 cursor-pointer transition-all ${
+                            isExpanded ? "bg-blue-50/60" : "hover:bg-gray-50"
+                          }`}
                           onClick={() => handleRowClick(account.id)}
                         >
                           <td className="py-4 px-6">
                             <div className="flex items-center gap-2">
                               <button
-                                className={`transition-colors ${isExpanded ? "text-blue-600" : "text-gray-400 hover:text-gray-600"}`}
+                                className={`transition-colors ${
+                                  isExpanded
+                                    ? "text-blue-600"
+                                    : "text-gray-400 hover:text-gray-600"
+                                }`}
                               >
                                 {isExpanded ? (
                                   <ChevronDown className="w-4 h-4" />
@@ -596,15 +571,16 @@ export default function AccountLedgerPage() {
                             {formatCurrency(account.balance)}
                           </td>
                         </tr>
+
                         {isExpanded && (
                           <tr>
                             <td colSpan={5} className="p-0">
                               <div className="bg-gradient-to-b from-blue-50/30 to-white border-b border-gray-200">
-                                <div className="p-5">
+                                <div className="p-4">
                                   {isLoadingDetail ? (
                                     <div className="space-y-3">
                                       <div className="flex items-center gap-2 text-sm text-blue-600">
-                                        <Loader2 className="w-4 h-4 animate-spin" />{" "}
+                                        <Loader2 className="w-4 h-4 animate-spin" />
                                         Loading transactions...
                                       </div>
                                       <div className="overflow-hidden rounded border border-gray-200">
@@ -619,61 +595,6 @@ export default function AccountLedgerPage() {
                                     </div>
                                   ) : selectedAccount ? (
                                     <>
-                                      <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-base font-semibold text-gray-900">
-                                          {selectedAccount.account.account_code}{" "}
-                                          -{" "}
-                                          {selectedAccount.account.account_name}
-                                        </h3>
-                                        <button
-                                          onClick={handleCloseDetail}
-                                          className="text-gray-400 hover:text-gray-600 transition-colors"
-                                        >
-                                          <X className="w-5 h-5" />
-                                        </button>
-                                      </div>
-                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-                                        <div className="bg-white rounded border border-gray-200 p-3">
-                                          <p className="text-xs text-gray-500">
-                                            Opening Balance
-                                          </p>
-                                          <p className="text-sm font-bold text-gray-900 mt-0.5">
-                                            {formatCurrency(
-                                              selectedAccount.opening_balance,
-                                            )}
-                                          </p>
-                                        </div>
-                                        <div className="bg-white rounded border border-red-100 p-3">
-                                          <p className="text-xs text-gray-500">
-                                            Total Debits
-                                          </p>
-                                          <p className="text-sm font-bold text-red-600 mt-0.5">
-                                            {formatCurrency(
-                                              selectedAccount.debit,
-                                            )}
-                                          </p>
-                                        </div>
-                                        <div className="bg-white rounded border border-green-100 p-3">
-                                          <p className="text-xs text-gray-500">
-                                            Total Credits
-                                          </p>
-                                          <p className="text-sm font-bold text-green-600 mt-0.5">
-                                            {formatCurrency(
-                                              selectedAccount.credit,
-                                            )}
-                                          </p>
-                                        </div>
-                                        <div className="bg-white rounded border border-blue-100 p-3">
-                                          <p className="text-xs text-gray-500">
-                                            Closing Balance
-                                          </p>
-                                          <p className="text-sm font-bold text-blue-600 mt-0.5">
-                                            {formatCurrency(
-                                              selectedAccount.balance,
-                                            )}
-                                          </p>
-                                        </div>
-                                      </div>
                                       <h4 className="text-sm font-semibold text-gray-700 mb-3">
                                         Ledger Entries (
                                         {selectedAccount.entries.length})
@@ -692,9 +613,6 @@ export default function AccountLedgerPage() {
                                                 </th>
                                                 <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500">
                                                   Description
-                                                </th>
-                                                <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500">
-                                                  WBS
                                                 </th>
                                                 <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500">
                                                   Type
@@ -724,21 +642,6 @@ export default function AccountLedgerPage() {
                                                     </td>
                                                     <td className="py-3 px-4 text-gray-900 font-medium">
                                                       {tx.description}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-600">
-                                                      {tx.wbs ? (
-                                                        <Tooltip
-                                                          content={tx.wbs}
-                                                        >
-                                                          <span className="cursor-help text-blue-600 hover:text-blue-800">
-                                                            {shortenWBS(tx.wbs)}
-                                                          </span>
-                                                        </Tooltip>
-                                                      ) : (
-                                                        <span className="text-gray-400">
-                                                          -
-                                                        </span>
-                                                      )}
                                                     </td>
                                                     <td className="py-3 px-4">
                                                       <TransactionTypeBadge

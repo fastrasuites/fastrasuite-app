@@ -17,7 +17,24 @@ export interface AccountLedgerEntry {
   account_name: string;
   debit: string;
   credit: string;
-  wbs: string | null;
+  wbs:
+    | string
+    | {
+        id: string;
+        name: string;
+        serial_number?: number;
+        phase?: {
+          id: string;
+          name: string;
+          code: string;
+        };
+        project?: {
+          id: number;
+          project_code: string;
+          name: string;
+        };
+      }
+    | null;
   running_balance: string;
   description: string;
   reference_number: string;
@@ -64,7 +81,15 @@ export interface AccountLedgerListParams {
   debit_min?: number;
   credit_max?: number;
   credit_min?: number;
-  period?: "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month" | "this_year" | "last_year";
+  period?:
+    | "today"
+    | "yesterday"
+    | "this_week"
+    | "last_week"
+    | "this_month"
+    | "last_month"
+    | "this_year"
+    | "last_year";
   [key: string]: string | number | boolean | undefined;
 }
 
@@ -91,8 +116,12 @@ export interface AccountLedgerExportParams {
 
 const getTenantBaseUrl = (state: RootState): string => {
   const tenantSchemaName = state.auth.tenant_schema_name;
-  const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1") ? "http" : "https";
+  const apiDomain =
+    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
+  const protocol =
+    apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
+      ? "http"
+      : "https";
   return `${protocol}://${tenantSchemaName}.${apiDomain}`;
 };
 
@@ -127,11 +156,21 @@ export const accountLedgerApi = createApi({
       const response = await fetch(url, {
         method: typeof args === "string" ? "GET" : args.method || "GET",
         headers,
-        body: typeof args === "string" ? undefined : args.body ? JSON.stringify(args.body) : undefined,
+        body:
+          typeof args === "string"
+            ? undefined
+            : args.body
+              ? JSON.stringify(args.body)
+              : undefined,
       });
 
       if (!response.ok) {
-        return { error: { status: response.status, data: await response.json().catch(() => null) } };
+        return {
+          error: {
+            status: response.status,
+            data: await response.json().catch(() => null),
+          },
+        };
       }
 
       if (response.status === 204) return { data: null };
@@ -143,8 +182,17 @@ export const accountLedgerApi = createApi({
       } else {
         const blob = await response.blob();
         const disposition = response.headers.get("content-disposition");
-        const filename = disposition ? disposition.split("filename=")[1] : `account-ledger-export.${url.includes("pdf") ? "pdf" : "xlsx"}`;
-        return { data: { blob, filename, url: URL.createObjectURL(blob), contentType: response.headers.get("content-type") } };
+        const filename = disposition
+          ? disposition.split("filename=")[1]
+          : `account-ledger-export.${url.includes("pdf") ? "pdf" : "xlsx"}`;
+        return {
+          data: {
+            blob,
+            filename,
+            url: URL.createObjectURL(blob),
+            contentType: response.headers.get("content-type"),
+          },
+        };
       }
     } catch (error) {
       return { error: { status: "FETCH_ERROR" as const, data: error } };
@@ -152,11 +200,23 @@ export const accountLedgerApi = createApi({
   },
   tagTypes: ["AccountLedger"],
   endpoints: (builder) => ({
-    getAccountLedger: builder.query<AccountLedgerSummary[], AccountLedgerListParams | void>({
-      query: (params) => ({ url: "/invoicing/account-ledger/", params: params || undefined }),
+    getAccountLedger: builder.query<
+      AccountLedgerSummary[],
+      AccountLedgerListParams | void
+    >({
+      query: (params) => ({
+        url: "/invoicing/account-ledger/",
+        params: params || undefined,
+      }),
       providesTags: (result) =>
         result
-          ? [...result.map(({ id }) => ({ type: "AccountLedger" as const, id })), { type: "AccountLedger", id: "LIST" }]
+          ? [
+              ...result.map(({ id }) => ({
+                type: "AccountLedger" as const,
+                id,
+              })),
+              { type: "AccountLedger", id: "LIST" },
+            ]
           : [{ type: "AccountLedger", id: "LIST" }],
     }),
 
@@ -166,7 +226,10 @@ export const accountLedgerApi = createApi({
     }),
 
     exportAccountLedger: builder.query<any, AccountLedgerExportParams>({
-      query: (params) => ({ url: "/invoicing/account-ledger/export/", params: params || undefined }),
+      query: (params) => ({
+        url: "/invoicing/account-ledger/export/",
+        params: params || undefined,
+      }),
     }),
   }),
 });
