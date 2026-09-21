@@ -1,12 +1,11 @@
 "use client";
 
 import type {
-  CreateDisbursementRequest,
   CreateCashDisbursement,
   CreateBankTransferDisbursement,
   CreateDisbursementBody,
 } from "@/api/invoice/disbursementApi";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, use } from "react";
 import {
   X,
   Loader2,
@@ -78,8 +77,7 @@ function formatRequesterName(details?: any, fallbackRequest?: any): string {
         .split(/[_\s.-]+/)
         .filter(Boolean)
         .map(
-          (w: string) =>
-            w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+          (w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
         )
         .join(" ");
     }
@@ -197,10 +195,13 @@ export default function CreateDisbursementModal({
 
   /* ----------------------------- Toast helper ----------------------------- */
 
-  const showToast = useCallback((type: "success" | "error", message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 4500);
-  }, []);
+  const showToast = useCallback(
+    (type: "success" | "error", message: string) => {
+      setToast({ type, message });
+      setTimeout(() => setToast(null), 4500);
+    },
+    [],
+  );
 
   /* ----------------------------- File handling (hooks must be before any early return) ---------------------------- */
 
@@ -415,7 +416,9 @@ export default function CreateDisbursementModal({
         aria-modal="true"
         aria-labelledby="disbursement-title"
         className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-300 ${
-          isOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+          isOpen
+            ? "opacity-100 scale-100"
+            : "opacity-0 scale-95 pointer-events-none"
         }`}
       >
         <div
@@ -433,7 +436,10 @@ export default function CreateDisbursementModal({
               </h2>
               <p className="text-sm text-gray-500 mt-0.5">
                 Petty Cash Request ·{" "}
-                <TruncateWithTooltip text={String(referenceId)} maxLength={32} />
+                <TruncateWithTooltip
+                  text={String(referenceId)}
+                  maxLength={32}
+                />
               </p>
             </div>
             <button
@@ -559,10 +565,8 @@ export default function CreateDisbursementModal({
                       <option value="">Select Bank Account</option>
                       {bankAccounts.map((b: any) => (
                         <option key={b.id} value={b.id}>
-                          {b.account_name || b.bank_name || `Account #${b.id}`}
-                          {b.account_number
-                            ? ` · ${b.account_number}`
-                            : ""}
+                          {b.bank_name || b.account_name || `Account #${b.id}`}
+                          {b.account_number ? ` · ${b.account_number}` : ""}
                         </option>
                       ))}
                     </select>
@@ -766,8 +770,8 @@ export default function CreateDisbursementModal({
                             Upload photo of signed voucher
                           </p>
                           <p className="text-xs text-gray-400">
-                            Drag & drop or click · JPG, PNG, WebP or PDF · max
-                            8 MB
+                            Drag & drop or click · JPG, PNG, WebP or PDF · max 8
+                            MB
                           </p>
                           <input
                             ref={fileInputRef}

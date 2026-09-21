@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -340,11 +340,11 @@ export default function PaymentQueuePage() {
 
   const hasActiveFilters = Boolean(
     filters.status ||
-      filters.payment_status ||
-      filters.source_type ||
-      filters.vendor ||
-      searchTerm ||
-      overdueOnly,
+    filters.payment_status ||
+    filters.source_type ||
+    filters.vendor ||
+    searchTerm ||
+    overdueOnly,
   );
 
   const isTableLoading = isLoading || isFetching;
