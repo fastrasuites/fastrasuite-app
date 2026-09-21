@@ -62,7 +62,7 @@ interface BaseCreateDisbursement {
   petty_cash_request: number;
   company_bank_account: number;
   payment_reference?: string; // optional – backend will generate if omitted
-  notes?: string;             // optional
+  notes?: string; // optional
   document?: string | File | null; // optional supporting file (e.g. signed voucher)
 }
 
