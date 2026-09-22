@@ -30,92 +30,116 @@ export interface Disbursement {
   source_type: DisbursementSourceType;
   disbursement_method: DisbursementMethod;
   amount: string;
-  payment_date: string | null; // YYYY-MM-DD (may be null until paid)
+  payment_date: string | null;
   status: DisbursementStatus;
   payment_reference: string | null;
   notes: string | null;
   approved_at: string | null;
   paid_at: string | null;
   petty_cash_request: number;
-  company_bank_account: number;
+  company_bank_account: number | null;
+  /** Cash float / payment account (cash method) */
+  payment_account?: number | null;
+  /** GL expense account */
+  expense_account?: number | null;
   created_by: number;
   approved_by: number | null;
 
-  // Cash-specific
   recipient_name?: string | null;
   cash_received?: boolean | null;
 
-  // Bank-transfer-specific
   recipient_bank_name?: string | null;
   recipient_account_number?: string | null;
   recipient_account_name?: string | null;
 
-  // Optional supporting document (URL after upload)
   document?: string | null;
+}
+
+/* -------------------- Expense / Payment option accounts ------------------- */
+
+/** Chart-of-account style option returned by expense-accounts & payment-options */
+export interface DisbursementAccountOption {
+  id: number;
+  account_number?: string;
+  account_name?: string;
+  name?: string;
+  account_type?: string;
+  subtype?: string;
+  is_active?: boolean;
+  /** Present on payment-options company bank accounts */
+  bank_name?: string;
+  account?: number;
+  account__account_number?: string;
+  account__account_name?: string;
+  currency_id?: number;
+  [key: string]: unknown;
+}
+
+/** Wrapper shapes returned by the list endpoints */
+export interface ExpenseAccountsResponse {
+  expense_accounts: DisbursementAccountOption[];
+}
+
+export interface PaymentOptionsResponse {
+  company_bank_accounts?: DisbursementAccountOption[];
+  payment_accounts?: DisbursementAccountOption[];
 }
 
 /* ------------------------- Create / Update Payloads ----------------------- */
 
-/** Shared base fields for both cash and bank-transfer creates */
 interface BaseCreateDisbursement {
   source_type: "PETTY_CASH";
   petty_cash_request: number;
-  company_bank_account: number;
-  payment_reference?: string; // optional – backend will generate if omitted
-  notes?: string; // optional
-  document?: string | File | null; // optional supporting file (e.g. signed voucher)
+  /** Required – GL expense account */
+  expense_account: number;
+  payment_reference?: string;
+  notes?: string;
+  document?: string | File | null;
 }
 
-/** Cash hand-out variant */
+/** Cash hand-out – uses payment_account (cash CoA), not company_bank_account */
 export type CreateCashDisbursement = BaseCreateDisbursement & {
   disbursement_method: "CASH";
+  payment_account: number;
   recipient_name: string;
-  cash_received: boolean;
-  // bank fields must not be sent
+  /** Approved amount from the petty-cash request */
+  amount?: string | number;
+  cash_received?: boolean;
+  company_bank_account?: never;
   recipient_bank_name?: never;
   recipient_account_number?: never;
   recipient_account_name?: never;
 };
 
-/** Bank transfer variant */
+/** Bank transfer – uses company_bank_account */
 export type CreateBankTransferDisbursement = BaseCreateDisbursement & {
   disbursement_method: "BANK_TRANSFER";
+  company_bank_account: number;
   recipient_bank_name: string;
   recipient_account_number: string;
   recipient_account_name: string;
-  cash_received?: false; // typically false / omitted
-  // cash field must not be sent
-  recipient_name?: never;
+  /** Optional display name; some backends also accept recipient_name */
+  recipient_name?: string;
+  cash_received?: false;
+  payment_account?: never;
 };
 
-/**
- * Discriminated union – prefer this for type-safe construction.
- * At runtime you will usually send FormData when a file is present.
- */
 export type CreateDisbursementRequest =
   | CreateCashDisbursement
   | CreateBankTransferDisbursement;
 
-/** What the mutation actually accepts (JSON or FormData) */
 export type CreateDisbursementBody = FormData | CreateDisbursementRequest;
 
-/**
- * Fields that can be updated via PUT / PATCH.
- * source_type, petty_cash_request and disbursement_method are immutable after creation.
- */
 export interface UpdateDisbursementRequest {
   company_bank_account?: number;
+  payment_account?: number;
+  expense_account?: number;
   payment_date?: string;
   payment_reference?: string;
   notes?: string;
-  // optional re-upload of supporting document
   document?: string | File | null;
-
-  // Cash fields (only relevant when method = CASH)
   recipient_name?: string;
   cash_received?: boolean;
-
-  // Bank-transfer fields (only relevant when method = BANK_TRANSFER)
   recipient_bank_name?: string;
   recipient_account_number?: string;
   recipient_account_name?: string;
@@ -123,7 +147,6 @@ export interface UpdateDisbursementRequest {
 
 export type PatchDisbursementRequest = Partial<UpdateDisbursementRequest>;
 
-/** Action endpoints may receive a body or none at all */
 export type DisbursementActionBody =
   | CreateDisbursementRequest
   | UpdateDisbursementRequest
@@ -132,12 +155,14 @@ export type DisbursementActionBody =
   | undefined
   | null;
 
-/* ----------------------------- List Params -------------------------------- */
-
 export interface GetDisbursementsParams {
   ordering?: string;
   search?: string;
   [key: string]: string | number | boolean | undefined;
+}
+
+export interface GetPaymentOptionsParams {
+  method: "CASH" | "BANK_TRANSFER" | string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -192,7 +217,6 @@ export const disbursementsApi = createApi({
       args && typeof args === "object" && args.body instanceof FormData;
 
     if (isFormData) {
-      // Let the browser set the correct multipart/form-data boundary
       headers.delete("content-type");
     }
 
@@ -236,9 +260,6 @@ export const disbursementsApi = createApi({
   },
   tagTypes: ["Disbursement"],
   endpoints: (builder) => ({
-    /* ---------------------------------------------------------------------- */
-    /*                                List                                    */
-    /* ---------------------------------------------------------------------- */
     getDisbursements: builder.query<
       Disbursement[],
       GetDisbursementsParams | void
@@ -259,22 +280,36 @@ export const disbursementsApi = createApi({
           : [{ type: "Disbursement", id: "LIST" }],
     }),
 
-    /* ---------------------------------------------------------------------- */
-    /*                               Retrieve                                 */
-    /* ---------------------------------------------------------------------- */
     getDisbursementById: builder.query<Disbursement, number>({
       query: (id) => `/invoicing/disbursements/${id}/`,
       providesTags: (_result, _error, id) => [{ type: "Disbursement", id }],
     }),
 
-    /* ---------------------------------------------------------------------- */
-    /*                                Create                                  */
-    /* ---------------------------------------------------------------------- */
+    /** Expense (GL) accounts eligible for a disbursement */
+    getExpenseAccounts: builder.query<
+      ExpenseAccountsResponse | DisbursementAccountOption[],
+      void
+    >({
+      query: () => ({
+        url: "/invoicing/disbursements/expense-accounts/",
+      }),
+    }),
+
     /**
-     * Create a Disbursement.
-     * Prefer FormData when a supporting document (file) is included.
-     * Supports both CASH and BANK_TRANSFER methods via the discriminated union.
+     * Payment source accounts.
+     * ?method=CASH → cash / float CoA options
+     * ?method=BANK_TRANSFER → bank accounts usable as company_bank_account
      */
+    getPaymentOptions: builder.query<
+      PaymentOptionsResponse | DisbursementAccountOption[],
+      GetPaymentOptionsParams
+    >({
+      query: ({ method }) => ({
+        url: "/invoicing/disbursements/payment-options/",
+        params: { method },
+      }),
+    }),
+
     createDisbursement: builder.mutation<Disbursement, CreateDisbursementBody>({
       query: (body) => ({
         url: "/invoicing/disbursements/",
@@ -284,9 +319,6 @@ export const disbursementsApi = createApi({
       invalidatesTags: [{ type: "Disbursement", id: "LIST" }],
     }),
 
-    /* ---------------------------------------------------------------------- */
-    /*                                Update                                  */
-    /* ---------------------------------------------------------------------- */
     updateDisbursement: builder.mutation<
       Disbursement,
       { id: number; data: UpdateDisbursementRequest | FormData }
@@ -317,10 +349,6 @@ export const disbursementsApi = createApi({
       ],
     }),
 
-    /* ---------------------------------------------------------------------- */
-    /*                                Delete                                  */
-    /* ---------------------------------------------------------------------- */
-    /** Body is optional – you may call with just the id */
     deleteDisbursement: builder.mutation<
       void,
       number | { id: number; data?: DisbursementActionBody }
@@ -343,13 +371,6 @@ export const disbursementsApi = createApi({
       },
     }),
 
-    /* ---------------------------------------------------------------------- */
-    /*                          Action Endpoints                              */
-    /* ---------------------------------------------------------------------- */
-    /**
-     * All action endpoints accept an optional body.
-     * You can call them with just `{ id }` or with `{ id, data }`.
-     */
     approveDisbursement: builder.mutation<
       Disbursement,
       { id: number; data?: DisbursementActionBody }
@@ -427,18 +448,14 @@ export const disbursementsApi = createApi({
   }),
 });
 
-/* -------------------------------------------------------------------------- */
-/*                                   Hooks                                    */
-/* -------------------------------------------------------------------------- */
-
 export const {
-  // Queries
   useGetDisbursementsQuery,
   useGetDisbursementByIdQuery,
   useLazyGetDisbursementsQuery,
   useLazyGetDisbursementByIdQuery,
-
-  // Mutations
+  useGetExpenseAccountsQuery,
+  useGetPaymentOptionsQuery,
+  useLazyGetPaymentOptionsQuery,
   useCreateDisbursementMutation,
   useUpdateDisbursementMutation,
   usePatchDisbursementMutation,
