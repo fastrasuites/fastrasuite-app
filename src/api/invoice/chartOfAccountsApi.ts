@@ -1,3 +1,4 @@
+
 import { createApi } from "@reduxjs/toolkit/query/react";
 import type { RootState } from "../../lib/store/store";
 
@@ -20,15 +21,17 @@ export interface ChartOfAccountSummary {
   children?: any[];
 }
 
+/** Nested child nodes share the same shape as the parent (recursive tree). */
 export interface ChartOfAccountDetail extends ChartOfAccountSummary {
-  children: Array<{
-    id: number;
-    account_number: string;
-    account_name: string;
-    balance: string;
-  }>;
-  created_at: string;
+  children: ChartOfAccountDetail[];
+  created_at?: string;
 }
+
+
+/** Response from GET /invoicing/chart-of-accounts/grouped/ */
+export type ChartOfAccountsGrouped = Partial<
+  Record<AccountType, ChartOfAccountDetail[]>
+>;
 
 export interface CreateChartOfAccountRequest {
   account_number: string;
@@ -136,6 +139,14 @@ export const chartOfAccountsApi = createApi({
       }),
       providesTags: ["ChartOfAccount"],
     }),
+    
+    getChartOfAccountsGrouped: builder.query<ChartOfAccountsGrouped, void>({
+      query: () => ({
+        url: "/invoicing/chart-of-accounts/grouped/",
+      }),
+      providesTags: [{ type: "ChartOfAccount", id: "GROUPED" }],
+    }),
+
     createChartOfAccount: builder.mutation<
       ChartOfAccountSummary,
       CreateChartOfAccountRequest
@@ -225,6 +236,7 @@ export const chartOfAccountsApi = createApi({
 
 export const {
   useGetChartOfAccountsQuery,
+  useGetChartOfAccountsGroupedQuery,
   useCreateChartOfAccountMutation,
   useGetChartOfAccountByIdQuery,
   useUpdateChartOfAccountMutation,
@@ -241,3 +253,4 @@ export const {
   useGetChartOfAccountsSummaryQuery,
   useGetChartOfAccountsTreeQuery,
 } = chartOfAccountsApi;
+
