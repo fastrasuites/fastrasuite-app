@@ -269,7 +269,7 @@ export default function ApprovedRequestsPage() {
       refetch();
 
       setTimeout(() => {
-        router.push("/invoice/payment-queue");
+        router.push("/invoice/payment-queue/disbursement");
       }, 900);
     } catch (err: unknown) {
       if (process.env.NODE_ENV === "development") {

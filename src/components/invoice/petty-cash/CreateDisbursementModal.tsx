@@ -4,8 +4,13 @@ import type {
   CreateCashDisbursement,
   CreateBankTransferDisbursement,
   CreateDisbursementBody,
+  DisbursementAccountOption,
 } from "@/api/invoice/disbursementApi";
-import { useState, useEffect, useRef, useCallback, use } from "react";
+import {
+  useGetExpenseAccountsQuery,
+  useGetPaymentOptionsQuery,
+} from "@/api/invoice/disbursementApi";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   X,
   Loader2,
@@ -15,7 +20,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { ToastNotification } from "@/components/shared/ToastNotification";
-import { useGetCompanyBankAccountsQuery } from "@/api/invoice/companyBankAccountsApi";
 import { useGetApprovedProjectRequestDetailsQuery } from "@/api/invoice/approvedProjectRequestsApi";
 
 /* -------------------------------------------------------------------------- */
@@ -26,7 +30,6 @@ interface CreateDisbursementModalProps {
   isOpen: boolean;
   onClose: () => void;
   request: any;
-  /** Accepts either plain JSON payload or FormData when a supporting file is present */
   onSubmit: (payload: CreateDisbursementBody) => void | Promise<void>;
   formatCurrency: (amount: number) => string;
   isSubmitting?: boolean;
@@ -59,11 +62,6 @@ function TruncateWithTooltip({
   );
 }
 
-/**
- * Normalize a username or full name for display.
- * e.g. "admin_lukudev" → "Admin Lukudev"
- * Falls back to first_name + last_name when available.
- */
 function formatRequesterName(details?: any, fallbackRequest?: any): string {
   const user = details?.requester_details?.user;
   if (user) {
@@ -82,7 +80,6 @@ function formatRequesterName(details?: any, fallbackRequest?: any): string {
         .join(" ");
     }
   }
-  // list-level fallback
   if (fallbackRequest?.requesterName) return fallbackRequest.requesterName;
   return "—";
 }
@@ -92,10 +89,91 @@ function formatDisplayDate(iso?: string | null): string {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "—";
-    return d.toLocaleDateString("en-CA"); // YYYY-MM-DD
+    return d.toLocaleDateString("en-CA");
   } catch {
     return "—";
   }
+}
+
+/** Label for an expense CoA option: "5500 · Petty Cash and Miscellaneous" */
+function expenseAccountLabel(a: DisbursementAccountOption): string {
+  const name = a.account_name || a.name || `Account #${a.id}`;
+  const num = a.account_number ? `${a.account_number} · ` : "";
+  return `${num}${name}`;
+}
+
+/**
+ * Label for a payment-option row.
+ * - Bank transfer (company_bank_accounts): "Opay - 8135425726"
+ * - Cash (payment_accounts): "1120 · Petty Cash Account"
+ */
+function paymentOptionLabel(a: DisbursementAccountOption): string {
+  const bank = (a.bank_name as string) || "";
+  const acctNo =
+    (a.account_number as string) || (a.account__account_number as string) || "";
+  const name =
+    (a.account_name as string) ||
+    (a.account__account_name as string) ||
+    (a.name as string) ||
+    "";
+
+  // Company bank account (has bank_name)
+  if (bank && acctNo) return `${bank} - ${acctNo}`;
+  if (bank) return bank;
+
+  // Cash / CoA payment account: "1120 · Petty Cash Account"
+  if (acctNo && name) return `${acctNo} · ${name}`;
+  if (name) return name;
+  if (acctNo) return acctNo;
+  return `Account #${a.id}`;
+}
+
+/**
+ * Normalize expense-accounts response:
+ *   { expense_accounts: [...] } | [...]
+ */
+function normalizeExpenseAccounts(res: unknown): DisbursementAccountOption[] {
+  if (Array.isArray(res)) return res as DisbursementAccountOption[];
+  if (res && typeof res === "object") {
+    const r = res as any;
+    if (Array.isArray(r.expense_accounts)) return r.expense_accounts;
+    if (Array.isArray(r.results)) return r.results;
+    if (Array.isArray(r.data)) return r.data;
+  }
+  return [];
+}
+
+/**
+ * Normalize payment-options response:
+ *   { company_bank_accounts: [...] } | { payment_accounts: [...] } | [...]
+ */
+function normalizePaymentOptions(res: unknown): DisbursementAccountOption[] {
+  if (Array.isArray(res)) return res as DisbursementAccountOption[];
+  if (res && typeof res === "object") {
+    const r = res as any;
+    if (Array.isArray(r.company_bank_accounts)) return r.company_bank_accounts;
+    if (Array.isArray(r.payment_accounts)) return r.payment_accounts;
+    if (Array.isArray(r.results)) return r.results;
+    if (Array.isArray(r.data)) return r.data;
+  }
+  return [];
+}
+
+/** Prefer the dedicated Petty Cash expense account when present */
+function pickDefaultExpenseAccount(
+  accounts: DisbursementAccountOption[],
+): string {
+  if (!accounts.length) return "";
+  const petty = accounts.find((a) => {
+    const name = (a.account_name || a.name || "").toLowerCase();
+    const num = String(a.account_number || "");
+    return (
+      name.includes("petty cash") ||
+      name.includes("miscellaneous") ||
+      num === "5500"
+    );
+  });
+  return String((petty || accounts[0]).id);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -112,24 +190,27 @@ export default function CreateDisbursementModal({
 }: CreateDisbursementModalProps) {
   const [isVisible, setIsVisible] = useState(false);
 
-  // Payment method (UI label) – maps to disbursement_method
   const [paymentMethod, setPaymentMethod] = useState<
     "bank_transfer" | "cash" | null
   >(null);
 
-  // Company bank account (source of funds)
-  const [bankAccount, setBankAccount] = useState("");
+  /** Expense (GL) account – required for both methods */
+  const [expenseAccount, setExpenseAccount] = useState("");
 
-  // Bank-transfer recipient fields
+  /**
+   * Payment source:
+   * - bank_transfer → company_bank_account (from payment-options?method=BANK_TRANSFER)
+   * - cash → payment_account (from payment-options?method=CASH)
+   */
+  const [paymentSourceId, setPaymentSourceId] = useState("");
+
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [bankName, setBankName] = useState("");
 
-  // Cash handout fields
   const [cashRecipientName, setCashRecipientName] = useState("");
   const [cashHandoverConfirmed, setCashHandoverConfirmed] = useState(false);
 
-  // Optional supporting document (signed voucher photo)
   const [voucherFile, setVoucherFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -158,12 +239,25 @@ export default function CreateDisbursementModal({
     skip: !isOpen || !requestId,
   });
 
-  const { data: banksRes, isLoading: isBanksLoading } =
-    useGetCompanyBankAccountsQuery(undefined, { skip: !isOpen });
+  const { data: expenseRes, isLoading: isExpenseLoading } =
+    useGetExpenseAccountsQuery(undefined, { skip: !isOpen });
 
-  const bankAccounts = Array.isArray(banksRes)
-    ? banksRes.filter((b: any) => b.is_active)
-    : [];
+  const expenseAccounts = normalizeExpenseAccounts(expenseRes);
+
+  const paymentMethodParam =
+    paymentMethod === "cash"
+      ? "CASH"
+      : paymentMethod === "bank_transfer"
+        ? "BANK_TRANSFER"
+        : undefined;
+
+  const { data: paymentOptsRes, isLoading: isPaymentOptsLoading } =
+    useGetPaymentOptionsQuery(
+      { method: paymentMethodParam! },
+      { skip: !isOpen || !paymentMethodParam },
+    );
+
+  const paymentOptions = normalizePaymentOptions(paymentOptsRes);
 
   /* ----------------------------- Lifecycle -------------------------------- */
 
@@ -180,7 +274,8 @@ export default function CreateDisbursementModal({
   useEffect(() => {
     if (!isOpen) {
       setPaymentMethod(null);
-      setBankAccount("");
+      setExpenseAccount("");
+      setPaymentSourceId("");
       setAccountName("");
       setAccountNumber("");
       setBankName("");
@@ -193,7 +288,18 @@ export default function CreateDisbursementModal({
     }
   }, [isOpen]);
 
-  /* ----------------------------- Toast helper ----------------------------- */
+  // Reset payment source when method changes
+  useEffect(() => {
+    setPaymentSourceId("");
+  }, [paymentMethod]);
+
+  // Default expense account to Petty Cash / 5500 when available
+  useEffect(() => {
+    if (!isOpen) return;
+    if (expenseAccount) return;
+    if (!expenseAccounts.length) return;
+    setExpenseAccount(pickDefaultExpenseAccount(expenseAccounts));
+  }, [isOpen, expenseAccounts, expenseAccount]);
 
   const showToast = useCallback(
     (type: "success" | "error", message: string) => {
@@ -203,12 +309,9 @@ export default function CreateDisbursementModal({
     [],
   );
 
-  /* ----------------------------- File handling (hooks must be before any early return) ---------------------------- */
-
   const acceptFile = useCallback(
     (file: File | null | undefined) => {
       if (!file) return;
-      // Allow common image + PDF types for a signed voucher
       const allowed = [
         "image/jpeg",
         "image/png",
@@ -223,7 +326,6 @@ export default function CreateDisbursementModal({
         );
         return;
       }
-      // Soft size limit ~8 MB
       if (file.size > 8 * 1024 * 1024) {
         showToast("error", "File is too large. Maximum size is 8 MB.");
         return;
@@ -233,7 +335,6 @@ export default function CreateDisbursementModal({
     [showToast],
   );
 
-  // ── Early return ONLY after every hook has been called ──────────────────
   if (!isOpen && !isVisible) return null;
 
   /* ----------------------------- Derived data ----------------------------- */
@@ -260,8 +361,7 @@ export default function CreateDisbursementModal({
   );
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    acceptFile(file);
+    acceptFile(e.target.files?.[0]);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -280,13 +380,23 @@ export default function CreateDisbursementModal({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    acceptFile(file);
+    acceptFile(e.dataTransfer.files?.[0]);
   };
 
   const clearVoucherFile = () => {
     setVoucherFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const appendPayloadToForm = (
+    form: FormData,
+    payload: Record<string, unknown>,
+  ) => {
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        form.append(key, String(value));
+      }
+    });
   };
 
   /* ----------------------------- Submit ----------------------------------- */
@@ -297,12 +407,21 @@ export default function CreateDisbursementModal({
       showToast("error", "Unable to determine the petty-cash request id.");
       return;
     }
-    if (!bankAccount) {
-      showToast("error", "Please select a company bank account.");
+    if (!expenseAccount) {
+      showToast("error", "Please select an expense account.");
       return;
     }
     if (!paymentMethod) {
       showToast("error", "Please select a payment method.");
+      return;
+    }
+    if (!paymentSourceId) {
+      showToast(
+        "error",
+        paymentMethod === "cash"
+          ? "Please select a payment (cash) account."
+          : "Please select a company bank account.",
+      );
       return;
     }
 
@@ -319,8 +438,10 @@ export default function CreateDisbursementModal({
       const base: CreateBankTransferDisbursement = {
         source_type: "PETTY_CASH",
         disbursement_method: "BANK_TRANSFER",
+        expense_account: Number(expenseAccount),
+        company_bank_account: Number(paymentSourceId),
         petty_cash_request: Number(sourceId),
-        company_bank_account: Number(bankAccount),
+        recipient_name: accountName.trim(),
         recipient_bank_name: bankName.trim(),
         recipient_account_number: accountNumber.trim(),
         recipient_account_name: accountName.trim(),
@@ -330,11 +451,7 @@ export default function CreateDisbursementModal({
       try {
         if (voucherFile) {
           const form = new FormData();
-          Object.entries(base).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-              form.append(key, String(value));
-            }
-          });
+          appendPayloadToForm(form, base as unknown as Record<string, unknown>);
           form.append("document", voucherFile);
           await onSubmit(form);
         } else {
@@ -362,20 +479,21 @@ export default function CreateDisbursementModal({
     const cashBase: CreateCashDisbursement = {
       source_type: "PETTY_CASH",
       disbursement_method: "CASH",
+      expense_account: Number(expenseAccount),
+      payment_account: Number(paymentSourceId),
       petty_cash_request: Number(sourceId),
-      company_bank_account: Number(bankAccount),
       recipient_name: cashRecipientName.trim(),
+      amount: amountApproved ? String(amountApproved) : undefined,
       cash_received: true,
     };
 
     try {
       if (voucherFile) {
         const form = new FormData();
-        Object.entries(cashBase).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            form.append(key, String(value));
-          }
-        });
+        appendPayloadToForm(
+          form,
+          cashBase as unknown as Record<string, unknown>,
+        );
         form.append("document", voucherFile);
         await onSubmit(form);
       } else {
@@ -391,10 +509,12 @@ export default function CreateDisbursementModal({
   const canSubmit =
     !isSubmitting &&
     !isDetailsLoading &&
-    !isBanksLoading &&
-    bankAccounts.length > 0 &&
-    !!bankAccount &&
+    !isExpenseLoading &&
+    !!expenseAccount &&
     !!paymentMethod &&
+    !isPaymentOptsLoading &&
+    paymentOptions.length > 0 &&
+    !!paymentSourceId &&
     (paymentMethod === "bank_transfer"
       ? accountName.trim() && accountNumber.trim() && bankName.trim()
       : cashRecipientName.trim() && cashHandoverConfirmed);
@@ -425,7 +545,7 @@ export default function CreateDisbursementModal({
           className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* ── Header ─────────────────────────────────────────────────── */}
+          {/* Header */}
           <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-gray-100 shrink-0">
             <div>
               <h2
@@ -453,7 +573,7 @@ export default function CreateDisbursementModal({
             </button>
           </div>
 
-          {/* ── Body ───────────────────────────────────────────────────── */}
+          {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {isDetailsLoading ? (
               <div className="flex items-center justify-center py-16 gap-2 text-sm text-gray-500">
@@ -468,7 +588,7 @@ export default function CreateDisbursementModal({
                   </div>
                 )}
 
-                {/* ── Request summary (Figma layout) ───────────────────── */}
+                {/* Request summary */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4 mb-5">
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">
@@ -495,7 +615,6 @@ export default function CreateDisbursementModal({
                       <TruncateWithTooltip text={wbs} maxLength={42} />
                     </p>
                   </div>
-
                   <div>
                     <p className="text-xs text-gray-500 mb-0.5">
                       Amount Approved
@@ -533,53 +652,51 @@ export default function CreateDisbursementModal({
                   </div>
                 </div>
 
-                {/* ── Disbursement From ────────────────────────────────── */}
+                {/* Expense Account – required for both methods */}
                 <div className="mb-6">
                   <h3 className="text-sm font-semibold text-gray-900 mb-3">
-                    Disbursement From
+                    Expense Account
                   </h3>
                   <label
-                    htmlFor="company-bank-account"
+                    htmlFor="expense-account"
                     className="block text-sm text-gray-600 mb-1.5"
                   >
-                    Company Bank Account
+                    Select Expense Account
                   </label>
-                  {isBanksLoading ? (
+                  {isExpenseLoading ? (
                     <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Loading accounts…
+                      Loading expense accounts…
                     </div>
-                  ) : bankAccounts.length === 0 ? (
+                  ) : expenseAccounts.length === 0 ? (
                     <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                      No active company bank accounts found. Add one under
-                      Invoice settings before submitting a disbursement.
+                      No expense accounts available. Check Chart of Accounts
+                      configuration.
                     </div>
                   ) : (
                     <select
-                      id="company-bank-account"
-                      value={bankAccount}
-                      onChange={(e) => setBankAccount(e.target.value)}
+                      id="expense-account"
+                      value={expenseAccount}
+                      onChange={(e) => setExpenseAccount(e.target.value)}
                       disabled={isSubmitting}
                       className="w-full max-w-md px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60"
                     >
-                      <option value="">Select Bank Account</option>
-                      {bankAccounts.map((b: any) => (
-                        <option key={b.id} value={b.id}>
-                          {b.bank_name || b.account_name || `Account #${b.id}`}
-                          {b.account_number ? ` · ${b.account_number}` : ""}
+                      <option value="">Select expense account</option>
+                      {expenseAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {expenseAccountLabel(a)}
                         </option>
                       ))}
                     </select>
                   )}
                 </div>
 
-                {/* ── Payment Method ───────────────────────────────────── */}
+                {/* Payment Method */}
                 <div className="mb-5">
                   <h3 className="text-sm font-semibold text-gray-900 mb-3">
                     Payment Method
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Bank Transfer card */}
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("bank_transfer")}
@@ -613,7 +730,6 @@ export default function CreateDisbursementModal({
                       </div>
                     </button>
 
-                    {/* Physical Cash Handout card */}
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("cash")}
@@ -649,7 +765,56 @@ export default function CreateDisbursementModal({
                   </div>
                 </div>
 
-                {/* ── Conditional: Recipient Bank Details ──────────────── */}
+                {/* Payment source – depends on method */}
+                {paymentMethod && (
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3">
+                      {paymentMethod === "cash"
+                        ? "Payment Account"
+                        : "Company Bank Account"}
+                    </h3>
+                    <label
+                      htmlFor="payment-source"
+                      className="block text-sm text-gray-600 mb-1.5"
+                    >
+                      {paymentMethod === "cash"
+                        ? "Select cash / float account"
+                        : "Select bank account (source of funds)"}
+                    </label>
+                    {isPaymentOptsLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Loading accounts…
+                      </div>
+                    ) : paymentOptions.length === 0 ? (
+                      <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                        No {paymentMethod === "cash" ? "cash" : "bank"} accounts
+                        available for this method.
+                      </div>
+                    ) : (
+                      <select
+                        id="payment-source"
+                        value={paymentSourceId}
+                        onChange={(e) => setPaymentSourceId(e.target.value)}
+                        disabled={isSubmitting}
+                        className="w-full max-w-md px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60"
+                      >
+                        <option value="">
+                          {paymentMethod === "cash"
+                            ? "Select payment account"
+                            : "Select bank account"}
+                        </option>
+                        {paymentOptions.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {paymentOptionLabel(a)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {/* Bank Transfer recipient */}
                 {paymentMethod === "bank_transfer" && (
                   <div className="rounded-xl bg-blue-50/60 border border-blue-100 p-5 mb-2">
                     <h4 className="text-sm font-semibold text-gray-900 mb-4">
@@ -685,7 +850,7 @@ export default function CreateDisbursementModal({
                           type="text"
                           value={bankName}
                           onChange={(e) => setBankName(e.target.value)}
-                          placeholder="e.g NatWest"
+                          placeholder="e.g GTBank"
                           disabled={isSubmitting}
                           className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60"
                         />
@@ -702,24 +867,22 @@ export default function CreateDisbursementModal({
                           type="text"
                           value={accountNumber}
                           onChange={(e) => setAccountNumber(e.target.value)}
-                          placeholder="1234567"
+                          placeholder="0123456789"
                           disabled={isSubmitting}
                           className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60"
                         />
                       </div>
-                      {/* Sort Code intentionally omitted – not present in API contract */}
                     </div>
                   </div>
                 )}
 
-                {/* ── Conditional: Cash Handout Details ────────────────── */}
+                {/* Cash handout */}
                 {paymentMethod === "cash" && (
                   <div className="rounded-xl bg-blue-50/60 border border-blue-100 p-5 mb-2">
                     <h4 className="text-sm font-semibold text-gray-900 mb-4">
                       Cash Handout Details
                     </h4>
 
-                    {/* Name of Person Receiving Cash (Petty cash float account ignored per requirements) */}
                     <div className="mb-4">
                       <label
                         htmlFor="cash-recipient-name"
@@ -738,7 +901,6 @@ export default function CreateDisbursementModal({
                       />
                     </div>
 
-                    {/* Signed voucher upload + drag-and-drop */}
                     <div className="mb-4">
                       <p className="text-sm text-gray-600 mb-1">
                         Signed Petty Cash Voucher Photo{" "}
@@ -808,14 +970,12 @@ export default function CreateDisbursementModal({
                           </button>
                         </div>
                       )}
-
                       <p className="text-xs text-gray-400 mt-1.5">
                         Not mandatory, but its absence will be noted in the
                         audit trail.
                       </p>
                     </div>
 
-                    {/* Confirmation checkbox */}
                     <label className="flex items-start gap-3 cursor-pointer rounded-lg border border-gray-200 bg-white px-4 py-3">
                       <input
                         type="checkbox"
@@ -839,7 +999,7 @@ export default function CreateDisbursementModal({
             )}
           </div>
 
-          {/* ── Footer ─────────────────────────────────────────────────── */}
+          {/* Footer */}
           <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 shrink-0 bg-gray-50/50">
             <button
               type="button"
