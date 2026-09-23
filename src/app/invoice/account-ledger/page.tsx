@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   useGetAccountLedgerQuery,
   useLazyGetAccountLedgerByIdQuery,
@@ -19,77 +19,81 @@ import {
   Loader2,
   Calendar,
   Hash,
+  BookOpen,
+  ArrowDownLeft,
+  ArrowUpRight,
+  type LucideIcon,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
-// Skeleton Components
 const SkeletonRow = () => (
   <tr className="border-b border-gray-100">
-    <td className="py-4 px-6">
-      <div className="h-4 bg-gray-200 rounded w-20 animate-pulse" />
+    <td className="px-6 py-4">
+      <div className="h-4 w-20 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-4 px-6">
-      <div className="h-4 bg-gray-200 rounded w-40 animate-pulse" />
+    <td className="px-6 py-4">
+      <div className="h-4 w-40 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-4 px-6">
-      <div className="h-4 bg-gray-200 rounded w-24 animate-pulse ml-auto" />
+    <td className="px-6 py-4">
+      <div className="ml-auto h-4 w-24 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-4 px-6">
-      <div className="h-4 bg-gray-200 rounded w-24 animate-pulse ml-auto" />
+    <td className="px-6 py-4">
+      <div className="ml-auto h-4 w-24 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-4 px-6">
-      <div className="h-4 bg-gray-200 rounded w-28 animate-pulse ml-auto" />
+    <td className="px-6 py-4">
+      <div className="ml-auto h-4 w-28 animate-pulse rounded bg-gray-200" />
     </td>
   </tr>
 );
 
 const SkeletonDetailRow = () => (
   <tr className="border-t border-gray-100">
-    <td className="py-3 px-4">
-      <div className="h-3 bg-gray-200 rounded w-24 animate-pulse" />
+    <td className="px-4 py-3">
+      <div className="h-3 w-24 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-3 px-4">
-      <div className="h-3 bg-gray-200 rounded w-36 animate-pulse" />
+    <td className="px-4 py-3">
+      <div className="h-3 w-36 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-3 px-4">
-      <div className="h-3 bg-gray-200 rounded w-20 animate-pulse" />
+    <td className="px-4 py-3">
+      <div className="h-3 w-20 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-3 px-4">
-      <div className="h-3 bg-gray-200 rounded w-20 animate-pulse ml-auto" />
+    <td className="px-4 py-3">
+      <div className="ml-auto h-3 w-20 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-3 px-4">
-      <div className="h-3 bg-gray-200 rounded w-20 animate-pulse ml-auto" />
+    <td className="px-4 py-3">
+      <div className="ml-auto h-3 w-20 animate-pulse rounded bg-gray-200" />
     </td>
-    <td className="py-3 px-4">
-      <div className="h-3 bg-gray-200 rounded w-24 animate-pulse ml-auto" />
+    <td className="px-4 py-3">
+      <div className="ml-auto h-3 w-24 animate-pulse rounded bg-gray-200" />
     </td>
   </tr>
 );
 
-// Utility Functions
-const formatCurrency = (value: number | string | null) => {
-  if (value === null || value === undefined) return "-";
+/** Proper Naira via Intl (₦) */
+const formatCurrency = (value: number | string | null | undefined) => {
+  if (value === null || value === undefined) return "—";
   const num = typeof value === "string" ? parseFloat(value) : value;
-  if (isNaN(num)) return "-";
-  return `N${num.toLocaleString(undefined, {
+  if (Number.isNaN(num)) return "—";
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  }).format(num);
 };
 
 const formatDate = (dateString: string) => {
-  if (!dateString) return "-";
+  if (!dateString) return "—";
   const date = new Date(dateString);
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString("en-NG", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
 };
 
-// Transaction Type Badge
 const TransactionTypeBadge = ({ type }: { type: string }) => {
   const colors: Record<string, string> = {
     vendor_bill: "bg-orange-100 text-orange-700",
@@ -113,7 +117,7 @@ const TransactionTypeBadge = ({ type }: { type: string }) => {
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+      className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
         colors[type] || "bg-gray-100 text-gray-700"
       }`}
     >
@@ -122,7 +126,6 @@ const TransactionTypeBadge = ({ type }: { type: string }) => {
   );
 };
 
-// Export Functions
 const handleExportPDF = (
   accounts: AccountLedgerSummary[],
   selectedAccount: AccountLedgerDetail | null,
@@ -233,6 +236,48 @@ const handleExportExcel = (
   link.click();
 };
 
+type SummaryCardConfig = {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  iconClass: string;
+  countClass: string;
+  getValue: (rows: AccountLedgerSummary[]) => number | string;
+  isCurrency?: boolean;
+};
+
+const SUMMARY_CARDS: SummaryCardConfig[] = [
+  {
+    key: "accounts",
+    label: "Total Accounts",
+    icon: BookOpen,
+    iconClass: "text-blue-500",
+    countClass: "text-blue-600",
+    getValue: (rows) => rows.length,
+    isCurrency: false,
+  },
+  {
+    key: "debits",
+    label: "Total Debits",
+    icon: ArrowDownLeft,
+    iconClass: "text-red-500",
+    countClass: "text-red-600",
+    getValue: (rows) =>
+      rows.reduce((sum, a) => sum + (parseFloat(String(a.debit)) || 0), 0),
+    isCurrency: true,
+  },
+  {
+    key: "credits",
+    label: "Total Credits",
+    icon: ArrowUpRight,
+    iconClass: "text-emerald-500",
+    countClass: "text-emerald-600",
+    getValue: (rows) =>
+      rows.reduce((sum, a) => sum + (parseFloat(String(a.credit)) || 0), 0),
+    isCurrency: true,
+  },
+];
+
 export default function AccountLedgerPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
@@ -254,10 +299,14 @@ export default function AccountLedgerPage() {
     { data: selectedAccount, isLoading: isLoadingDetail },
   ] = useLazyGetAccountLedgerByIdQuery();
 
-  const filtered = ledgers.filter(
-    (acc) =>
-      acc.account_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      acc.account_code.toLowerCase().includes(searchTerm.toLowerCase()),
+  const filtered = useMemo(
+    () =>
+      ledgers.filter(
+        (acc) =>
+          acc.account_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          acc.account_code.toLowerCase().includes(searchTerm.toLowerCase()),
+      ),
+    [ledgers, searchTerm],
   );
 
   const handleRowClick = (id: number) => {
@@ -272,12 +321,12 @@ export default function AccountLedgerPage() {
   if (isError) {
     return (
       <div className="p-6">
-        <div className="bg-red-50 border border-red-200 rounded p-6 text-center">
-          <X className="w-12 h-12 text-red-400 mx-auto mb-3" />
+        <div className="rounded border border-red-200 bg-red-50 p-6 text-center">
+          <X className="mx-auto mb-3 h-12 w-12 text-red-400" />
           <h2 className="text-lg font-semibold text-red-800">
             Failed to load account ledger
           </h2>
-          <p className="text-red-600 mt-2 text-sm">
+          <p className="mt-2 text-sm text-red-600">
             {(error as any)?.data?.message || "An unexpected error occurred"}
           </p>
         </div>
@@ -287,44 +336,46 @@ export default function AccountLedgerPage() {
 
   return (
     <PageGuard module="invoice" entitlement="view_cash_flow">
-      <div className="p-4 md:p-6 space-y-5 max-w-[1600px] mx-auto">
+      <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
         {/* Header */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+        <div className="flex flex-col items-start justify-between gap-4 lg:flex-row lg:items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Account Ledger</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="mt-1 text-sm text-gray-500">
               View and manage account balances and transactions
             </p>
           </div>
-          <div className="flex items-center gap-2 w-full lg:w-auto flex-wrap">
-            <div className="relative flex-1 lg:flex-none lg:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
+            <div className="relative flex-1 lg:w-72 lg:flex-none">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search by code or name..."
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded border border-gray-200 py-2.5 pl-10 pr-4 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <button
+              type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 border px-4 py-2.5 rounded text-sm font-medium transition-all ${
+              className={`flex items-center gap-2 rounded border px-4 py-2.5 text-sm font-medium transition-all ${
                 showFilters
                   ? "border-blue-500 bg-blue-50 text-blue-600"
                   : "border-gray-200 text-gray-700 hover:bg-gray-50"
               }`}
             >
-              <Filter className="w-4 h-4" />
+              <Filter className="h-4 w-4" />
               <span className="hidden sm:inline">Filter</span>
             </button>
             <div className="relative">
               <PermissionGuard module="invoice" entitlement="view_cash_flow">
                 <button
+                  type="button"
                   onClick={() => setShowExportMenu(!showExportMenu)}
-                  className="flex items-center gap-2 border border-gray-200 text-gray-700 hover:bg-gray-50 px-4 py-2.5 rounded text-sm font-medium transition-all"
+                  className="flex items-center gap-2 rounded border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="h-4 w-4" />
                   <span className="hidden sm:inline">Export</span>
                 </button>
               </PermissionGuard>
@@ -334,8 +385,9 @@ export default function AccountLedgerPage() {
                     className="fixed inset-0 z-10"
                     onClick={() => setShowExportMenu(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded shadow-lg z-20 overflow-hidden">
+                  <div className="absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded border border-gray-200 bg-white shadow-lg">
                     <button
+                      type="button"
                       onClick={() => {
                         handleExportPDF(
                           filtered,
@@ -343,12 +395,13 @@ export default function AccountLedgerPage() {
                         );
                         setShowExportMenu(false);
                       }}
-                      className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
                     >
-                      <FileText className="w-4 h-4 text-red-500" />
+                      <FileText className="h-4 w-4 text-red-500" />
                       Export as PDF
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
                         handleExportExcel(
                           filtered,
@@ -356,9 +409,9 @@ export default function AccountLedgerPage() {
                         );
                         setShowExportMenu(false);
                       }}
-                      className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-gray-700 transition-colors hover:bg-gray-50"
                     >
-                      <Download className="w-4 h-4 text-green-500" />
+                      <Download className="h-4 w-4 text-green-500" />
                       Export as Excel/CSV
                     </button>
                   </div>
@@ -370,36 +423,36 @@ export default function AccountLedgerPage() {
 
         {/* Filter Panel */}
         {showFilters && (
-          <div className="bg-white rounded border border-gray-200 p-4 shadow-sm">
-            <div className="flex flex-wrap gap-4 items-end">
+          <div className="rounded border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-wrap items-end gap-4">
               <div className="min-w-[160px]">
-                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                  <Calendar className="w-3.5 h-3.5" /> From
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                  <Calendar className="h-3.5 w-3.5" /> From
                 </label>
                 <input
                   type="date"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
                 />
               </div>
               <div className="min-w-[160px]">
-                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                  <Calendar className="w-3.5 h-3.5" /> To
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                  <Calendar className="h-3.5 w-3.5" /> To
                 </label>
                 <input
                   type="date"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
                 />
               </div>
               <div className="min-w-[160px]">
-                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
-                  <Hash className="w-3.5 h-3.5" /> Period
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-gray-500">
+                  <Hash className="h-3.5 w-3.5" /> Period
                 </label>
                 <select
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={period}
                   onChange={(e) => setPeriod(e.target.value)}
                 >
@@ -414,68 +467,68 @@ export default function AccountLedgerPage() {
                   <option value="last_year">Last Year</option>
                 </select>
               </div>
-              <button className="bg-blue-600 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-700 transition-colors">
+              <button
+                type="button"
+                className="rounded bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              >
                 Apply Filters
               </button>
             </div>
           </div>
         )}
 
-        {/* Stats Cards */}
-        {!isLoading && filtered.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white rounded border border-gray-200 p-4 shadow-sm">
-              <p className="text-xs text-gray-500 font-medium">
-                Total Accounts
-              </p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {filtered.length}
-              </p>
-            </div>
-            <div className="bg-white rounded border border-gray-200 p-4 shadow-sm">
-              <p className="text-xs text-gray-500 font-medium">Total Debits</p>
-              <p className="text-2xl font-bold text-red-600 mt-1">
-                {formatCurrency(
-                  filtered.reduce(
-                    (sum, a) => sum + (parseFloat(a.debit) || 0),
-                    0,
-                  ),
-                )}
-              </p>
-            </div>
-            <div className="bg-white rounded border border-gray-200 p-4 shadow-sm">
-              <p className="text-xs text-gray-500 font-medium">Total Credits</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">
-                {formatCurrency(
-                  filtered.reduce(
-                    (sum, a) => sum + (parseFloat(a.credit) || 0),
-                    0,
-                  ),
-                )}
-              </p>
-            </div>
+        {/* Summary cards – CoA / PO style */}
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="grid grid-cols-1 divide-y divide-gray-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            {SUMMARY_CARDS.map((card) => {
+              const Icon = card.icon;
+              const raw = isLoading ? null : card.getValue(filtered);
+              return (
+                <div
+                  key={card.key}
+                  className="flex min-h-[84px] flex-col items-start gap-1.5 px-4 py-3 sm:min-h-[96px] sm:gap-2 sm:px-5 sm:py-4"
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className={`h-4 w-4 shrink-0 ${card.iconClass}`} />
+                    <span className="text-sm font-medium text-gray-600">
+                      {card.label}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-xl font-semibold tabular-nums sm:text-2xl ${card.countClass}`}
+                  >
+                    {raw === null ? (
+                      <span className="inline-block h-7 w-16 animate-pulse rounded bg-gray-200" />
+                    ) : card.isCurrency ? (
+                      formatCurrency(raw as number)
+                    ) : (
+                      raw
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
 
-        {/* Loading State */}
         {isLoading && (
-          <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-hidden rounded border border-gray-200 bg-white shadow-sm">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="text-left py-3.5 px-6 text-sm font-medium text-gray-500 w-32">
+                  <th className="w-32 px-6 py-3.5 text-left text-sm font-medium text-gray-500">
                     Code
                   </th>
-                  <th className="text-left py-3.5 px-6 text-sm font-medium text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-sm font-medium text-gray-500">
                     Account Name
                   </th>
-                  <th className="text-right py-3.5 px-6 text-sm font-medium text-gray-500">
+                  <th className="px-6 py-3.5 text-right text-sm font-medium text-gray-500">
                     Debits
                   </th>
-                  <th className="text-right py-3.5 px-6 text-sm font-medium text-gray-500">
+                  <th className="px-6 py-3.5 text-right text-sm font-medium text-gray-500">
                     Credits
                   </th>
-                  <th className="text-right py-3.5 px-6 text-sm font-medium text-gray-500">
+                  <th className="px-6 py-3.5 text-right text-sm font-medium text-gray-500">
                     Balance
                   </th>
                 </tr>
@@ -490,39 +543,37 @@ export default function AccountLedgerPage() {
           </div>
         )}
 
-        {/* Empty State */}
         {!isLoading && filtered.length === 0 && (
-          <div className="bg-white rounded border border-gray-200 shadow-sm p-12 text-center">
-            <Search className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <div className="rounded border border-gray-200 bg-white p-12 text-center shadow-sm">
+            <Search className="mx-auto mb-3 h-12 w-12 text-gray-300" />
             <h3 className="text-lg font-medium text-gray-900">
               No accounts found
             </h3>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="mt-1 text-sm text-gray-500">
               Try adjusting your search or filter criteria
             </p>
           </div>
         )}
 
-        {/* Main Table */}
         {!isLoading && filtered.length > 0 && (
-          <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden">
+          <div className="overflow-hidden rounded border border-gray-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[640px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="text-left py-3.5 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider w-32">
+                    <th className="w-32 px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                       Code
                     </th>
-                    <th className="text-left py-3.5 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                       Account Name
                     </th>
-                    <th className="text-right py-3.5 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
                       Debits
                     </th>
-                    <th className="text-right py-3.5 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
                       Credits
                     </th>
-                    <th className="text-right py-3.5 px-6 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
                       Balance
                     </th>
                   </tr>
@@ -533,41 +584,44 @@ export default function AccountLedgerPage() {
                     return (
                       <React.Fragment key={account.id}>
                         <tr
-                          className={`border-b border-gray-100 cursor-pointer transition-all ${
+                          className={`cursor-pointer border-b border-gray-100 transition-all ${
                             isExpanded ? "bg-blue-50/60" : "hover:bg-gray-50"
                           }`}
                           onClick={() => handleRowClick(account.id)}
                         >
-                          <td className="py-4 px-6">
+                          <td className="whitespace-nowrap px-6 py-4">
                             <div className="flex items-center gap-2">
-                              <button
+                              <span
                                 className={`transition-colors ${
-                                  isExpanded
-                                    ? "text-blue-600"
-                                    : "text-gray-400 hover:text-gray-600"
+                                  isExpanded ? "text-blue-600" : "text-gray-400"
                                 }`}
                               >
                                 {isExpanded ? (
-                                  <ChevronDown className="w-4 h-4" />
+                                  <ChevronDown className="h-4 w-4" />
                                 ) : (
-                                  <ChevronRight className="w-4 h-4" />
+                                  <ChevronRight className="h-4 w-4" />
                                 )}
-                              </button>
+                              </span>
                               <span className="font-mono text-sm font-medium text-gray-900">
                                 {account.account_code}
                               </span>
                             </div>
                           </td>
-                          <td className="py-4 px-6 text-sm text-gray-800 font-medium">
-                            {account.account_name}
+                          <td className="px-6 py-4 text-sm font-medium text-gray-800">
+                            <span
+                              className="block max-w-[280px] truncate"
+                              title={account.account_name}
+                            >
+                              {account.account_name}
+                            </span>
                           </td>
-                          <td className="py-4 px-6 text-right text-sm font-semibold text-red-600">
+                          <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-semibold tabular-nums text-red-600">
                             {formatCurrency(account.debit)}
                           </td>
-                          <td className="py-4 px-6 text-right text-sm font-semibold text-green-600">
+                          <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-semibold tabular-nums text-green-600">
                             {formatCurrency(account.credit)}
                           </td>
-                          <td className="py-4 px-6 text-right text-sm font-bold text-gray-900">
+                          <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-bold tabular-nums text-gray-900">
                             {formatCurrency(account.balance)}
                           </td>
                         </tr>
@@ -575,12 +629,12 @@ export default function AccountLedgerPage() {
                         {isExpanded && (
                           <tr>
                             <td colSpan={5} className="p-0">
-                              <div className="bg-gradient-to-b from-blue-50/30 to-white border-b border-gray-200">
+                              <div className="border-b border-gray-200 bg-gradient-to-b from-blue-50/30 to-white">
                                 <div className="p-4">
                                   {isLoadingDetail ? (
                                     <div className="space-y-3">
                                       <div className="flex items-center gap-2 text-sm text-blue-600">
-                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <Loader2 className="h-4 w-4 animate-spin" />
                                         Loading transactions...
                                       </div>
                                       <div className="overflow-hidden rounded border border-gray-200">
@@ -595,35 +649,35 @@ export default function AccountLedgerPage() {
                                     </div>
                                   ) : selectedAccount ? (
                                     <>
-                                      <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                                      <h4 className="mb-3 text-sm font-semibold text-gray-700">
                                         Ledger Entries (
                                         {selectedAccount.entries.length})
                                       </h4>
                                       {selectedAccount.entries.length === 0 ? (
-                                        <div className="text-center py-8 text-gray-500 text-sm">
+                                        <div className="py-8 text-center text-sm text-gray-500">
                                           No transactions found for this account
                                         </div>
                                       ) : (
                                         <div className="overflow-x-auto rounded border border-gray-200">
-                                          <table className="w-full text-sm">
+                                          <table className="w-full min-w-[560px] text-sm">
                                             <thead>
-                                              <tr className="bg-gray-50 border-b border-gray-200">
-                                                <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500">
+                                              <tr className="border-b border-gray-200 bg-gray-50">
+                                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">
                                                   Date
                                                 </th>
-                                                <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500">
+                                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">
                                                   Description
                                                 </th>
-                                                <th className="text-left py-2.5 px-4 text-xs font-semibold text-gray-500">
+                                                <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">
                                                   Type
                                                 </th>
-                                                <th className="text-right py-2.5 px-4 text-xs font-semibold text-gray-500">
+                                                <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500">
                                                   Debit
                                                 </th>
-                                                <th className="text-right py-2.5 px-4 text-xs font-semibold text-gray-500">
+                                                <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500">
                                                   Credit
                                                 </th>
-                                                <th className="text-right py-2.5 px-4 text-xs font-semibold text-gray-500">
+                                                <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500">
                                                   Balance
                                                 </th>
                                               </tr>
@@ -633,32 +687,37 @@ export default function AccountLedgerPage() {
                                                 (tx) => (
                                                   <tr
                                                     key={tx.id}
-                                                    className="border-t border-gray-100 hover:bg-gray-50 transition-colors"
+                                                    className="border-t border-gray-100 transition-colors hover:bg-gray-50"
                                                   >
-                                                    <td className="py-3 px-4 text-gray-700 whitespace-nowrap">
+                                                    <td className="whitespace-nowrap px-4 py-3 text-gray-700">
                                                       {formatDate(
                                                         tx.transaction_date,
                                                       )}
                                                     </td>
-                                                    <td className="py-3 px-4 text-gray-900 font-medium">
-                                                      {tx.description}
+                                                    <td className="px-4 py-3 font-medium text-gray-900">
+                                                      <span
+                                                        className="block max-w-[220px] truncate"
+                                                        title={tx.description}
+                                                      >
+                                                        {tx.description}
+                                                      </span>
                                                     </td>
-                                                    <td className="py-3 px-4">
+                                                    <td className="px-4 py-3">
                                                       <TransactionTypeBadge
                                                         type={
                                                           tx.transaction_type
                                                         }
                                                       />
                                                     </td>
-                                                    <td className="py-3 px-4 text-right font-semibold text-red-600">
+                                                    <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-red-600">
                                                       {formatCurrency(tx.debit)}
                                                     </td>
-                                                    <td className="py-3 px-4 text-right font-semibold text-green-600">
+                                                    <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-green-600">
                                                       {formatCurrency(
                                                         tx.credit,
                                                       )}
                                                     </td>
-                                                    <td className="py-3 px-4 text-right font-bold text-gray-900">
+                                                    <td className="whitespace-nowrap px-4 py-3 text-right font-bold tabular-nums text-gray-900">
                                                       {formatCurrency(
                                                         tx.running_balance,
                                                       )}
@@ -672,7 +731,7 @@ export default function AccountLedgerPage() {
                                       )}
                                     </>
                                   ) : (
-                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                    <div className="py-8 text-center text-sm text-gray-500">
                                       Failed to load account details
                                     </div>
                                   )}

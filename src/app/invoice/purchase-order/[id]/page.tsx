@@ -165,7 +165,8 @@ export default function PurchaseOrderDetailPage() {
         extractErrorMessage(err, "Failed to issue Purchase Order."),
         "error",
       );
-      console.error("[PO Issue]", err);
+      if (process.env.NODE_ENV === "development")
+        console.error("[PO Issue]", err);
     }
   };
 
@@ -182,7 +183,8 @@ export default function PurchaseOrderDetailPage() {
         extractErrorMessage(err, "Failed to mark equipment as returned."),
         "error",
       );
-      console.error("[Return Hired Equipment]", err);
+      if (process.env.NODE_ENV === "development")
+        console.error("[Return Hired Equipment]", err);
     }
   };
 
@@ -261,13 +263,13 @@ export default function PurchaseOrderDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          {/* <button
             type="button"
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             <Mail className="h-4 w-4" />
             Send Via Email
-          </button>
+          </button> */}
 
           {isDraft && (
             <PermissionGuard
@@ -298,10 +300,7 @@ export default function PurchaseOrderDetailPage() {
           {equipmentHire &&
             equipmentHire.status !== "returned" &&
             status === "issued" && (
-              <PermissionGuard
-                module="invoice"
-                entitlement="receive_purchase_orders"
-              >
+              <PermissionGuard module="invoice" entitlement="edit_invoices">
                 <button
                   type="button"
                   onClick={() => setIsReturnModalOpen(true)}
