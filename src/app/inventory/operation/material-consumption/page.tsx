@@ -123,11 +123,28 @@ export default function MaterialConsumptionPage() {
         normalizedGroup = "pending";
       }
 
+      let requester = "System Request";
+      const u = req.requester_details?.user || req.created_by_details || req.project_request?.created_by_details;
+      if (u) {
+        const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+        requester = fullName || u.username || u.email || "System Request";
+      } else if (req.requester_details?.name) {
+        requester = req.requester_details.name;
+      } else if (req.created_by_name) {
+        requester = req.created_by_name;
+      } else if (req.requester_name) {
+        requester = req.requester_name;
+      } else if (typeof req.requester === "string") {
+        requester = req.requester;
+      } else if (req.created_by_id) {
+        requester = `User #${req.created_by_id}`;
+      }
+
       return {
         id: req.request_id || `MCR-${req.id}`,
         realId: req.id,
         wbsActivity: wbsActivity,
-        requester: req.created_by_name || req.requester_details?.name || "System Request",
+        requester,
         requestDate: req.date_consumed ? new Date(req.date_consumed).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : new Date(req.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
         numberOfItems: (req.lines ?? []).length,
         status: req.status || "pending",

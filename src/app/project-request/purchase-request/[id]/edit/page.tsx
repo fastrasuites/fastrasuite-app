@@ -24,9 +24,8 @@ import {
   useGetProjectOptionsQuery,
   useGetPhaseOptionsQuery,
   useGetActivityOptionsQuery,
+  useGetProjectRequestProductsQuery,
 } from "@/api/requests/projectRequestApi";
-import { useGetProductsQuery } from "@/api/purchase/productsApi";
-import { useGetInventoryProductsQuery } from "@/api/inventory/productsApi";
 import { useGetCurrenciesQuery } from "@/api/purchase/currencyApi";
 import { useGetVendorsQuery } from "@/api/purchase/vendorsApi";
 import { useGetTenantUsersQuery } from "@/api/settings/tenantUserApi";
@@ -59,8 +58,7 @@ export default function EditPurchaseRequestPage() {
   // API queries
   const { data: requestData, isLoading: isRequestLoading } = useGetProjectPurchaseRequestQuery(id as string, { skip: !id });
   const { data: rawProjectOptions = [] } = useGetProjectOptionsQuery();
-  const { data: rawInventoryProducts = [] } = useGetInventoryProductsQuery({});
-  const { data: dbProducts = [] } = useGetProductsQuery({});
+  const { data: rawProjectProducts = [] } = useGetProjectRequestProductsQuery();
   const { data: currencies } = useGetCurrenciesQuery({});
   const { data: vendors } = useGetVendorsQuery({});
   const { data: tenantUsers } = useGetTenantUsersQuery({});
@@ -261,41 +259,31 @@ export default function EditPurchaseRequestPage() {
     }
   }, [selectedProjectId, currentProject, activeLocations]);
 
-  // Normalize inventory products
-  const invProductsList = useMemo(() => {
-    if (!rawInventoryProducts) return [];
-    if (Array.isArray(rawInventoryProducts)) return rawInventoryProducts;
-    if ((rawInventoryProducts as any).results && Array.isArray((rawInventoryProducts as any).results)) {
-      return (rawInventoryProducts as any).results;
+  // Normalize project request products
+  const projectProductsList = useMemo(() => {
+    if (!rawProjectProducts) return [];
+    if (Array.isArray(rawProjectProducts)) return rawProjectProducts;
+    if ((rawProjectProducts as any).products && Array.isArray((rawProjectProducts as any).products)) {
+      return (rawProjectProducts as any).products;
+    }
+    if ((rawProjectProducts as any).results && Array.isArray((rawProjectProducts as any).results)) {
+      return (rawProjectProducts as any).results;
     }
     return [];
-  }, [rawInventoryProducts]);
+  }, [rawProjectProducts]);
 
   // Combine products
   const allProducts = useMemo(() => {
     const list: { id: string; name: string; standardCost?: number; description?: string }[] = [];
-    invProductsList.forEach((ip: any) => {
-      if (ip && (ip.product_name || ip.name)) {
-        const pName = String(ip.product_name || ip.name).trim();
+    projectProductsList.forEach((p: any) => {
+      if (p && (p.product_name || p.name)) {
+        const pName = String(p.product_name || p.name).trim();
         if (!list.some((item) => item.name.toLowerCase() === pName.toLowerCase())) {
           list.push({
-            id: String(ip.id),
+            id: String(p.id),
             name: pName,
-            standardCost: Number(ip.standard_cost || ip.estimated_unit_cost || 0),
-            description: ip.description || ip.product_description || "",
-          });
-        }
-      }
-    });
-    dbProducts.forEach((dp: any) => {
-      if (dp && dp.product_name) {
-        const pName = String(dp.product_name).trim();
-        if (!list.some((item) => item.name.toLowerCase() === pName.toLowerCase())) {
-          list.push({
-            id: String(dp.id),
-            name: pName,
-            standardCost: Number(dp.standard_cost || dp.estimated_unit_cost || 0),
-            description: dp.product_description || dp.description || "",
+            standardCost: Number(p.standard_cost || p.estimated_unit_cost || p.unit_cost || p.cost || 0),
+            description: p.description || p.product_description || "",
           });
         }
       }
@@ -310,7 +298,7 @@ export default function EditPurchaseRequestPage() {
       }
     });
     return list;
-  }, [invProductsList, dbProducts, customProducts]);
+  }, [projectProductsList, customProducts]);
 
   // Total cost
   const totalCost = useMemo(() => {
@@ -474,19 +462,13 @@ export default function EditPurchaseRequestPage() {
     const linesPayload = validatedItems.map((item) => {
       const cleanId = item.productId || item.id;
       const parsedId = parseInt(cleanId);
+      const matchedProd = projectProductsList.find(
+        (p: any) =>
+          String(p.product_name || p.name || "").toLowerCase() === item.productName.toLowerCase(),
+      );
       const productDbId = !isNaN(parsedId)
         ? parsedId
-        : (invProductsList.find(
-            (p: any) =>
-              String(p.product_name || p.name || "").toLowerCase() === item.productName.toLowerCase(),
-          )?.id ||
-          dbProducts.find(
-            (p) =>
-              String(p.product_name || "").toLowerCase() === item.productName.toLowerCase(),
-          )?.id ||
-          invProductsList[0]?.id ||
-          dbProducts[0]?.id ||
-          1);
+        : (matchedProd?.id || projectProductsList[0]?.id || 1);
 
       const payloadLine: any = {
         product: productDbId,
@@ -743,7 +725,7 @@ export default function EditPurchaseRequestPage() {
                 <SelectContent>
                   {projects.map((p: any) => (
                     <SelectItem key={p.id} value={String(p.id)}>
-                      {p.project_code ? `${p.name} (${p.project_code})` : p.name}
+                      {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -817,7 +799,7 @@ export default function EditPurchaseRequestPage() {
                         >
                           <span className="flex items-center justify-between gap-3 w-full min-w-0">
                             <span className="font-medium text-gray-800 truncate min-w-0">
-                              {ph.code ? `${ph.code} - ${ph.name}` : ph.name}
+                              {ph.name}
                             </span>
                             {phaseBudget !== undefined && phaseBudget !== null && (
                               <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">

@@ -34,7 +34,7 @@ const formSchema = z.object({
   payment_type: z.enum(["lump_sum", "milestone"], {
     message: "Please select a payment type",
   }),
-  payment_terms: z.string().optional(),
+  payment_terms: z.string().min(1, "Payment terms are required"),
   milestones: z.array(milestoneSchema).optional(),
   phase: z.string().min(1, "Please select a phase"),
   task: z.string().min(1, "Please select an activity"),
@@ -201,8 +201,7 @@ export default function NewSubcontractorRequestPage() {
             name: "payment_terms",
             label: "Payment Terms",
             type: "text",
-            placeholder: "Enter payment terms (optional)",
-            hintText: "Optional payment terms or conditions",
+            placeholder: "Enter payment terms",
           },
         ],
       },
@@ -233,7 +232,7 @@ export default function NewSubcontractorRequestPage() {
             name: "justification_notes",
             label: "Note",
             type: "text",
-            placeholder: "Enter note",
+            placeholder: "Enter note (optional)",
           },
         ],
         renderTop: (data: FormValues, extra?: any) => {
@@ -309,10 +308,11 @@ export default function NewSubcontractorRequestPage() {
           scope_of_work: data.scope_of_work,
           payment_type: data.payment_type,
           contract_value: data.contract_value,
-          payment_terms: data.payment_terms || "",
+          payment_terms: data.payment_terms,
           start_date: data.start_date,
           end_date: data.end_date,
-          justification_notes: data.justification_notes || "",
+          justification_notes: data.justification_notes?.trim() || "N/A",
+          notes: data.justification_notes?.trim() || "",
           milestones: data.payment_type === "milestone"
             ? (data.milestones || []).map((m: any) => ({
                 name: m.name,

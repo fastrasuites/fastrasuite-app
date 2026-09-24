@@ -59,16 +59,36 @@ export default function PettyCashRequestDetailPage() {
   const [deleteRequest, { isLoading: isDeleting }] = useDeleteProjectRequestMutation();
   const [submitRequest, { isLoading: isSubmitting }] = useSubmitProjectRequestMutation();
 
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-
-  // Attempt to fetch from ProjectRequest API
-  const { data: apiProjectRequest, isLoading: isProjectLoading } = useGetProjectRequestQuery(numericId, {
-    skip: isNaN(numericId),
-  });
+  const [localStatus, setLocalStatus] = useState<string | null>(null);
 
   // Attempt to fetch from PettyCashRequest API
-  const { data: apiPettyCash, isLoading: isPettyCashLoading } = useGetPettyCashRequestQuery(numericId, {
+  const {
+    data: apiPettyCash,
+    isLoading: isPettyCashLoading,
+    refetch: refetchPettyCash,
+  } = useGetPettyCashRequestQuery(numericId, {
     skip: isNaN(numericId),
+    refetchOnMountOrArgChange: true,
+  });
+
+  const effectiveProjectRequestId = useMemo(() => {
+    const pr = apiPettyCash?.project_request;
+    const prId = typeof pr === "object" ? pr?.id : pr;
+    return Number(
+      prId ||
+      apiPettyCash?.project_request_id ||
+      numericId
+    );
+  }, [apiPettyCash, numericId]);
+
+  // Attempt to fetch from ProjectRequest API
+  const {
+    data: apiProjectRequest,
+    isLoading: isProjectLoading,
+    refetch: refetchProjectRequest,
+  } = useGetProjectRequestQuery(effectiveProjectRequestId, {
+    skip: isNaN(effectiveProjectRequestId) || effectiveProjectRequestId <= 0,
+    refetchOnMountOrArgChange: true,
   });
 
   const apiLoading = isProjectLoading && isPettyCashLoading;
@@ -278,13 +298,24 @@ export default function PettyCashRequestDetailPage() {
       parseFloat(String(typeof rawRequest.project_request === "object" ? rawRequest.project_request?.request_amount ?? "" : "")) ||
       0;
 
-    // Status
-    const rawStatus = (
-      rawRequest.status ||
+    // Status resolution
+    // Canonical workflow status comes from parent project_request (approved, pending, rejected, draft)
+    const parentStatus = (
       (typeof rawRequest.project_request === "object" && rawRequest.project_request?.status) ||
-      apiProjectRequest?.status ||
-      "pending"
-    ).toLowerCase();
+      apiProjectRequest?.status
+    );
+    const itemStatus = rawRequest.status;
+
+    let computedStatus = "pending";
+    if (localStatus) {
+      computedStatus = localStatus;
+    } else if (parentStatus) {
+      computedStatus = parentStatus;
+    } else if (itemStatus) {
+      computedStatus = itemStatus;
+    }
+
+    const rawStatus = computedStatus.toLowerCase();
     const status = rawStatus === "cancelled" ? "rejected" : rawStatus;
 
     // Date
@@ -316,7 +347,7 @@ export default function PettyCashRequestDetailPage() {
       task: resolvedActivity,
       notes: rawRequest.notes || detail.notes || detail.justification_notes || "-",
     };
-  }, [rawRequest, apiProjectRequest, detail, projectId, phaseId, activityId, phaseOptions, activityOptions, projectCosting, projects, id, numericId]);
+  }, [rawRequest, apiProjectRequest, detail, projectId, phaseId, activityId, phaseOptions, activityOptions, projectCosting, projects, id, numericId, localStatus]);
 
   // Compute live available budget without dummy fallback
   const availableBudget = useMemo(() => {
@@ -388,38 +419,62 @@ export default function PettyCashRequestDetailPage() {
     router.push(`/project-request/petty-cash-request/${id}/edit`);
   };
 
-  const effectiveProjectRequestId = useMemo(() => {
-    return (
-      (typeof rawRequest?.project_request === "object" ? rawRequest?.project_request?.id : rawRequest?.project_request) ||
-      rawRequest?.project_request_id ||
-      apiProjectRequest?.id ||
-      numericId
-    );
-  }, [rawRequest, apiProjectRequest, numericId]);
+  const handleRefreshAll = () => {
+    refetchPettyCash();
+    refetchProjectRequest();
+    router.refresh();
+  };
 
-  const handleDelete = async () => {
-    try {
-      await deleteRequest(effectiveProjectRequestId).unwrap();
-      setIsConfirmingDelete(false);
-      statusModal.showSuccess("Request Deleted", "The petty cash request has been deleted.");
-    } catch (err) {
-      statusModal.showError("Delete Failed", extractErrorMessage(err, "Failed to delete the request."));
-    }
+  const handleDelete = () => {
+    statusModal.showConfirm(
+      "Delete Petty Cash Request",
+      "Are you sure you want to delete this petty cash request? This action cannot be undone.",
+      async () => {
+        try {
+          await deleteRequest(effectiveProjectRequestId).unwrap();
+          statusModal.showSuccess(
+            "Request Deleted",
+            "The petty cash request has been deleted successfully.",
+            "Go to Requests",
+            () => {
+              statusModal.close();
+              router.push("/project-request/petty-cash-request");
+            }
+          );
+        } catch (err) {
+          statusModal.showError("Delete Failed", extractErrorMessage(err, "Failed to delete the request."));
+        }
+      }
+    );
   };
 
   const handleSubmit = async () => {
     try {
       await submitRequest({ id: effectiveProjectRequestId }).unwrap();
-      statusModal.showSuccess("Request Submitted", "The petty cash request has been submitted for approval.");
+      setLocalStatus("pending");
+      refetchProjectRequest();
+      refetchPettyCash();
+      statusModal.showSuccess(
+        "Request Submitted",
+        "The petty cash request has been submitted for approval.",
+        "Done",
+        () => {
+          statusModal.close();
+          handleRefreshAll();
+        }
+      );
     } catch (err) {
       statusModal.showError("Submit Failed", extractErrorMessage(err, "Failed to submit the request."));
     }
   };
 
   const handleModalClose = () => {
+    const isDeleted = statusModal.type === "success" && statusModal.title === "Request Deleted";
     statusModal.close();
-    if (statusModal.type === "success" && !isConfirmingDelete) {
+    if (isDeleted) {
       router.push("/project-request/petty-cash-request");
+    } else {
+      handleRefreshAll();
     }
   };
 
@@ -643,63 +698,38 @@ export default function PettyCashRequestDetailPage() {
           {(canEdit || canDelete || canSubmit) && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 p-3.5 z-40 shadow-lg">
               <div className="max-w-[430px] mx-auto flex items-center justify-between gap-3">
-                {isConfirmingDelete ? (
-                  <div className="w-full flex items-center justify-between gap-2 bg-red-50 p-2 rounded-xl border border-red-100">
-                    <span className="text-xs font-semibold text-red-700 flex items-center gap-1.5 pl-1">
-                      <AlertCircle size={16} className="text-red-600" /> Confirm delete?
-                    </span>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setIsConfirmingDelete(false)}
-                        className="h-9 text-xs bg-white border-gray-200 text-gray-700 rounded-lg"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleDelete}
-                        disabled={isDeleting}
-                        className="h-9 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg"
-                      >
-                        {isDeleting ? "Deleting..." : "Delete"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full flex items-center justify-end gap-2.5">
-                    {canDelete && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsConfirmingDelete(true)}
-                        className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
-                      >
-                        <Trash2 size={15} /> Delete
-                      </Button>
-                    )}
+                <div className="w-full flex items-center justify-end gap-2.5">
+                  {canDelete && (
+                    <Button
+                      variant="outline"
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
+                    >
+                      <Trash2 size={15} /> {isDeleting ? "Deleting..." : "Delete"}
+                    </Button>
+                  )}
 
-                    {canEdit && (
-                      <Button
-                        variant="outline"
-                        onClick={handleEdit}
-                        className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
-                      >
-                        <Edit3 size={15} /> Edit
-                      </Button>
-                    )}
+                  {canEdit && (
+                    <Button
+                      variant="outline"
+                      onClick={handleEdit}
+                      className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
+                    >
+                      <Edit3 size={15} /> Edit
+                    </Button>
+                  )}
 
-                    {canSubmit && (
-                      <Button
-                        disabled={isSubmitting}
-                        onClick={handleSubmit}
-                        className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
-                      >
-                        <Send size={14} /> Submit
-                      </Button>
-                    )}
-                  </div>
-                )}
+                  {canSubmit && (
+                    <Button
+                      disabled={isSubmitting}
+                      onClick={handleSubmit}
+                      className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
+                    >
+                      <Send size={14} /> {isSubmitting ? "Submitting..." : "Submit"}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -711,9 +741,11 @@ export default function PettyCashRequestDetailPage() {
             type={statusModal.type}
             title={statusModal.title}
             message={statusModal.message}
-            actionText="Back to List"
-            onAction={handleModalClose}
-            showCloseButton={false}
+            actionText={statusModal.actionText}
+            onAction={statusModal.onAction}
+            secondaryText={statusModal.secondaryText}
+            onSecondary={statusModal.onSecondary}
+            actionVariant={statusModal.actionVariant}
           />
         </div>
       </motion.div>

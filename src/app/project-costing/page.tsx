@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, LayoutGrid, Menu } from "lucide-react";
+import { Search, LayoutGrid, Menu, Lock } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useGetProjectCostingProjectsQuery } from "@/api/projectCostingApi";
@@ -111,7 +111,7 @@ export default function ProjectCostingListPage() {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
 
-  const { canCreateProject, currentProjects, maxProjects, planName } =
+  const { canCreateProject, currentProjects, maxProjects, planName, isProjectAccessible } =
     useSubscriptionLimits();
 
   const {
@@ -167,6 +167,10 @@ export default function ProjectCostingListPage() {
   }, [projects, selectedStatus, search]);
 
   const handleRowClick = (id: number) => {
+    if (!isProjectAccessible(id)) {
+      setIsLimitModalOpen(true);
+      return;
+    }
     router.push(`/project-costing/${id}`);
   };
 
@@ -361,38 +365,50 @@ export default function ProjectCostingListPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredProjects.map((project, index) => (
-                        <TableRow
-                          key={project.id || index}
-                          className="cursor-pointer hover:bg-gray-50/50 border-b border-[#E9ECEF] transition-colors"
-                          onClick={() => handleRowClick(project.id)}
-                        >
-                          <TableCell className="text-[#32325D] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
-                            {project.project_code || "N/A"}
-                          </TableCell>
-                          <TableCell className="text-[#32325D] font-semibold text-sm py-3.5 px-6 whitespace-nowrap">
-                            {project.name || "Untitled Project"}
-                          </TableCell>
-                          <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
-                            {getProjectManager(project)}
-                          </TableCell>
-                          <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
-                            {project.project_type || "Fixed Price"}
-                          </TableCell>
-                          <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
-                            {formatDate(project.start_date)}
-                          </TableCell>
-                          <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
-                            {formatDate(project.expected_end_date)}
-                          </TableCell>
-                          <TableCell className="text-[#32325D] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
-                            {getProjectBudget(project)}
-                          </TableCell>
-                          <TableCell className="py-3.5 px-6 whitespace-nowrap">
-                            {renderStatusBadge(project.status)}
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      filteredProjects.map((project, index) => {
+                        const isAccessible = isProjectAccessible(project.id);
+                        return (
+                          <TableRow
+                            key={project.id || index}
+                            className={`cursor-pointer border-b border-[#E9ECEF] transition-colors ${
+                              isAccessible ? "hover:bg-gray-50/50" : "bg-amber-50/20 hover:bg-amber-50/40 opacity-75"
+                            }`}
+                            onClick={() => handleRowClick(project.id)}
+                          >
+                            <TableCell className="text-[#32325D] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
+                              {project.project_code || "N/A"}
+                            </TableCell>
+                            <TableCell className="text-[#32325D] font-semibold text-sm py-3.5 px-6 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span>{project.name || "Untitled Project"}</span>
+                                {!isAccessible && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                    <Lock className="w-3 h-3" /> Locked
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
+                              {getProjectManager(project)}
+                            </TableCell>
+                            <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
+                              {project.project_type || "Fixed Price"}
+                            </TableCell>
+                            <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
+                              {formatDate(project.start_date)}
+                            </TableCell>
+                            <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
+                              {formatDate(project.expected_end_date)}
+                            </TableCell>
+                            <TableCell className="text-[#32325D] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
+                              {getProjectBudget(project)}
+                            </TableCell>
+                            <TableCell className="py-3.5 px-6 whitespace-nowrap">
+                              {renderStatusBadge(project.status)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -456,55 +472,69 @@ export default function ProjectCostingListPage() {
                 />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredProjects.map((project, index) => (
-                    <div
-                      key={project.id || index}
-                      onClick={() => handleRowClick(project.id)}
-                      className="bg-white rounded-xl border border-gray-200/80 p-5 shadow-2xs hover:shadow-md hover:border-blue-200/80 transition-all duration-200 flex flex-col justify-between cursor-pointer group"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-md tracking-wide">
-                            {project.project_code || "N/A"}
-                          </span>
-                          {renderStatusBadge(project.status)}
+                  {filteredProjects.map((project, index) => {
+                    const isAccessible = isProjectAccessible(project.id);
+                    return (
+                      <div
+                        key={project.id || index}
+                        onClick={() => handleRowClick(project.id)}
+                        className={`rounded-xl border p-5 shadow-2xs transition-all duration-200 flex flex-col justify-between cursor-pointer group ${
+                          isAccessible
+                            ? "bg-white border-gray-200/80 hover:shadow-md hover:border-blue-200/80"
+                            : "bg-amber-50/30 border-amber-200/80 opacity-75 hover:border-amber-300"
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-md tracking-wide">
+                              {project.project_code || "N/A"}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {!isAccessible && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <Lock className="w-3 h-3" /> Locked
+                                </span>
+                              )}
+                              {renderStatusBadge(project.status)}
+                            </div>
+                          </div>
+                          <h3 className="text-base font-bold text-gray-900 group-hover:text-[#3B7CED] transition-colors line-clamp-1 mb-1">
+                            {project.name || "Untitled Project"}
+                          </h3>
+                          <p className="text-xs text-gray-500 font-medium">
+                            {project.project_type || "Fixed Price"}
+                          </p>
                         </div>
-                        <h3 className="text-base font-bold text-gray-900 group-hover:text-[#3B7CED] transition-colors line-clamp-1 mb-1">
-                          {project.name || "Untitled Project"}
-                        </h3>
-                        <p className="text-xs text-gray-500 font-medium">
-                          {project.project_type || "Fixed Price"}
-                        </p>
-                      </div>
 
-                      <div className="border-t border-gray-100 my-4 pt-3 flex items-center justify-between text-xs">
-                        <div>
-                          <span className="text-[11px] text-gray-400 font-medium block uppercase tracking-wider">
-                            Start Date
-                          </span>
-                          <span className="font-medium text-gray-700 mt-0.5 block">
-                            {formatDate(project.start_date)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[11px] text-gray-400 font-medium block uppercase tracking-wider">
-                            Manager
-                          </span>
-                          <span className="font-medium text-gray-700 mt-0.5 block">
-                            {getProjectManager(project)}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-[11px] text-gray-400 font-medium block uppercase tracking-wider">
-                            Budget
-                          </span>
-                          <span className="font-bold text-gray-900 text-sm mt-0.5 block">
-                            {getProjectBudget(project)}
-                          </span>
+                        <div className="border-t border-gray-100 my-4 pt-3 flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-[11px] text-gray-400 font-medium block uppercase tracking-wider">
+                              Start Date
+                            </span>
+                            <span className="font-medium text-gray-700 mt-0.5 block">
+                              {formatDate(project.start_date)}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-gray-400 font-medium block uppercase tracking-wider">
+                              Manager
+                            </span>
+                            <span className="font-medium text-gray-700 mt-0.5 block">
+                              {getProjectManager(project)}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[11px] text-gray-400 font-medium block uppercase tracking-wider">
+                              Budget
+                            </span>
+                            <span className="font-bold text-gray-900 text-sm mt-0.5 block">
+                              {getProjectBudget(project)}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

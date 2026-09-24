@@ -64,6 +64,7 @@ export interface RequestFormConfig<T extends Record<string, any>> {
   sections: {
     title?: string;
     fields: RequestFormField[];
+    hideCostSummary?: boolean;
     renderTop?: (data: T, extra?: any) => React.ReactNode;
     renderBottom?: (data: T, extra?: any) => React.ReactNode;
   }[];

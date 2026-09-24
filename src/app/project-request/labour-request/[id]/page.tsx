@@ -44,8 +44,6 @@ export default function LabourRequestDetailPage() {
   const [deleteRequest, { isLoading: isDeleting }] = useDeleteLabourRequestMutation();
   const [submitRequest, { isLoading: isSubmitting }] = useSubmitLabourRequestMutation();
 
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-
   // Normalize request in case response is wrapped in an array
   const reqObj: any = (Array.isArray(request) ? request[0] : request) || {};
   const detail: any = useMemo(() => {
@@ -167,22 +165,39 @@ export default function LabourRequestDetailPage() {
     router.push(`/project-request/labour-request/edit/${id}`);
   };
 
-  const handleDelete = async () => {
-    try {
-      const deleteId = detail?.id || reqObj?.id || id;
-      await deleteRequest(deleteId).unwrap();
-      setIsConfirmingDelete(false);
-      statusModal.showSuccess(
-        "Request Deleted",
-        "The labour request has been deleted successfully."
-      );
-    } catch (err) {
-      console.error("Failed to delete request:", err);
-      statusModal.showError(
-        "Error",
-        extractErrorMessage(err, "Failed to delete the request. Please try again.")
-      );
-    }
+  const handleDelete = () => {
+    statusModal.showConfirm(
+      "Delete Labour Request",
+      "Are you sure you want to delete this labour request? This action cannot be undone.",
+      async () => {
+        try {
+          const deleteId =
+            reqObj?.id ||
+            projectRequest?.id ||
+            (typeof reqObj?.project_request === "object"
+              ? reqObj?.project_request?.id
+              : reqObj?.project_request) ||
+            (reqObj as any)?.project_request_id ||
+            id;
+          await deleteRequest(Number(deleteId)).unwrap();
+          statusModal.showSuccess(
+            "Request Deleted",
+            "The labour request has been deleted successfully.",
+            "Go to Requests",
+            () => {
+              statusModal.close();
+              router.push("/project-request/labour-request");
+            }
+          );
+        } catch (err) {
+          console.error("Failed to delete request:", err);
+          statusModal.showError(
+            "Delete Failed",
+            extractErrorMessage(err, "Failed to delete the request. Please try again.")
+          );
+        }
+      }
+    );
   };
 
   const handleSubmit = async () => {
@@ -204,8 +219,9 @@ export default function LabourRequestDetailPage() {
   };
 
   const handleModalClose = () => {
+    const isDeleted = statusModal.type === "success" && statusModal.title === "Request Deleted";
     statusModal.close();
-    if (statusModal.type === "success" && !isConfirmingDelete) {
+    if (isDeleted) {
       router.push("/project-request/labour-request");
     }
   };
@@ -586,63 +602,38 @@ export default function LabourRequestDetailPage() {
           {(canEdit || canDelete || canSubmit) && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 p-3.5 z-40 shadow-lg">
               <div className="max-w-[430px] mx-auto flex items-center justify-between gap-3">
-                {isConfirmingDelete ? (
-                  <div className="w-full flex items-center justify-between gap-2 bg-red-50 p-2 rounded-xl border border-red-100">
-                    <span className="text-xs font-semibold text-red-700 flex items-center gap-1.5 pl-1">
-                      <AlertCircle size={16} className="text-red-600" /> Confirm delete?
-                    </span>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setIsConfirmingDelete(false)}
-                        className="h-9 text-xs bg-white border-gray-200 text-gray-700 rounded-lg"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleDelete}
-                        disabled={isDeleting}
-                        className="h-9 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg"
-                      >
-                        {isDeleting ? "Deleting..." : "Delete"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full flex items-center justify-end gap-2.5">
-                    {canDelete && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsConfirmingDelete(true)}
-                        className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
-                      >
-                        <Trash2 size={15} /> Delete
-                      </Button>
-                    )}
+                <div className="w-full flex items-center justify-end gap-2.5">
+                  {canDelete && (
+                    <Button
+                      variant="outline"
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
+                    >
+                      <Trash2 size={15} /> {isDeleting ? "Deleting..." : "Delete"}
+                    </Button>
+                  )}
 
-                    {canEdit && (
-                      <Button
-                        variant="outline"
-                        onClick={handleEdit}
-                        className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
-                      >
-                        <Edit3 size={15} /> Edit
-                      </Button>
-                    )}
+                  {canEdit && (
+                    <Button
+                      variant="outline"
+                      onClick={handleEdit}
+                      className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
+                    >
+                      <Edit3 size={15} /> Edit
+                    </Button>
+                  )}
 
-                    {canSubmit && (
-                      <Button
-                        disabled={isSubmitting}
-                        onClick={handleSubmit}
-                        className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
-                      >
-                        <Send size={14} /> Submit
-                      </Button>
-                    )}
-                  </div>
-                )}
+                  {canSubmit && (
+                    <Button
+                      disabled={isSubmitting}
+                      onClick={handleSubmit}
+                      className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
+                    >
+                      <Send size={14} /> Submit
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -654,9 +645,11 @@ export default function LabourRequestDetailPage() {
             type={statusModal.type}
             title={statusModal.title}
             message={statusModal.message}
-            actionText="Back to List"
-            onAction={handleModalClose}
-            showCloseButton={false}
+            actionText={statusModal.actionText}
+            onAction={statusModal.onAction}
+            secondaryText={statusModal.secondaryText}
+            onSecondary={statusModal.onSecondary}
+            actionVariant={statusModal.actionVariant}
           />
         </div>
       </motion.div>

@@ -18,13 +18,13 @@ export default function MakeRequestPage() {
       titleColor: "text-green-600",
     },
     {
-      title: "Labour Request",
-      description: "Request for additional human resources (workers, contractors)",
-      icon: Package,
-      href: "/project-request/labour-request",
-      iconColor: "text-[#3B7CED]",
-      borderColor: "border-blue-200",
-      titleColor: "text-[#3B7CED]",
+      title: "Material Consumption Request",
+      description: "Record of materials consumed from inventory on-site",
+      icon: Wallet,
+      href: "/project-request/material-consumption-request",
+      iconColor: "text-yellow-500",
+      borderColor: "border-yellow-200",
+      titleColor: "text-yellow-500",
     },
     {
       title: "Petty Cash Request",
@@ -34,6 +34,15 @@ export default function MakeRequestPage() {
       iconColor: "text-yellow-500",
       borderColor: "border-yellow-200",
       titleColor: "text-yellow-500",
+    },
+    {
+      title: "Labour Request",
+      description: "Request for additional human resources (workers, contractors)",
+      icon: Package,
+      href: "/project-request/labour-request",
+      iconColor: "text-[#3B7CED]",
+      borderColor: "border-blue-200",
+      titleColor: "text-[#3B7CED]",
     },
     {
       title: "Subcontractor Request",
@@ -47,20 +56,11 @@ export default function MakeRequestPage() {
     {
       title: "Plant & Equipment Request",
       description: "Request for machinery, tools, or equipment needed on-site",
-      icon: Settings, // Alternative to Calculator for variety
+      icon: Settings,
       href: "/project-request/plant-equipment-request",
       iconColor: "text-[#3B7CED]",
       borderColor: "border-blue-200",
       titleColor: "text-[#3B7CED]",
-    },
-    {
-      title: "Material Consumption Request",
-      description: "Record of materials consumed from inventory on-site",
-      icon: Wallet, // Alternative to Wallet for variety
-      href: "/project-request/material-consumption-request",
-      iconColor: "text-yellow-500",
-      borderColor: "border-yellow-200",
-      titleColor: "text-yellow-500",
     },
   ];
 

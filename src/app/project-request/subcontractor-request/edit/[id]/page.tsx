@@ -11,6 +11,7 @@ import {
   useUpdateSubcontractorRequestMutation 
 } from "@/api/subcontractorRequestApi";
 import { useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
+import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useParams, useRouter } from "next/navigation";
 import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
@@ -35,7 +36,7 @@ const formSchema = z.object({
   payment_type: z.enum(["lump_sum", "milestone"], {
     message: "Please select a payment type",
   }),
-  payment_terms: z.string().optional(),
+  payment_terms: z.string().min(1, "Payment terms are required"),
   milestones: z.array(milestoneSchema).optional(),
   phase: z.string().min(1, "Please select a phase"),
   task: z.string().min(1, "Please select an activity"),
@@ -78,41 +79,273 @@ export default function EditSubcontractorRequestPage() {
   const { data: vendors = [], isLoading: isLoadingVendors } = useGetActiveVendorsQuery();
   const loggedInUserName = useCurrentUserName();
 
+  const detail = useMemo(() => (request as any)?.detail || (request as any) || {}, [request]);
+  const projectRequest = useMemo(() => (request as any)?.project_request || (request as any) || {}, [request]);
+
+  const rawProjectId =
+    detail?.project_details?.id ??
+    detail?.project?.id ??
+    detail?.project ??
+    (request as any)?.project_details?.id ??
+    (request as any)?.project?.id ??
+    (request as any)?.project ??
+    projectRequest?.project_details?.id ??
+    projectRequest?.project;
+  const projectIdStr = rawProjectId !== undefined && rawProjectId !== null ? String(rawProjectId) : "";
+
+  const { data: projectCosting } = useGetProjectCostingProjectQuery(
+    Number(projectIdStr),
+    { skip: !projectIdStr || isNaN(Number(projectIdStr)) }
+  );
+
+  const rawTaskId =
+    detail?.activity_details?.id ??
+    detail?.activity?.id ??
+    detail?.activity ??
+    detail?.activity_id ??
+    detail?.task?.id ??
+    detail?.task ??
+    detail?.task_id ??
+    (request as any)?.activity_details?.id ??
+    (request as any)?.activity?.id ??
+    (request as any)?.activity ??
+    (request as any)?.activity_id;
+  const taskIdStr = rawTaskId !== undefined && rawTaskId !== null ? String(rawTaskId) : "";
+
+  const resolvedPhaseId = useMemo(() => {
+    const rawPhase =
+      detail?.phase_details?.id ??
+      detail?.phase?.id ??
+      detail?.phase ??
+      detail?.phase_id ??
+      (request as any)?.phase_details?.id ??
+      (request as any)?.phase?.id ??
+      (request as any)?.phase ??
+      (request as any)?.phase_id;
+
+    if (rawPhase !== undefined && rawPhase !== null && String(rawPhase).trim() !== "") {
+      return String(rawPhase);
+    }
+
+    if (projectCosting && taskIdStr) {
+      const phasesArr = Array.isArray(projectCosting.phases)
+        ? projectCosting.phases
+        : Array.isArray((projectCosting as any).phase_list)
+        ? (projectCosting as any).phase_list
+        : [];
+      for (const ph of phasesArr) {
+        const acts = Array.isArray(ph.activities)
+          ? ph.activities
+          : Array.isArray(ph.activity_list)
+          ? ph.activity_list
+          : [];
+        if (acts.some((a: any) => String(a.id || a.activity_id) === String(taskIdStr))) {
+          return String(ph.id);
+        }
+      }
+    }
+    return "";
+  }, [detail, request, projectCosting, taskIdStr]);
+
+  const rawBudget = (request as any)?.available_budget ?? detail?.available_budget;
+  const reqBudget = (rawBudget !== undefined && rawBudget !== null && rawBudget !== "") ? Number(rawBudget) : 0;
+
+  const budgetFromCosting = useMemo(() => {
+    if (!projectCosting) return 0;
+    if (taskIdStr) {
+      const phasesArr = Array.isArray(projectCosting.phases)
+        ? projectCosting.phases
+        : Array.isArray((projectCosting as any).phase_list)
+        ? (projectCosting as any).phase_list
+        : [];
+
+      for (const ph of phasesArr) {
+        const acts = Array.isArray(ph.activities)
+          ? ph.activities
+          : Array.isArray(ph.activity_list)
+          ? ph.activity_list
+          : [];
+        const act = acts.find((a: any) => String(a.id || a.activity_id) === String(taskIdStr));
+        if (act) {
+          if (act.available_budget !== undefined && act.available_budget !== null)
+            return Number(act.available_budget);
+          if (act.remaining_budget !== undefined && act.remaining_budget !== null)
+            return Number(act.remaining_budget);
+          if (act.amount !== undefined && act.amount !== null) return Number(act.amount);
+        }
+      }
+    }
+
+    if (projectCosting?.financials) {
+      if (
+        projectCosting.financials.remaining_budget !== undefined &&
+        projectCosting.financials.remaining_budget !== null
+      )
+        return Number(projectCosting.financials.remaining_budget);
+      if (
+        projectCosting.financials.budget !== undefined &&
+        projectCosting.financials.budget !== null
+      )
+        return Number(projectCosting.financials.budget);
+    }
+    return 0;
+  }, [projectCosting, taskIdStr]);
+
+  const defaultAvailableBudget = reqBudget > 0 ? reqBudget : budgetFromCosting;
+
+  const projectName =
+    detail?.project_details?.name ||
+    (request as any)?.project_details?.name ||
+    projectRequest?.project_details?.name ||
+    projectCosting?.name ||
+    (projectIdStr ? `Project #${projectIdStr}` : "");
+
+  const projectOptions = useMemo(() => {
+    if (projectIdStr) {
+      return [{ label: projectName || `Project #${projectIdStr}`, value: projectIdStr }];
+    }
+    return [];
+  }, [projectIdStr, projectName]);
+
+  const rawVendorId =
+    detail?.vendor_details?.id ??
+    detail?.vendor?.id ??
+    detail?.vendor ??
+    (request as any)?.vendor_details?.id ??
+    (request as any)?.vendor?.id ??
+    (request as any)?.vendor ??
+    (request as any)?.vendor_id ??
+    detail?.vendor_id;
+  const vendorIdStr = rawVendorId !== undefined && rawVendorId !== null ? String(rawVendorId) : "";
+
+  const existingVendorName =
+    detail?.vendor_details?.vendor_name ||
+    detail?.vendor_name ||
+    (request as any)?.vendor_details?.vendor_name ||
+    (request as any)?.vendor_name ||
+    (vendorIdStr ? `Vendor #${vendorIdStr}` : "");
+
   const vendorOptions = useMemo(() => {
-    return vendors.map((vendor) => ({
+    const opts = vendors.map((vendor) => ({
       label: vendor.vendor_name,
       value: String(vendor.id),
     }));
-  }, [vendors]);
+    if (vendorIdStr && !opts.some((o) => o.value === vendorIdStr)) {
+      opts.unshift({
+        label: existingVendorName || `Vendor #${vendorIdStr}`,
+        value: vendorIdStr,
+      });
+    }
+    return opts;
+  }, [vendors, vendorIdStr, existingVendorName]);
+
+  const phaseName = useMemo(() => {
+    if (detail?.phase_details?.name) return detail.phase_details.name;
+    if (detail?.phase_name) return detail.phase_name;
+    if ((request as any)?.phase_details?.name) return (request as any).phase_details.name;
+    if ((request as any)?.phase_name) return (request as any).phase_name;
+    if (projectCosting && resolvedPhaseId) {
+      const phasesArr = Array.isArray(projectCosting.phases)
+        ? projectCosting.phases
+        : Array.isArray((projectCosting as any).phase_list)
+        ? (projectCosting as any).phase_list
+        : [];
+      const found = phasesArr.find((p: any) => String(p.id) === String(resolvedPhaseId));
+      if (found) return found.name || found.phase_name || "";
+    }
+    return resolvedPhaseId ? `Phase ${resolvedPhaseId}` : "";
+  }, [detail, request, projectCosting, resolvedPhaseId]);
+
+  const phaseOptions = useMemo(() => {
+    if (resolvedPhaseId) {
+      return [{ label: phaseName || `Phase ${resolvedPhaseId}`, value: resolvedPhaseId }];
+    }
+    return [];
+  }, [resolvedPhaseId, phaseName]);
+
+  const taskName = useMemo(() => {
+    if (detail?.activity_details?.name) {
+      const sn = detail.activity_details.serial_number;
+      return sn !== undefined && sn !== null ? `${sn} - ${detail.activity_details.name}` : detail.activity_details.name;
+    }
+    if (detail?.task_name) return detail.task_name;
+    if ((request as any)?.activity_details?.name) {
+      const sn = (request as any).activity_details.serial_number;
+      return sn !== undefined && sn !== null ? `${sn} - ${(request as any).activity_details.name}` : (request as any).activity_details.name;
+    }
+    if ((request as any)?.task_name) return (request as any).task_name;
+    if (projectCosting && taskIdStr) {
+      const phasesArr = Array.isArray(projectCosting.phases)
+        ? projectCosting.phases
+        : Array.isArray((projectCosting as any).phase_list)
+        ? (projectCosting as any).phase_list
+        : [];
+      for (const ph of phasesArr) {
+        const acts = Array.isArray(ph.activities)
+          ? ph.activities
+          : Array.isArray(ph.activity_list)
+          ? ph.activity_list
+          : [];
+        const act = acts.find((a: any) => String(a.id || a.activity_id) === String(taskIdStr));
+        if (act) {
+          const sn = act.serial_number;
+          const name = act.name || act.activity_name || "Activity";
+          return sn !== undefined && sn !== null ? `${sn} - ${name}` : name;
+        }
+      }
+    }
+    return taskIdStr ? `Activity ${taskIdStr}` : "";
+  }, [detail, request, projectCosting, taskIdStr]);
+
+  const taskOptions = useMemo(() => {
+    if (taskIdStr) {
+      return [
+        {
+          label: taskName || `Activity ${taskIdStr}`,
+          value: taskIdStr,
+          amount: defaultAvailableBudget,
+        },
+      ];
+    }
+    return [];
+  }, [taskIdStr, taskName, defaultAvailableBudget]);
+
+  const rawCreatedAt =
+    (request as any)?.created_at ||
+    detail?.created_at ||
+    projectRequest?.created_at;
 
   const requestDate = useMemo(() => {
-    if (!request?.created_at) return "";
-    return new Date(request.created_at).toLocaleDateString("en-GB", {
+    if (!rawCreatedAt) return "";
+    return new Date(rawCreatedAt).toLocaleDateString("en-GB", {
       day: "numeric",
       month: "short",
       year: "numeric",
     });
-  }, [request?.created_at]);
+  }, [rawCreatedAt]);
 
-  if (isLoadingRequest || !request) {
-    return (
-      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-8 h-8 text-[#3B7CED] animate-spin" />
-        <p className="text-sm font-semibold text-gray-500">Loading request...</p>
-      </div>
-    );
-  }
+  const requesterName =
+    (request as any)?.created_by_details?.first_name &&
+    (request as any)?.created_by_details?.last_name
+      ? `${(request as any).created_by_details.first_name} ${(request as any).created_by_details.last_name}`.trim()
+      : (request as any)?.created_by_details?.first_name ||
+        detail?.created_by_details?.first_name ||
+        projectRequest?.created_by_details?.first_name ||
+        detail?.created_by_name ||
+        (request as any)?.created_by_name ||
+        loggedInUserName ||
+        "Requester";
 
   const requestId =
     ((request as any)?.reference_id && String((request as any).reference_id).trim()) ||
-    ((request as any)?.detail?.reference_id && String((request as any).detail.reference_id).trim()) ||
-    ((request as any)?.project_request?.reference_id && String((request as any).project_request.reference_id).trim()) ||
-    `SUB${String(request.id).padStart(4, "0")}`;
+    (detail?.reference_id && String(detail.reference_id).trim()) ||
+    (projectRequest?.reference_id && String(projectRequest.reference_id).trim()) ||
+    (request ? `SUB${String(request.id).padStart(4, "0")}` : "SUB0001");
 
-  const config: RequestFormConfig<FormValues> = {
+  const config: RequestFormConfig<FormValues> = useMemo(() => ({
     title: "Edit Subcontractor Request",
     requestId: requestId,
-    requesterName: loggedInUserName,
+    requesterName: requesterName,
     date: requestDate,
     renderHeader: () => (
       <div className="bg-white px-4 py-6">
@@ -128,7 +361,7 @@ export default function EditSubcontractorRequestPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="requestedBy" className="text-sm font-semibold text-gray-900">Requested by</Label>
-            <Input id="requestedBy" value={loggedInUserName} readOnly className="bg-white text-gray-900" />
+            <Input id="requestedBy" value={requesterName} readOnly className="bg-white text-gray-900" />
           </div>
         </div>
       </div>
@@ -142,13 +375,13 @@ export default function EditSubcontractorRequestPage() {
             label: "Project",
             type: "select",
             placeholder: "Select a project",
-            options: [],
+            options: projectOptions,
           },
           {
             name: "vendor",
             label: "Subcontractor Name",
             type: "select",
-            placeholder: isLoadingVendors ? "Loading subcontractors..." : "Enter name",
+            placeholder: isLoadingVendors ? "Loading subcontractors..." : "Select subcontractor",
             options: vendorOptions,
           },
           {
@@ -202,8 +435,7 @@ export default function EditSubcontractorRequestPage() {
             name: "payment_terms",
             label: "Payment Terms",
             type: "text",
-            placeholder: "Enter payment terms (optional)",
-            hintText: "Optional payment terms or conditions",
+            placeholder: "Enter payment terms",
           },
         ],
       },
@@ -216,7 +448,7 @@ export default function EditSubcontractorRequestPage() {
             type: "select",
             placeholder: "Select a phase",
             dependsOn: "project",
-            options: [],
+            options: phaseOptions,
           },
           {
             name: "task",
@@ -224,7 +456,7 @@ export default function EditSubcontractorRequestPage() {
             type: "select",
             placeholder: "Select an activity",
             dependsOn: "phase",
-            options: [],
+            options: taskOptions,
           },
         ],
       },
@@ -234,18 +466,27 @@ export default function EditSubcontractorRequestPage() {
             name: "justification_notes",
             label: "Note",
             type: "text",
-            placeholder: "Enter note",
+            placeholder: "Enter note (optional)",
           },
         ],
         renderTop: (data: FormValues, extra?: any) => {
-          const availBudget = extra?.availableBudget || 0;
+          const isSameTask = String(data.task || "") === String(taskIdStr || "");
+          const availBudget =
+            extra?.availableBudget && Number(extra.availableBudget) > 0
+              ? Number(extra.availableBudget)
+              : isSameTask
+              ? defaultAvailableBudget
+              : extra?.availableBudget !== undefined
+              ? Number(extra.availableBudget)
+              : 0;
+
           return (
             <div className="pb-4 mb-4 border-b border-gray-200 space-y-2">
-              {availBudget > 0 && (
+              {(availBudget > 0 || Boolean(data.task)) && (
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold text-gray-900">Available Budget</span>
                   <span className="text-sm font-semibold text-black/80">
-                    ₦{Number(availBudget).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₦{Number(availBudget || 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               )}
@@ -262,25 +503,54 @@ export default function EditSubcontractorRequestPage() {
     ],
     schema: formSchema,
     defaultValues: {
-      project: String((request as any).project_details?.id || (request as any).project || ""),
-      vendor: String((request as any).vendor || ""),
-      scope_of_work: (request as any).scope_of_work || "",
-      start_date: (request as any).start_date || "",
-      end_date: (request as any).end_date || "",
-      contract_value: String((request as any).contract_value || ""),
-      payment_type: ((request as any).payment_type as any) || "lump_sum",
-      payment_terms: (request as any).payment_terms || "",
-      milestones: (request as any).milestones || [],
-      phase:
-        (request as any)?.detail?.phase_details?.id?.toString() ||
-        (request as any)?.phase?.toString() ||
+      project: projectIdStr,
+      vendor: vendorIdStr,
+      scope_of_work:
+        detail.scope_of_work ??
+        detail.service_type ??
+        (request as any)?.scope_of_work ??
+        (request as any)?.service_type ??
         "",
-      task:
-        (request as any)?.activity?.toString() ||
-        (request as any)?.detail?.activity_details?.id?.toString() ||
-        (request as any)?.activity?.toString() ||
+      start_date: detail.start_date
+        ? String(detail.start_date).split("T")[0]
+        : (request as any)?.start_date
+        ? String((request as any).start_date).split("T")[0]
+        : "",
+      end_date: detail.end_date
+        ? String(detail.end_date).split("T")[0]
+        : (request as any)?.end_date
+        ? String((request as any).end_date).split("T")[0]
+        : "",
+      contract_value: String(
+        detail.contract_value ??
+        detail.estimated_cost ??
+        detail.amount ??
+        (request as any)?.contract_value ??
+        projectRequest?.request_amount ??
+        (request as any)?.request_amount ??
+        ""
+      ),
+      payment_type:
+        detail.payment_type === "milestone" ||
+        detail.payment_type === "milestone_based" ||
+        (request as any)?.payment_type === "milestone" ||
+        (request as any)?.payment_type === "milestone_based"
+          ? "milestone"
+          : "lump_sum",
+      payment_terms: detail.payment_terms ?? (request as any)?.payment_terms ?? "",
+      milestones: Array.isArray(detail.milestones)
+        ? detail.milestones
+        : Array.isArray((request as any)?.milestones)
+        ? (request as any).milestones
+        : [],
+      phase: resolvedPhaseId,
+      task: taskIdStr,
+      justification_notes:
+        detail.justification_notes ??
+        detail.notes ??
+        (request as any)?.justification_notes ??
+        (request as any)?.notes ??
         "",
-      justification_notes: (request as any).justification_notes || "",
     },
     calculateProjectedCost: (data: FormValues) => {
       return Number(data.contract_value || 0);
@@ -290,6 +560,7 @@ export default function EditSubcontractorRequestPage() {
       wbsField: "task",
       costCode: "SUB-001",
     },
+    defaultBudget: defaultAvailableBudget,
     onSubmit: async (data) => {
       try {
         const ensureValidUUID = (val: string): string => {
@@ -311,10 +582,11 @@ export default function EditSubcontractorRequestPage() {
           scope_of_work: data.scope_of_work,
           payment_type: data.payment_type,
           contract_value: data.contract_value,
-          payment_terms: data.payment_terms || "",
+          payment_terms: data.payment_terms,
           start_date: data.start_date,
           end_date: data.end_date,
-          justification_notes: data.justification_notes || "",
+          justification_notes: data.justification_notes?.trim() || "N/A",
+          notes: data.justification_notes?.trim() || "",
           milestones: data.payment_type === "milestone"
             ? (data.milestones || []).map((m: any) => ({
                 name: m.name,
@@ -325,7 +597,8 @@ export default function EditSubcontractorRequestPage() {
             : [],
         };
 
-        await updateRequest({ id, body: payload }).unwrap();
+        const targetId = (request as any)?.id || id;
+        await updateRequest({ id: targetId, body: payload }).unwrap();
       } catch (error) {
         console.error("Failed to update subcontractor request:", error);
         throw error;
@@ -340,7 +613,35 @@ export default function EditSubcontractorRequestPage() {
       description: "Your request update was unsuccessful. Please check your data and try again.",
     },
     backPath: `/project-request/subcontractor-request/${id}`,
-  };
+  }), [
+    requestId,
+    requesterName,
+    requestDate,
+    projectOptions,
+    isLoadingVendors,
+    vendorOptions,
+    phaseOptions,
+    taskOptions,
+    taskIdStr,
+    defaultAvailableBudget,
+    projectIdStr,
+    vendorIdStr,
+    detail,
+    request,
+    projectRequest,
+    resolvedPhaseId,
+    id,
+    updateRequest,
+  ]);
+
+  if (isLoadingRequest || !request) {
+    return (
+      <div className="min-h-screen bg-[#F9FAFB] flex flex-col items-center justify-center gap-3">
+        <Loader2 className="w-8 h-8 text-[#3B7CED] animate-spin" />
+        <p className="text-sm font-semibold text-gray-500">Loading request...</p>
+      </div>
+    );
+  }
 
   return (
     <PageGuard module="project_request" entitlement="edit">

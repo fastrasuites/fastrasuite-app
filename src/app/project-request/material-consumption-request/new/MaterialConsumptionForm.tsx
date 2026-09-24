@@ -48,7 +48,6 @@ import {
   useGetPhaseOptionsQuery,
   useGetActivityOptionsQuery,
 } from "@/api/requests/projectRequestApi";
-import { useGetAvailableBudgetQuery } from "@/api/projectApi";
 import { useGetActiveLocationsFilteredQuery } from "@/api/inventory/locationApi";
 import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -260,42 +259,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
     prevPhaseRef.current = phaseId;
   }, [phaseId, form]);
 
-  const { data: budgetData } = useGetAvailableBudgetQuery(
-    {
-      project_id: Number(projectId),
-      wbs_id: wbsElement,
-      cost_code: "CC-04",
-    },
-    { skip: !projectId || !wbsElement }
-  );
 
-  const availableBudget = useMemo(() => {
-    const selectedAct = activities.find((a: any) => String(a.id) === String(wbsElement));
-    if (selectedAct) {
-      if (selectedAct.available_budget !== undefined && selectedAct.available_budget !== null) {
-        return Number(selectedAct.available_budget);
-      }
-      if (selectedAct.current_budget !== undefined && selectedAct.current_budget !== null) {
-        return Number(selectedAct.current_budget);
-      }
-      if (selectedAct.original_amount !== undefined && selectedAct.original_amount !== null) {
-        return Number(selectedAct.original_amount);
-      }
-    }
-    const selectedPh = phases.find((p: any) => String(p.id) === String(phaseId));
-    if (selectedPh) {
-      if (selectedPh.current_budget !== undefined && selectedPh.current_budget !== null) {
-        return Number(selectedPh.current_budget);
-      }
-      if (selectedPh.original_amount !== undefined && selectedPh.original_amount !== null) {
-        return Number(selectedPh.original_amount);
-      }
-    }
-    if (budgetData?.available_budget !== undefined && Number(budgetData.available_budget) > 0) {
-      return Number(budgetData.available_budget);
-    }
-    return 0;
-  }, [activities, wbsElement, phases, phaseId, budgetData]);
 
   const hasInitialized = React.useRef(false);
   // Effect to initialise form values when request data is loaded
@@ -510,7 +474,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           <option value="" disabled>{isLoadingProjects ? "Loading projects..." : "Select active project"}</option>
                           {projects.map((p: any) => (
                             <option key={p.id} value={String(p.id)}>
-                              {p.project_code ? `${p.name} (${p.project_code})` : p.name}
+                              {p.name}
                             </option>
                           ))}
                         </NativeSelect>
@@ -530,7 +494,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                         <SelectContent>
                           {projects.map((p: any) => (
                             <SelectItem key={p.id} value={String(p.id)}>
-                              {p.project_code ? `${p.name} (${p.project_code})` : p.name}
+                              {p.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -627,7 +591,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           <option value="" disabled>{!projectId ? "Select a project first" : "Select a phase"}</option>
                           {phases.map((p) => (
                             <option key={p.id} value={String(p.id)}>
-                              {p.code ? `${p.code} - ${p.name}` : p.name}
+                              {p.name}
                             </option>
                           ))}
                         </NativeSelect>
@@ -645,29 +609,17 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent className="max-h-72">
-                          {phases.map((p: any) => {
-                            const phaseBudget = p.current_budget ?? p.original_amount;
-                            return (
-                              <SelectItem
-                                key={p.id}
-                                value={String(p.id)}
-                                className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
-                              >
-                                <span className="flex items-center justify-between gap-3 w-full min-w-0">
-                                  <span className="font-medium text-gray-800 truncate min-w-0">
-                                    {p.code ? `${p.code} - ${p.name}` : p.name}
-                                  </span>
-                                  {phaseBudget !== undefined && phaseBudget !== null && (
-                                    <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                                      ₦{Number(phaseBudget).toLocaleString("en-NG", {
-                                        minimumFractionDigits: 2,
-                                      })}
-                                    </span>
-                                  )}
-                                </span>
-                              </SelectItem>
-                            );
-                          })}
+                          {phases.map((p: any) => (
+                            <SelectItem
+                              key={p.id}
+                              value={String(p.id)}
+                              className="py-2.5 cursor-pointer"
+                            >
+                              <span className="font-medium text-gray-800 truncate">
+                                {p.name}
+                              </span>
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -709,31 +661,19 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent className="max-h-72">
-                          {activities.map((a: any) => {
-                            const actBudget = a.available_budget ?? a.current_budget ?? a.original_amount;
-                            return (
-                              <SelectItem
-                                key={a.id}
-                                value={String(a.id)}
-                                className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
-                              >
-                                <span className="flex items-center justify-between gap-3 w-full min-w-0">
-                                  <span className="font-medium text-gray-800 truncate min-w-0">
-                                    {a.serial_number !== undefined && a.serial_number !== null
-                                      ? `${a.serial_number} - ${a.name}`
-                                      : a.name}
-                                  </span>
-                                  {actBudget !== undefined && actBudget !== null && (
-                                    <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                                      ₦{Number(actBudget).toLocaleString("en-NG", {
-                                        minimumFractionDigits: 2,
-                                      })}
-                                    </span>
-                                  )}
-                                </span>
-                              </SelectItem>
-                            );
-                          })}
+                          {activities.map((a: any) => (
+                            <SelectItem
+                              key={a.id}
+                              value={String(a.id)}
+                              className="py-2.5 cursor-pointer"
+                            >
+                              <span className="font-medium text-gray-800 truncate">
+                                {a.serial_number !== undefined && a.serial_number !== null
+                                  ? `${a.serial_number} - ${a.name}`
+                                  : a.name}
+                              </span>
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
@@ -741,18 +681,6 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                   </FormItem>
                 )}
               />
-
-              <div className="flex justify-between items-center py-2 border-t border-gray-100">
-                <span className="text-xs font-semibold text-gray-900">
-                  Available Budget
-                </span>
-                <span className="text-xs font-semibold text-[#3B7CED]">
-                  ₦
-                  {availableBudget.toLocaleString("en-NG", {
-                    minimumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -799,6 +727,8 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                     const uCost = Number(currentLine?.unitCost) || 0;
                     const tCost = qty * uCost > 0 ? (qty * uCost) : (Number(currentLine?.totalCost) || 0);
 
+                    const remainingStock = availableStock - qty;
+
                     return (
                       <div
                         key={fieldItem.id}
@@ -835,14 +765,24 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           </h3>
                         </div>
 
-                        <div className="flex justify-between items-center bg-white px-3 py-2 rounded-md border border-[#E5EEFF] text-xs">
-                          <span className="text-gray-500">
-                            Available: <strong className="text-black/80 font-semibold">{availableStock} {unitSymbol}</strong>
-                          </span>
-                          <span className="text-gray-500">
-                            Consuming: <strong className="text-black/80 font-semibold">{qty} {unitSymbol}</strong>
-                          </span>
-                          <span className="font-semibold text-[#3B7CED]">
+                        <div className="flex flex-wrap justify-between items-center bg-white px-3.5 py-2.5 rounded-md border border-[#E5EEFF] text-xs gap-2">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="text-gray-500">
+                              In Stock: <strong className="text-black/80 font-semibold">{availableStock} {unitSymbol}</strong>
+                            </span>
+                            <span className="text-gray-500">
+                              Consuming: <strong className="text-black/80 font-semibold">{qty} {unitSymbol}</strong>
+                            </span>
+                            <span className="text-gray-500">
+                              Remaining: <strong className={cn(
+                                "font-semibold",
+                                remainingStock < 0 ? "text-red-600" : "text-emerald-700"
+                              )}>
+                                {remainingStock} {unitSymbol}
+                              </strong>
+                            </span>
+                          </div>
+                          <span className="font-bold text-[#3B7CED] shrink-0 ml-auto">
                             ₦{tCost.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                           </span>
                         </div>
@@ -921,7 +861,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                       const pUnit = p.unit_of_measure_details?.unit_symbol || p.unit_of_measure_details?.unit_name || "";
                                       return (
                                         <option key={p.id} value={String(p.id)}>
-                                          {p.product_name} {pUnit ? `(${pUnit})` : ""} — In Stock: {pStock}
+                                          {p.product_name} {pUnit ? `(${pUnit})` : ""} — In Inventory: {pStock}
                                         </option>
                                       );
                                     })}
@@ -984,7 +924,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                               {p.product_name} {pUnit ? `(${pUnit})` : ""}
                                             </span>
                                             <span className="text-[11px] font-semibold text-[#3B7CED] bg-[#EFF6FF] px-2 py-0.5 rounded border border-[#DBEAFE]">
-                                              Stock: {pStock}
+                                              In Inventory: {pStock}
                                             </span>
                                           </div>
                                         </SelectItem>
@@ -998,18 +938,40 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           )}
                         />
 
-                        {/* Available Stock Indicator Banner */}
+                        {/* Inventory Remaining & Stock Indicator Banner */}
                         {prod && (
-                          <div className="col-span-2 bg-[#F5F8FF] border border-[#E5EEFF] rounded-lg p-3 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2 h-2 rounded-full bg-[#3B7CED] inline-block" />
-                              <span className="text-xs font-medium text-gray-700">
-                                Available in Inventory:
-                              </span>
+                          <div className="col-span-2 bg-[#F5F8FF] border border-[#E5EEFF] rounded-lg p-3">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                              <div>
+                                <span className="text-gray-500 block text-[11px] mb-0.5">In Inventory</span>
+                                <span className="font-semibold text-gray-800 bg-white px-2 py-0.5 rounded border border-[#D0E2FF] inline-block">
+                                  {availableStock} {unitSymbol}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 block text-[11px] mb-0.5">Consuming</span>
+                                <span className="font-semibold text-gray-800 bg-white px-2 py-0.5 rounded border border-[#D0E2FF] inline-block">
+                                  {enteredQty} {unitSymbol}
+                                </span>
+                              </div>
+                              <div className="col-span-2 sm:col-span-1">
+                                <span className="text-gray-500 block text-[11px] mb-0.5">Remaining in Inventory</span>
+                                <span className={cn(
+                                  "font-semibold px-2 py-0.5 rounded border inline-block",
+                                  availableStock - enteredQty < 0
+                                    ? "text-red-600 bg-red-50 border-red-200 font-bold"
+                                    : "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                )}>
+                                  {availableStock - enteredQty} {unitSymbol}
+                                </span>
+                              </div>
                             </div>
-                            <span className="text-xs font-semibold text-[#3B7CED] bg-white px-2.5 py-1 rounded-md border border-[#D0E2FF] shadow-2xs">
-                              {availableStock} {unitSymbol}
-                            </span>
+                            {isOverStock && (
+                              <p className="text-[11px] text-red-600 font-medium mt-2 flex items-center gap-1">
+                                <AlertCircle size={13} />
+                                Quantity to consume exceeds available inventory stock by {enteredQty - availableStock} {unitSymbol}.
+                              </p>
+                            )}
                           </div>
                         )}
 
@@ -1051,7 +1013,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                 <p className={cn("text-[11px]", isOverStock ? "text-amber-600 font-semibold" : "text-gray-500")}>
                                   {isOverStock
                                     ? `Exceeds available stock (${availableStock} ${unitSymbol})`
-                                    : `Max available: ${availableStock} ${unitSymbol}`}
+                                    : `Remaining in inventory: ${availableStock - enteredQty} ${unitSymbol}`}
                                 </p>
                               )}
                               <FormMessage />
@@ -1097,6 +1059,13 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                             </FormItem>
                           )}
                         />
+                        {/* Item Total Cost */}
+                        <div className="col-span-2 flex justify-between items-center bg-[#F8FAFC] px-3.5 py-2 rounded-md border border-gray-100 text-xs">
+                          <span className="text-gray-500 font-medium">Item Total Cost:</span>
+                          <span className="font-bold text-[#3B7CED]">
+                            ₦{((Number(currentLine?.quantity) || 0) * (Number(currentLine?.unitCost) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
                       </div>
 
                       <button
@@ -1142,24 +1111,15 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
 
           <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-xs space-y-4">
             <div className="flex justify-between items-center py-1">
-              <span className="text-xs font-semibold text-gray-500">
-                Available Budget
+              <span className="text-xs font-semibold text-gray-700">
+                Total Material Cost
               </span>
-              <span className="text-xs font-semibold text-gray-500">
-                ₦{availableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center py-1 border-t border-gray-100 pt-3">
-              <span className="text-xs font-semibold text-gray-900">
-                Total Cost
-              </span>
-              <span className="text-xs font-bold text-[#3B7CED]">
+              <span className="text-sm font-bold text-[#3B7CED]">
                 ₦{totalRequestCost.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
               </span>
             </div>
 
-            <div className="space-y-1.5 pt-2">
+            <div className="space-y-1.5 pt-2 border-t border-gray-100">
               <FormField
                 control={form.control}
                 name="notes"
@@ -1170,7 +1130,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                     </FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Enter any additional context..."
+                        placeholder="Enter any additional notes..."
                         className="min-h-[100px] border-gray-200 focus:ring-[#3B7CED]/20"
                         {...field}
                       />

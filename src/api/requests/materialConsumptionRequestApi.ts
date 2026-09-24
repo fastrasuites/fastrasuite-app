@@ -231,7 +231,7 @@ export const materialConsumptionRequestApi = createApi({
     }),
     deleteMaterialConsumption: builder.mutation<void, number>({
       query: (id) => ({
-        url: `/project-requests/material-consumption/${id}/`,
+        url: `/project-requests/project-requests/${id}/`,
         method: "DELETE",
       }),
       invalidatesTags: (result, error, id) => [{ type: "MaterialConsumption", id }, "MaterialConsumption"],

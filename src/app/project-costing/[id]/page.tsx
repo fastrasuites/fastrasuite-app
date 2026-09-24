@@ -36,9 +36,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Plus, ChevronDown, CheckCircle2, FileText, Image as ImageIcon, Download, Loader2 } from "lucide-react";
+import { ArrowLeft, RefreshCw, Plus, ChevronDown, CheckCircle2, FileText, Image as ImageIcon, Download, Loader2, FileSpreadsheet, Edit, Lock } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
 import { toPng, toJpeg } from "html-to-image";
 import { jsPDF } from "jspdf";
 import { 
@@ -84,10 +85,19 @@ const getStatusVariant = (status: string) => {
   }
 };
 
+const parseNumber = (val: any): number => {
+  if (val === undefined || val === null || val === "") return 0;
+  if (typeof val === "number") return isNaN(val) ? 0 : val;
+  const cleaned = String(val).replace(/[^0-9.-]/g, "");
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+};
+
 export default function ProjectDashboardPage() {
   const params = useParams();
   const id = params?.id;
   const [showActual, setShowActual] = useState(true);
+  const [showCommitted, setShowCommitted] = useState(true);
   const [showPlanned, setShowPlanned] = useState(true);
   const [isBudgetAdjustmentModalOpen, setIsBudgetAdjustmentModalOpen] = useState(false);
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
@@ -111,10 +121,43 @@ export default function ProjectDashboardPage() {
   const [toDate, setToDate] = useState("");
   const [costCategoryFilter, setCostCategoryFilter] = useState("all");
 
+  const { isProjectAccessible, planName } = useSubscriptionLimits();
+  const isAccessible = !id || isProjectAccessible(Number(id));
+
   const { data: project, isLoading, error, refetch } = useGetProjectCostingProjectQuery(
     Number(id),
-    { skip: !id }
+    { skip: !id || !isAccessible }
   );
+
+  if (!isAccessible) {
+    return (
+      <PageGuard module="project_costing" entitlement="view_project">
+        <div className="w-full flex flex-col items-center justify-center min-h-[60vh] p-6 text-center">
+          <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mb-4 border border-amber-200 shadow-sm">
+            <Lock className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Project Access Restricted</h2>
+          <p className="text-sm text-gray-600 max-w-md mb-6">
+            This project was created under a higher subscription plan and is currently locked because your account exceeds the project quota for your current <strong>{planName}</strong> plan.
+          </p>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => window.history.back()}
+              className="text-xs font-semibold"
+            >
+              Go Back
+            </Button>
+            <Link href="/settings/billing">
+              <Button className="bg-[#3B7CED] hover:bg-[#2d63c7] text-white text-xs font-semibold shadow-2xs">
+                Upgrade Plan to Unlock
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </PageGuard>
+    );
+  }
 
   const { data: budgetAdjustments, isLoading: isLoadingAdjustments } = useGetBudgetAdjustmentsQuery(
     Number(id),
@@ -213,11 +256,71 @@ export default function ProjectDashboardPage() {
       link.download = `${project?.name || "Project"}_Costing_Details.png`;
       link.click();
       statusModal.showSuccess("Export Successful", "Full detail image has been downloaded.");
-    } catch (err: any) {
-      console.error("Image export error", err);
-      statusModal.showError("Export Failed", `Failed to generate image: ${err.message || String(err)}`);
     } finally {
       setIsExportingImage(false);
+    }
+  };
+
+  const handleExportWbsCsv = () => {
+    try {
+      let csvContent = "\uFEFF"; // UTF-8 BOM for Excel compatibility
+      csvContent += `Project Costing - Work Breakdown Structure (WBS)\n`;
+      csvContent += `Project Name: "${(project?.name || "Project").replace(/"/g, '""')}"\n`;
+      csvContent += `Project Code: "${(project?.project_code || "N/A").replace(/"/g, '""')}"\n`;
+      csvContent += `Export Date: "${new Date().toLocaleDateString("en-US")}"\n\n`;
+
+      const headers = ["S/N", "Phase / Activity Name", "Type", "Quantity", "Unit Rate (NGN)", "Total Budget (NGN)"];
+      if (customColumns && customColumns.length > 0) {
+        customColumns.forEach(col => headers.push(`"${col.replace(/"/g, '""')}"`));
+      }
+      csvContent += headers.join(",") + "\n";
+
+      if (parsedPhases && Array.isArray(parsedPhases)) {
+        parsedPhases.forEach((phase: any, pIndex: number) => {
+          const phaseSn = `${pIndex + 1}`;
+          const phaseName = `"${(phase.name || `Phase ${pIndex + 1}`).replace(/"/g, '""')}"`;
+          const phaseTotal = phase.activities?.reduce((sum: number, act: any) => sum + Number(act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || 0), 0) || 0;
+          
+          const phaseRow = [phaseSn, phaseName, "PHASE", "", "", phaseTotal];
+          if (customColumns && customColumns.length > 0) {
+            customColumns.forEach(() => phaseRow.push(""));
+          }
+          csvContent += phaseRow.join(",") + "\n";
+
+          if (phase.activities && Array.isArray(phase.activities)) {
+            phase.activities.forEach((act: any, aIndex: number) => {
+              const actSn = `${pIndex + 1}.${aIndex + 1}`;
+              const actName = `"${(act.name || "").replace(/"/g, '""')}"`;
+              const qty = act.quantity || 1;
+              const rate = act.rate || (Number(act.amount || 0) / Number(qty));
+              const amount = act.amount || (Number(qty) * Number(rate)) || 0;
+
+              const actRow = [actSn, actName, "ACTIVITY", qty, rate, amount];
+              if (customColumns && customColumns.length > 0) {
+                customColumns.forEach(col => {
+                  const val = act[col] || act.custom_values?.[col] || "";
+                  actRow.push(`"${String(val).replace(/"/g, '""')}"`);
+                });
+              }
+              csvContent += actRow.join(",") + "\n";
+            });
+          }
+        });
+      }
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${(project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_")}_WBS.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      statusModal.showSuccess("Export Successful", "WBS CSV file has been downloaded.");
+    } catch (err: any) {
+      console.error("WBS CSV export error", err);
+      statusModal.showError("Export Failed", `Failed to generate WBS CSV file: ${err.message || String(err)}`);
     }
   };
 
@@ -533,9 +636,9 @@ export default function ProjectDashboardPage() {
          budgetNum = filteredBudget;
       } else {
         // All Categories
-        actualSpend = Number(fin.actual ?? fin.spent ?? fin.actual_spend ?? fin.total_actual_spend ?? fin.total_actual_cost ?? 0);
-        committed = Number(fin.committed ?? fin.committed_spend ?? fin.total_committed ?? fin.total_commitment ?? 0);
-        budgetNum = Number(fin.budget ?? fin.total_budget ?? fin.total_amount ?? 0);
+        actualSpend = parseNumber(fin.actual ?? fin.spent ?? fin.actual_spend ?? fin.total_actual_spend ?? fin.total_actual_cost ?? 0);
+        committed = parseNumber(fin.committed ?? fin.committed_spend ?? fin.total_committed ?? fin.total_commitment ?? 0);
+        budgetNum = parseNumber(fin.budget ?? fin.total_budget ?? fin.total_amount ?? 0);
       }
       
       // Fallback for pending adjustments if empty
@@ -553,19 +656,81 @@ export default function ProjectDashboardPage() {
     }
   }
 
+  if (budgetNum === 0) {
+    budgetNum = parseNumber(
+      project?.budget ??
+      project?.total_budget ??
+      project?.contract_amount ??
+      project?.total_amount ??
+      project?.approved_budget ??
+      0
+    );
+  }
+
   if (budgetNum === 0 && parsedPhases.length > 0) {
     budgetNum = parsedPhases.reduce((acc, phase) => {
-      return acc + (phase.activities || []).reduce((sum: number, act: any) => sum + Number(act.current_budget || act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || act.budget || 0), 0);
+      return acc + (phase.activities || []).reduce((sum: number, act: any) => sum + parseNumber(act.current_budget || act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || act.budget || 0), 0);
     }, 0);
   }
 
+  if (actualSpend === 0) {
+    actualSpend = parseNumber(
+      project?.actual_spend ??
+      project?.spent ??
+      project?.actual ??
+      project?.total_actual_spend ??
+      project?.actual_cost ??
+      project?.total_actual_cost ??
+      0
+    );
+  }
+
+  if (committed === 0) {
+    committed = parseNumber(
+      project?.committed_spend ??
+      project?.committed ??
+      project?.total_committed ??
+      project?.commitment ??
+      project?.total_commitment ??
+      0
+    );
+  }
+
+  // Check transactions list to calculate or augment actualSpend and committed if needed
+  const txList = Array.isArray(transactions)
+    ? transactions
+    : Array.isArray((transactions as any)?.results)
+    ? (transactions as any).results
+    : Array.isArray((transactions as any)?.data)
+    ? (transactions as any).data
+    : [];
+
+  let txActualSum = 0;
+  let txCommittedSum = 0;
+  txList.forEach((tx: any) => {
+    const amt = extractAmount(tx);
+    const status = String(tx.status || "").toLowerCase();
+    if (status.includes("approv") || status === "done" || status === "success" || status === "released" || status === "paid" || status === "invoice") {
+      txActualSum += amt;
+    } else {
+      txCommittedSum += amt;
+    }
+  });
+
+  if (actualSpend === 0 && txActualSum > 0) {
+    actualSpend = txActualSum;
+  }
+  if (committed === 0 && txCommittedSum > 0) {
+    committed = txCommittedSum;
+  }
+
   if (costCategoryFilter === "all" && fin?.remaining_budget !== undefined && fin?.remaining_budget !== null) {
-    remaining = Number(fin.remaining_budget);
+    remaining = parseNumber(fin.remaining_budget);
   } else {
     remaining = budgetNum - actualSpend - committed;
   }
 
-  originalBudgetNum = Number(fin?.original_budget || budgetNum);
+  originalBudgetNum = parseNumber(fin?.original_budget || budgetNum);
   if (originalBudgetNum === 0) originalBudgetNum = budgetNum;
 
   const isProjectApproved = ["ACTIVE", "APPROVED", "COMPLETED", "CLOSED"].includes(
@@ -642,103 +807,59 @@ export default function ProjectDashboardPage() {
   const availablePercent = budgetNum > 0 ? remaining / budgetNum : 1;
 
   let dynamicLineChartData: any[] = [];
-  if (budgetNum > 0) {
-    const start = project?.start_date ? new Date(project.start_date) : null;
-    const end = project?.expected_end_date ? new Date(project.expected_end_date) : null;
-    
-    const monthDiff = (start && end && start < end)
-      ? (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1
-      : 1;
+  const chartBudget = budgetNum > 0 ? budgetNum : (actualSpend + committed > 0 ? (actualSpend + committed) : 0);
 
-    // Helper: Sigmoid S-Curve distribution factor (0 to 1) for natural project ramp-up & plateau
-    const getSigmoidWeight = (t: number) => {
-      const k = 6;
-      const raw = (x: number) => 1 / (1 + Math.exp(-k * (x - 0.5)));
-      const minVal = raw(0);
-      const maxVal = raw(1);
-      return Math.max(0, Math.min(1, (raw(t) - minVal) / (maxVal - minVal)));
-    };
+  if (chartBudget > 0 || actualSpend > 0 || committed > 0) {
+    // 1. Check if backend provided a real time-series array in financials or project
+    const backendTimeline = fin?.spend_over_time || fin?.monthly_spend || fin?.spend_history || project?.spend_over_time;
 
-    if (monthDiff > 2 && start && end) {
-      // Multi-month timeline: Generate standard project S-Curve
-      const now = new Date();
-      const currentMonthIndex = Math.max(0, Math.min(monthDiff, (now.getFullYear() - start.getFullYear()) * 12 + now.getMonth() - start.getMonth() + 1));
-      
-      dynamicLineChartData.push({
-        name: "Start",
-        fullName: "Project Start",
-        planned: 0,
-        actual: 0,
-      });
-
-      for (let i = 0; i < monthDiff; i++) {
-        const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-        const t = (i + 1) / monthDiff;
-        const sWeight = getSigmoidWeight(t);
-        const plannedValue = Math.round(budgetNum * sWeight);
-
-        let actualValue: number | null = null;
-        if (i < currentMonthIndex) {
-          if (transactions && transactions.length > 0) {
-            const endOfMonth = new Date(start.getFullYear(), start.getMonth() + i + 1, 0, 23, 59, 59);
-            const txUpToMonth = transactions.filter((tx: any) => {
-              const txDate = new Date(tx.created_at || tx.date || tx.transaction_date);
-              return !isNaN(txDate.getTime()) && txDate <= endOfMonth;
-            });
-            actualValue = txUpToMonth.reduce((acc: number, tx: any) => acc + Number(tx.amount || 0), 0);
-          } else {
-            const actT = (i + 1) / Math.max(1, currentMonthIndex);
-            actualValue = Math.round(actualSpend * getSigmoidWeight(actT));
-          }
-        }
-
-        dynamicLineChartData.push({
-          name: d.toLocaleString('default', { month: 'short' }),
-          fullName: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-          planned: plannedValue,
-          actual: actualValue,
-        });
-      }
-    } else if (parsedPhases && parsedPhases.length > 0) {
-      // Phase-Milestone based curve (ideal for same-day, short duration, or phase-governed project costing)
-      dynamicLineChartData.push({
-        name: "Start",
-        fullName: "Project Mobilization",
-        planned: 0,
-        actual: 0,
-      });
-
-      let cumulativePhaseBudget = 0;
-      parsedPhases.forEach((phase: any, pIndex: number) => {
-        const phaseBudget = (phase.activities || []).reduce(
-          (sum: number, act: any) => sum + Number(act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || act.budget || 0),
-          0
-        );
-        cumulativePhaseBudget += phaseBudget;
-
-        let phaseActual: number | null = null;
-        if (actualSpend > 0) {
-          const ratio = Math.min(1, (pIndex + 1) / parsedPhases.length);
-          phaseActual = Math.round(actualSpend * ratio);
-        } else {
-          phaseActual = 0;
-        }
-
-        const rawName = phase.name || `Phase ${pIndex + 1}`;
-        const shortName = rawName.length > 15 ? `${rawName.slice(0, 13)}...` : rawName;
-
-        dynamicLineChartData.push({
-          name: shortName,
-          fullName: rawName,
-          planned: Math.round(cumulativePhaseBudget),
-          actual: phaseActual,
-        });
-      });
+    if (Array.isArray(backendTimeline) && backendTimeline.length > 0) {
+      dynamicLineChartData = backendTimeline.map((item: any) => ({
+        name: item.period || item.month || item.date || item.name,
+        fullName: item.full_name || item.period || item.name,
+        planned: parseNumber(item.planned ?? item.planned_budget ?? item.budget ?? 0),
+        actual: parseNumber(item.actual ?? item.spent ?? item.actual_spend ?? 0),
+        committed: parseNumber(item.committed ?? item.committed_spend ?? 0),
+      }));
     } else {
-      dynamicLineChartData = [
-        { name: "Start", fullName: "Project Start", planned: 0, actual: 0 },
-        { name: "Target", fullName: "Project Completion", planned: budgetNum, actual: actualSpend },
-      ];
+      // 2. Real Project Date Timeline from start_date to expected_end_date
+      const start = project?.start_date ? new Date(project.start_date) : null;
+      const end = project?.expected_end_date ? new Date(project.expected_end_date) : null;
+      const hasValidStart = start && !isNaN(start.getTime());
+      const hasValidEnd = end && !isNaN(end.getTime());
+      const hasValidDates = hasValidStart && hasValidEnd && start < end;
+      
+      const monthDiff = hasValidDates
+        ? (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1
+        : 1;
+
+      if (monthDiff > 1 && hasValidDates && start && end) {
+        dynamicLineChartData.push({
+          name: "Start",
+          fullName: "Project Start",
+          planned: 0,
+          actual: 0,
+          committed: 0,
+        });
+
+        for (let i = 0; i < monthDiff; i++) {
+          const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+          const plannedValue = Math.round((budgetNum / monthDiff) * (i + 1));
+
+          dynamicLineChartData.push({
+            name: d.toLocaleString('default', { month: 'short' }),
+            fullName: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
+            planned: plannedValue,
+            actual: actualSpend,
+            committed: committed,
+          });
+        }
+      } else {
+        dynamicLineChartData = [
+          { name: "Start", fullName: "Project Start", planned: 0, actual: 0, committed: 0 },
+          { name: "Target", fullName: "Project Completion", planned: chartBudget, actual: actualSpend, committed: committed },
+        ];
+      }
     }
   }
 
@@ -847,18 +968,101 @@ export default function ProjectDashboardPage() {
     });
   };
 
-  // Set up PieChart data
+  // Set up PieChart data from backend category_breakdown
   let pieChartData: any[] = [];
-  if (fin?.category_breakdown && Array.isArray(fin.category_breakdown)) {
-    const COLORS = ["#3B7CED", "#2BA24D", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899"];
-    pieChartData = fin.category_breakdown
-      .filter((cat: any) => Number(cat.amount || 0) > 0)
-      .map((cat: any, index: number) => ({
-        name: cat.request_type.replace(/_/g, ' '),
-        value: Number(cat.amount),
-        color: COLORS[index % COLORS.length]
-      }));
+  const CATEGORY_COLORS = ["#3B7CED", "#F59E0B", "#10B981", "#8B5CF6", "#EC4899", "#06B6D4", "#F97316", "#64748B"];
+
+  const rawCatBreakdown =
+    fin?.category_breakdown ||
+    project?.category_breakdown ||
+    (typeof project?.financials === "object" ? project?.financials?.category_breakdown : null);
+
+  let rawCatList: any[] = [];
+  if (Array.isArray(rawCatBreakdown)) {
+    rawCatList = rawCatBreakdown;
+  } else if (rawCatBreakdown && typeof rawCatBreakdown === "object") {
+    rawCatList = Object.entries(rawCatBreakdown).map(([k, v]: [string, any]) =>
+      typeof v === "object" && v !== null ? { request_type: k, ...v } : { request_type: k, amount: v }
+    );
   }
+
+  const formatCostCategory = (cat: string): string => {
+    if (!cat) return "General";
+    const lower = cat.toLowerCase().trim();
+    if (lower === "plant_equipment" || lower === "plant equipment" || lower === "plant & equipment") return "Plant & Equipment";
+    if (lower === "material_consumption" || lower === "material consumption") return "Material Consumption";
+    if (lower === "petty_cash" || lower === "petty cash") return "Petty Cash";
+    return formatCategory(cat);
+  };
+
+  if (rawCatList.length > 0) {
+    const totalCatAmount = rawCatList.reduce(
+      (sum: number, cat: any) => sum + parseNumber(cat.amount || cat.value || cat.spent || 0),
+      0
+    );
+
+    const items = rawCatList
+      .map((cat: any) => {
+        const amt = parseNumber(cat.amount || cat.value || cat.spent || 0);
+        let pct =
+          cat.percentage !== undefined && cat.percentage !== null && !isNaN(Number(cat.percentage))
+            ? Number(cat.percentage)
+            : 0;
+
+        // If backend percentage is not supplied or 0, accurately calculate from total category amounts
+        if (pct <= 0 && totalCatAmount > 0 && amt > 0) {
+          pct = (amt / totalCatAmount) * 100;
+        }
+
+        const nameKey = cat.request_type || cat.name || cat.category || cat.type || "General";
+        return {
+          name: formatCostCategory(nameKey),
+          amount: amt,
+          percentage: pct,
+          value: Number(pct.toFixed(2)),
+        };
+      })
+      .filter((item: any) => item.percentage > 0 || item.amount > 0)
+      .sort((a: any, b: any) => b.percentage - a.percentage);
+
+    pieChartData = items.map((item: any, index: number) => ({
+      ...item,
+      color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+    }));
+  }
+
+  // Fallback to categorizing from transactions if category_breakdown is missing
+  if (pieChartData.length === 0 && txList.length > 0) {
+    const catMap = new Map<string, number>();
+    let txSum = 0;
+    txList.forEach((tx: any) => {
+      const cat = formatCostCategory(tx.category || tx.request_type || tx.type || "General");
+      const amt = extractAmount(tx);
+      if (amt > 0) {
+        catMap.set(cat, (catMap.get(cat) || 0) + amt);
+        txSum += amt;
+      }
+    });
+
+    const fallbackItems: any[] = [];
+    catMap.forEach((amt, name) => {
+      const pct = txSum > 0 ? (amt / txSum) * 100 : 0;
+      fallbackItems.push({
+        name,
+        amount: amt,
+        percentage: pct,
+        value: Number(pct.toFixed(2)),
+      });
+    });
+
+    fallbackItems.sort((a, b) => b.percentage - a.percentage);
+    pieChartData = fallbackItems.map((item, index) => ({
+      ...item,
+      color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+    }));
+  }
+
+  const categoryTotal = pieChartData.reduce((s: number, e: any) => s + e.value, 0);
 
   return (
     <PageGuard module="project_costing" entitlement="view_project">
@@ -922,11 +1126,27 @@ export default function ProjectDashboardPage() {
                     <ImageIcon className="w-4 h-4 text-blue-500" />
                     <span className="font-medium text-gray-700">Download as Image</span>
                   </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={handleExportWbsCsv} 
+                    className="flex items-center gap-3 cursor-pointer p-2.5 rounded-lg hover:bg-gray-50 focus:bg-gray-50 mt-1"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span className="font-medium text-gray-700">Download WBS (CSV)</span>
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </PermissionGuard>
 
             <WizardGuideButton moduleId="project-costing" />
+
+            {(!project.status || project.status === "DRAFT" || project.status === "PENDING" || project.status === "PENDING_APPROVAL") && (
+              <Link href={`/project-costing/${project.id}/edit`}>
+                <Button variant="outline" className="border-gray-300 text-gray-700 hover:bg-gray-50 h-9 flex items-center gap-1.5 px-3.5">
+                  <Edit className="w-3.5 h-3.5 text-gray-500" />
+                  <span>Edit Project</span>
+                </Button>
+              </Link>
+            )}
 
             {(!project.status || project.status === "DRAFT") && (
               <PermissionGuard module="project_costing" entitlement="submit_project">
@@ -1041,30 +1261,68 @@ export default function ProjectDashboardPage() {
 
             {/* Line / Area Chart */}
             <div className="bg-white p-6 rounded shadow-sm border border-gray-100 flex-1 flex flex-col">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                 <div>
                   <h3 className="text-lg font-medium text-[#3B7CED]">Spend Over Time vs Budget Curve</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {dynamicLineChartData.length > 2 && parsedPhases?.length > 0 && (!project?.start_date || project.start_date === project.expected_end_date)
-                      ? "Milestone budget progress across project phases"
-                      : "Cumulative planned S-curve vs actual project expenditure"}
+                  <p className="text-xs text-gray-400 mt-1">
+                    Cumulative planned budget vs committed and actual expenditure over project duration
                   </p>
                 </div>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={showActual} onChange={() => setShowActual(!showActual)} className="w-4 h-4 rounded border-gray-300 text-[#2BA24D] focus:ring-[#2BA24D] accent-[#2BA24D] cursor-pointer" />
-                    <span className="text-sm text-gray-600 font-medium flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#2BA24D]"></span>
-                      Actual Spent
+                {/* Interactive Series Toggle Pills */}
+                <div className="flex flex-wrap gap-2.5 items-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowActual(!showActual)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${
+                      showActual
+                        ? "bg-[#EBF7EE] border-[#2BA24D]/40 text-[#1E8E3E] shadow-sm shadow-[#2BA24D]/10"
+                        : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 opacity-60"
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full transition-transform ${showActual ? "bg-[#2BA24D] scale-110" : "bg-gray-300"}`} />
+                    <span>Actual Spent</span>
+                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
+                      showActual ? "bg-[#2BA24D] text-white" : "bg-gray-200 text-gray-400"
+                    }`}>
+                      {showActual ? "✓" : "–"}
                     </span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={showPlanned} onChange={() => setShowPlanned(!showPlanned)} className="w-4 h-4 rounded border-gray-300 text-[#3B7CED] focus:ring-[#3B7CED] accent-[#3B7CED] cursor-pointer" />
-                    <span className="text-sm text-gray-600 font-medium flex items-center gap-1.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#3B7CED]"></span>
-                      Planned Spend
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCommitted(!showCommitted)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${
+                      showCommitted
+                        ? "bg-[#FEF7EC] border-[#F59E0B]/40 text-[#B45309] shadow-sm shadow-[#F59E0B]/10"
+                        : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 opacity-60"
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full transition-transform ${showCommitted ? "bg-[#F59E0B] scale-110" : "bg-gray-300"}`} />
+                    <span>Committed Spent</span>
+                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
+                      showCommitted ? "bg-[#F59E0B] text-white" : "bg-gray-200 text-gray-400"
+                    }`}>
+                      {showCommitted ? "✓" : "–"}
                     </span>
-                  </label>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPlanned(!showPlanned)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${
+                      showPlanned
+                        ? "bg-[#EFF6FF] border-[#3B7CED]/40 text-[#1D4ED8] shadow-sm shadow-[#3B7CED]/10"
+                        : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 opacity-60"
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full transition-transform ${showPlanned ? "bg-[#3B7CED] scale-110" : "bg-gray-300"}`} />
+                    <span>Planned Spend</span>
+                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
+                      showPlanned ? "bg-[#3B7CED] text-white" : "bg-gray-200 text-gray-400"
+                    }`}>
+                      {showPlanned ? "✓" : "–"}
+                    </span>
+                  </button>
                 </div>
               </div>
               <div className="flex-1 w-full min-h-[300px] relative">
@@ -1076,8 +1334,12 @@ export default function ProjectDashboardPage() {
                         <stop offset="95%" stopColor="#3B7CED" stopOpacity={0.0}/>
                       </linearGradient>
                       <linearGradient id="actualGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#2BA24D" stopOpacity={0.15}/>
+                        <stop offset="5%" stopColor="#2BA24D" stopOpacity={0.18}/>
                         <stop offset="95%" stopColor="#2BA24D" stopOpacity={0.0}/>
+                      </linearGradient>
+                      <linearGradient id="committedGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.18}/>
+                        <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0F3F6" />
@@ -1108,8 +1370,9 @@ export default function ProjectDashboardPage() {
                               <p className="font-semibold text-gray-800 mb-2 border-b border-gray-100 pb-1">{fullName}</p>
                               {payload.map((entry: any, index: number) => {
                                 const isPlanned = entry.dataKey === "planned";
-                                const color = isPlanned ? "#3B7CED" : "#2BA24D";
-                                const name = isPlanned ? "Planned Budget" : "Actual Spent";
+                                const isCommitted = entry.dataKey === "committed";
+                                const color = isPlanned ? "#3B7CED" : isCommitted ? "#F59E0B" : "#2BA24D";
+                                const name = isPlanned ? "Planned Budget" : isCommitted ? "Committed Spent" : "Actual Spent";
                                 const value = entry.value !== null && entry.value !== undefined ? `₦${Number(entry.value).toLocaleString()}` : "Not reached";
                                 return (
                                   <div key={`item-${index}`} className="flex items-center justify-between gap-4 py-0.5">
@@ -1138,6 +1401,19 @@ export default function ProjectDashboardPage() {
                         dot={{ r: 4, fill: '#3B7CED', strokeWidth: 1, stroke: '#fff' }}
                         activeDot={{ r: 6, fill: '#3B7CED' }} 
                         name="Planned Spend"
+                      />
+                    )}
+                    {showCommitted && (
+                      <Area 
+                        type="monotone" 
+                        dataKey="committed" 
+                        stroke="#F59E0B" 
+                        strokeWidth={2.5} 
+                        fillOpacity={1} 
+                        fill="url(#committedGradient)" 
+                        dot={{ r: 4, fill: '#F59E0B', strokeWidth: 1, stroke: '#fff' }}
+                        activeDot={{ r: 6, fill: '#F59E0B' }} 
+                        name="Committed Spent"
                       />
                     )}
                     {showActual && (
@@ -1189,20 +1465,20 @@ export default function ProjectDashboardPage() {
               
               {/* Stacked Progress Bar */}
               <div className="w-full h-8 flex rounded overflow-hidden mb-6">
-                <div className="bg-[#3B7CED] h-full" style={{ width: `${actualPercent * 100}%` }}></div>
-                <div className="bg-[#7BA8F5] h-full" style={{ width: `${committedPercent * 100}%` }}></div>
-                <div className="bg-[#E5E7EB] h-full" style={{ width: `${availablePercent * 100}%` }}></div>
+                <div className="bg-[#2BA24D] h-full transition-all" style={{ width: `${actualPercent * 100}%` }}></div>
+                <div className="bg-[#F59E0B] h-full transition-all" style={{ width: `${committedPercent * 100}%` }}></div>
+                <div className="bg-[#E5E7EB] h-full transition-all" style={{ width: `${availablePercent * 100}%` }}></div>
               </div>
 
               {/* Progress Bar Legend */}
-              <div className="flex gap-4 text-xs">
+              <div className="flex flex-wrap gap-4 text-xs">
                 <div className="flex items-center gap-1.5 text-gray-600">
-                  <div className="w-3 h-3 rounded bg-[#3B7CED]"></div>
+                  <div className="w-3 h-3 rounded bg-[#2BA24D]"></div>
                   Actual Spent ({(actualPercent * 100).toFixed(1)}%)
                 </div>
                 <div className="flex items-center gap-1.5 text-gray-600">
-                  <div className="w-3 h-3 rounded bg-[#7BA8F5]"></div>
-                  Committed Amount ({(committedPercent * 100).toFixed(1)}%)
+                  <div className="w-3 h-3 rounded bg-[#F59E0B]"></div>
+                  Committed Spent ({(committedPercent * 100).toFixed(1)}%)
                 </div>
                 <div className="flex items-center gap-1.5 text-gray-600">
                   <div className="w-3 h-3 rounded bg-[#E5E7EB]"></div>
@@ -1226,44 +1502,67 @@ export default function ProjectDashboardPage() {
               </div>
             </div>
 
-            {/* Spend by Category */}
+            {/* Spend by Category - 100% Perfect Circle Donut Chart */}
             <div className="bg-white p-6 rounded shadow-sm border border-gray-100">
-              <h3 className="text-lg font-medium text-[#3B7CED] mb-6">Spend by category</h3>
-              <div className="flex items-center justify-center relative">
-                <div className="w-48 h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={pieChartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={0}
-                        outerRadius={80}
-                        paddingAngle={0}
-                        dataKey="value"
-                        stroke="none"
-                      >
-                        {pieChartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                  {/* Fallback for empty data */}
-                  {pieChartData.length === 0 && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <p className="text-gray-400 text-sm">No data</p>
-                    </div>
-                  )}
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-lg font-medium text-[#3B7CED]">Spend by Category</h3>
+                <span className="text-xs text-gray-400 font-medium">Breakdown</span>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 relative">
+                {/* Fixed Square 1:1 Aspect Ratio Container Guaranteed to be a Perfect Circle */}
+                <div className="w-[180px] h-[180px] shrink-0 relative flex items-center justify-center">
+                  <PieChart width={180} height={180}>
+                    <Pie
+                      data={pieChartData.length > 0 ? pieChartData : [{ name: "No Data", value: 1, color: "#E5E7EB" }]}
+                      cx={90}
+                      cy={90}
+                      innerRadius={52}
+                      outerRadius={78}
+                      paddingAngle={pieChartData.length > 1 ? 3 : 0}
+                      dataKey="value"
+                      stroke="#ffffff"
+                      strokeWidth={2}
+                    >
+                      {(pieChartData.length > 0 ? pieChartData : [{ name: "No Data", value: 1, color: "#E5E7EB" }]).map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(val: any, name: any) => [
+                        `${Number(val).toFixed(1)}%`,
+                        name
+                      ]}
+                      contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}
+                    />
+                  </PieChart>
+                  {/* Center Stat inside the Donut Hole */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Share</span>
+                    <span className="text-sm font-bold text-gray-800">100%</span>
+                  </div>
                 </div>
-                {pieChartData.length > 0 && (
-                  <div className="flex flex-col gap-3 ml-4">
-                    {pieChartData.map((entry, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm text-gray-600 capitalize">
-                        <div className="w-3 h-3 rounded" style={{ backgroundColor: entry.color }}></div>
-                        {entry.name} ({actualSpend > 0 ? ((entry.value / actualSpend) * 100).toFixed(1) : 0}%)
-                      </div>
-                    ))}
+
+                {/* Legend */}
+                {pieChartData.length > 0 ? (
+                  <div className="flex flex-col gap-2.5 flex-1 min-w-0 w-full sm:w-auto">
+                    {pieChartData.map((entry, index) => {
+                      const pct = Number(entry.percentage || entry.value || 0).toFixed(1);
+                      return (
+                        <div key={index} className="flex items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2 truncate">
+                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }}></div>
+                            <span className="text-gray-700 font-medium capitalize truncate">{entry.name}</span>
+                          </div>
+                          <div className="flex items-center shrink-0">
+                            <span className="text-gray-900 font-semibold text-xs min-w-[42px] text-right">{pct}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center text-xs text-gray-400 py-4 flex-1">
+                    No category spend data available
                   </div>
                 )}
               </div>
@@ -1870,22 +2169,11 @@ export default function ProjectDashboardPage() {
                     month: "short",
                     year: "numeric",
                   }) : "-";
-                  const recordId =
-                    tx.reference_id ||
-                    tx.detail?.project_request?.reference_id ||
-                    tx.record_id ||
-                    tx.recordId ||
-                    tx.reference_no ||
-                    tx.reference ||
-                    tx.ref ||
-                    tx.transaction_number ||
-                    tx.transaction_id ||
-                    tx.code ||
-                    tx.item_code ||
-                    (tx.id ? (String(tx.id).startsWith("#") || String(tx.id).includes("-") ? String(tx.id) : `PjR-${tx.id}`) : "-");
-                  const subRef =
-                    tx.detail?.request_id ||
-                    (tx.detail?.reference_id && tx.detail.reference_id !== recordId ? tx.detail.reference_id : null);
+                  const primaryRef = tx.detail?.reference_id || tx.detail?.request_id;
+                  const mainRef = tx.reference_id || tx.record_id || tx.recordId || tx.reference_no || tx.reference || tx.ref;
+
+                  const recordId = primaryRef || mainRef || (tx.id ? (String(tx.id).startsWith("#") || String(tx.id).includes("-") ? String(tx.id) : `PjR-${tx.id}`) : "-");
+                  const subRef = (primaryRef && mainRef && String(primaryRef) !== String(mainRef)) ? mainRef : null;
                   const catStr = formatCategory(tx.category || tx.type || tx.request_type || tx.project_type || "-");
                   const amountVal = extractAmount(tx);
                   const amountStr = `₦${Number(amountVal).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -1918,14 +2206,7 @@ export default function ProjectDashboardPage() {
                         {dateStr}
                       </TableCell>
                       <TableCell className="py-3 text-sm text-gray-800 font-semibold">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span>{recordId}</span>
-                          {subRef && (
-                            <span className="text-xs font-normal text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                              {subRef}
-                            </span>
-                          )}
-                        </div>
+                        <span>{recordId}</span>
                       </TableCell>
                       <TableCell className="py-3 text-sm text-gray-600">
                         {catStr}

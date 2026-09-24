@@ -148,7 +148,7 @@ export const subcontractorRequestApi = createApi({
     }),
     deleteSubcontractorRequest: builder.mutation<void, number | string>({
       query: (id) => ({
-        url: `/project-requests/subcontractor-requests/${id}/`,
+        url: `/project-requests/project-requests/${id}/`,
         method: "DELETE",
       }),
       invalidatesTags: (result, error, id) => [

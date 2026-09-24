@@ -28,7 +28,6 @@ import {
   Plus,
   Calendar,
   Layers,
-  CheckCircle2,
   X,
   Filter,
   Download,
@@ -307,18 +306,91 @@ function matchesProject(
   return false;
 }
 
+function renderBudgetBar(props: any) {
+  const { x, y, width, height, value } = props;
+  if (x === undefined || y === undefined || width === undefined) return null;
+  const numVal = typeof value === "number" ? value : parseFloat(String(value || 0)) || 0;
+  const isZero = numVal <= 0;
+  const minH = 6;
+  const actualHeight = Math.max(Math.abs(Number(height) || 0), minH);
+  const actualY = (Number(height) || 0) < minH ? y - minH : y;
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={actualY}
+        width={width}
+        height={actualHeight}
+        fill={isZero ? "#BFDBFE" : "#3B82F6"}
+        stroke={isZero ? "#2563EB" : "none"}
+        strokeWidth={isZero ? 1 : 0}
+        strokeDasharray={isZero ? "2 2" : undefined}
+        rx={isZero ? 2 : 4}
+        ry={isZero ? 2 : 4}
+      />
+      {isZero && (
+        <text
+          x={x + width / 2}
+          y={actualY - 4}
+          textAnchor="middle"
+          fill="#2563EB"
+          fontSize={10}
+          fontWeight={700}
+        >
+          ₦0
+        </text>
+      )}
+    </g>
+  );
+}
+
+function renderSpentBar(props: any) {
+  const { x, y, width, height, value } = props;
+  if (x === undefined || y === undefined || width === undefined) return null;
+  const numVal = typeof value === "number" ? value : parseFloat(String(value || 0)) || 0;
+  const isZero = numVal <= 0;
+  const minH = 6;
+  const actualHeight = Math.max(Math.abs(Number(height) || 0), minH);
+  const actualY = (Number(height) || 0) < minH ? y - minH : y;
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={actualY}
+        width={width}
+        height={actualHeight}
+        fill={isZero ? "#86EFAC" : "#22C55E"}
+        stroke={isZero ? "#16A34A" : "none"}
+        strokeWidth={isZero ? 1 : 0}
+        strokeDasharray={isZero ? "2 2" : undefined}
+        rx={isZero ? 2 : 4}
+        ry={isZero ? 2 : 4}
+      />
+      {isZero && (
+        <text
+          x={x + width / 2}
+          y={actualY - 4}
+          textAnchor="middle"
+          fill="#16A34A"
+          fontSize={10}
+          fontWeight={700}
+        >
+          ₦0
+        </text>
+      )}
+    </g>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // MAIN COMPONENT
 // ---------------------------------------------------------------------------
 
 export default function HomePage() {
   const [isMounted, setIsMounted] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
 
   // Live Dashboard & Module Queries (Zero Dummy Data)
   const {
@@ -484,6 +556,10 @@ export default function HomePage() {
       const proj =
         po.project_name ||
         po.project ||
+        po.project_details?.name ||
+        po.project_details?.project_name ||
+        po.project_costing_name ||
+        po.wbs_element_details?.phase?.project_name ||
         po.wbs_element_details?.phase?.name ||
         po.wbs_element_details?.name ||
         "General";
@@ -808,8 +884,7 @@ export default function HomePage() {
       );
       if (apiProj) {
         const bNum = typeof apiProj.budget === "number" ? apiProj.budget : (parseFloat(String(apiProj.budget)) || 0);
-        const sNum = typeof apiProj.actual_spent === "number" ? apiProj.actual_spent : (parseFloat(String(apiProj.actual_spent)) || 0);
-        const util = bNum > 0 ? Math.min(100, Math.round((sNum / bNum) * 100)) : 0;
+        let sNum = typeof apiProj.actual_spent === "number" ? apiProj.actual_spent : (parseFloat(String(apiProj.actual_spent)) || 0);
 
         const projName = apiProj.name;
         const projId = String(apiProj.id);
@@ -834,6 +909,15 @@ export default function HomePage() {
           .reduce((sum, i) => sum + i.amountNum, 0);
         const projOverdueInvoices = projInvoices.filter((i) => i.status === "Overdue");
         const projOverdueAmount = projOverdueInvoices.reduce((sum, i) => sum + i.amountNum, 0);
+
+        if (sNum === 0) {
+          if (projPaidTotal > 0) {
+            sNum = projPaidTotal;
+          } else if (projPoTotal > 0) {
+            sNum = projPoTotal;
+          }
+        }
+        const util = bNum > 0 ? Math.min(100, Math.round((sNum / bNum) * 100)) : 0;
 
         return {
           ...baseProject,
@@ -883,7 +967,27 @@ export default function HomePage() {
       if (apiProjectList.length > 0) {
         apiBarData = apiProjectList.map((p) => {
           const bNum = typeof p.budget === "number" ? p.budget : (parseFloat(String(p.budget)) || 0);
-          const sNum = typeof p.actual_spent === "number" ? p.actual_spent : (parseFloat(String(p.actual_spent)) || 0);
+          let sNum = typeof p.actual_spent === "number" ? p.actual_spent : (parseFloat(String(p.actual_spent)) || 0);
+
+          if (sNum === 0) {
+            const projInvoices = liveInvoices.filter((inv) =>
+              matchesProject(inv.project, p.name, String(p.id))
+            );
+            const projPOs = livePurchaseOrders.filter((po) =>
+              matchesProject(po.project, p.name, String(p.id))
+            );
+            const projPaidTotal = projInvoices
+              .filter((i) => i.status === "Paid")
+              .reduce((sum, i) => sum + i.amountNum, 0);
+            const projPoTotal = projPOs.reduce((sum, po) => sum + po.amountNum, 0);
+
+            if (projPaidTotal > 0) {
+              sNum = projPaidTotal;
+            } else if (projPoTotal > 0) {
+              sNum = projPoTotal;
+            }
+          }
+
           totalBudgetFromProjects += bNum;
           totalSpentFromProjects += sNum;
           return {
@@ -1224,7 +1328,6 @@ export default function HomePage() {
 
     setSelectedProjectId(newKey);
     setIsNewProjectOpen(false);
-    showToast(`Project "${newProjectForm.name}" created and selected!`);
     setNewProjectForm({
       name: "",
       code: "",
@@ -1260,7 +1363,6 @@ export default function HomePage() {
       });
       return updated;
     });
-    showToast(`Site Request ${reqId} marked as ${newStatus}`);
   };
 
   // Handler: Invoice payment approval / marking as paid
@@ -1286,7 +1388,6 @@ export default function HomePage() {
       return updated;
     });
     setSelectedInv(null);
-    showToast(`Payment processed for ${invId}! Marked as Paid.`);
   };
 
   // Handler: PO Mark as Received
@@ -1304,20 +1405,12 @@ export default function HomePage() {
       return updated;
     });
     setSelectedPo(null);
-    showToast(`Goods delivery confirmed for ${poId}! Status updated to Received.`);
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F9FE] font-open-sans text-[#32325D] select-none">
       <NavBar title="Home" items={[]} />
       <main className="flex-1 pb-16">
-      {/* Interactive Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-[#32325D] text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-xs font-semibold border border-slate-700 animate-in fade-in slide-in-from-top-4 duration-200">
-          <CheckCircle2 size={16} className="text-[#2DCE89] shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* ================================================================= */}
@@ -1375,7 +1468,6 @@ export default function HomePage() {
             <div
               onClick={() => {
                 setPoFilter("all");
-                showToast("Viewing all Purchase Orders");
               }}
               className="bg-white p-5 rounded-2xl border border-gray-100/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-blue-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200 cursor-pointer group"
             >
@@ -1399,7 +1491,6 @@ export default function HomePage() {
             <div
               onClick={() => {
                 setInvFilter("all");
-                showToast("Viewing all Invoices");
               }}
               className="bg-white p-5 rounded-2xl border border-gray-100/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-emerald-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200 cursor-pointer group"
             >
@@ -1423,7 +1514,6 @@ export default function HomePage() {
             <div
               onClick={() => {
                 setInvFilter("overdue");
-                showToast("Filtered view to Overdue Invoices");
               }}
               className="bg-white p-5 rounded-2xl border border-gray-100/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-rose-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200 cursor-pointer group"
             >
@@ -1444,9 +1534,9 @@ export default function HomePage() {
             </div>
 
             {/* Card 4: Budget Utilisation */}
-            <Link
-              href="/project-costing"
-              className="bg-white p-5 rounded-2xl border border-gray-100/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-amber-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200 cursor-pointer group block"
+            <div
+              onClick={() => setIsBudgetDrawerOpen(true)}
+              className="bg-white p-5 rounded-2xl border border-gray-100/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] hover:border-amber-200 hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200 cursor-pointer group"
             >
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
@@ -1462,7 +1552,7 @@ export default function HomePage() {
               <div className="text-xs text-gray-500 mt-2 font-normal">
                 {currentProject.allocatedBudget} of {currentProject.totalBudget}
               </div>
-            </Link>
+            </div>
           </div>
         )}
 
@@ -1604,7 +1694,7 @@ export default function HomePage() {
                     Budget vs Spent by Project
                   </h2>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    Live project financial comparisons
+                    Live project financial comparisons · Total Budget: {currentProject.totalBudget} · Total Spent: {currentProject.monthlySpending}
                   </p>
                 </div>
                 <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
@@ -1627,8 +1717,8 @@ export default function HomePage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={currentProject.barData}
-                      margin={{ top: 15, right: 15, left: 10, bottom: 5 }}
-                      barGap={10}
+                      margin={{ top: 25, right: 15, left: 10, bottom: 5 }}
+                      barGap={8}
                     >
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F3F9" />
                       <XAxis
@@ -1654,17 +1744,36 @@ export default function HomePage() {
                         content={({ active, payload }: any) => {
                           if (active && payload && payload.length) {
                             const data = payload[0].payload;
+                            const budgetVal = Number(data.budget || 0);
+                            const spentVal = Number(data.spent || 0);
+                            const pct = budgetVal > 0 ? ((spentVal / budgetVal) * 100).toFixed(1) : "0.0";
                             return (
-                              <div className="bg-white p-3 border border-gray-100 rounded-xl shadow-lg text-xs space-y-1">
-                                <p className="font-semibold text-gray-800 text-xs">
+                              <div className="bg-white p-3.5 border border-gray-100 rounded-xl shadow-lg text-xs space-y-1.5 min-w-[200px]">
+                                <p className="font-bold text-gray-900 border-b border-gray-100 pb-1">
                                   {data.fullName || data.project}
                                 </p>
-                                <div className="text-[#3B82F6] font-medium pt-0.5">
-                                  Budget : ₦{Number(data.budget).toLocaleString()}
+                                <div className="flex items-center justify-between text-[#3B82F6] font-semibold pt-0.5">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-[#3B82F6]" />
+                                    Budget:
+                                  </span>
+                                  <span>₦{budgetVal.toLocaleString()}</span>
                                 </div>
-                                <div className="text-[#22C55E] font-medium">
-                                  Spent : ₦{Number(data.spent).toLocaleString()}
+                                <div className="flex items-center justify-between text-[#16A34A] font-semibold">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-2 h-2 rounded-full bg-[#22C55E]" />
+                                    Spent:
+                                  </span>
+                                  <span>
+                                    ₦{spentVal.toLocaleString()}
+                                    <span className="text-[10px] text-gray-400 font-normal ml-1">({pct}%)</span>
+                                  </span>
                                 </div>
+                                {spentVal === 0 && (
+                                  <div className="text-[10px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 mt-1">
+                                    ₦0.00 actual expenses logged to date
+                                  </div>
+                                )}
                               </div>
                             );
                           }
@@ -1677,6 +1786,8 @@ export default function HomePage() {
                         fill="#3B82F6"
                         radius={[4, 4, 0, 0]}
                         maxBarSize={38}
+                        minPointSize={6}
+                        shape={renderBudgetBar}
                       />
                       <Bar
                         dataKey="spent"
@@ -1684,6 +1795,8 @@ export default function HomePage() {
                         fill="#22C55E"
                         radius={[4, 4, 0, 0]}
                         maxBarSize={38}
+                        minPointSize={6}
+                        shape={renderSpentBar}
                       />
                     </BarChart>
                   </ResponsiveContainer>
@@ -1709,7 +1822,7 @@ export default function HomePage() {
             </div>
 
             {/* Centered Bottom Legend */}
-            <div className="flex items-center justify-center gap-5 pt-3 border-t border-gray-50 text-xs font-medium text-gray-600">
+            <div className="flex items-center justify-center gap-6 pt-3 border-t border-gray-50 text-xs font-medium text-gray-600">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-[2px] bg-[#3B82F6]" />
                 <span>Budget</span>
@@ -1717,6 +1830,10 @@ export default function HomePage() {
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-[2px] bg-[#22C55E]" />
                 <span>Spent</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-gray-400 text-[11px]">
+                <span className="w-2 h-2 rounded-full border border-dashed border-[#16A34A] bg-[#86EFAC]" />
+                <span>(₦0 indicates 0 expenses logged)</span>
               </div>
             </div>
           </div>
@@ -2073,7 +2190,6 @@ export default function HomePage() {
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(selectedPo.id);
-                        showToast(`Copied PO #${selectedPo.id}`);
                       }}
                       title="Copy PO Number"
                       className="p-1 text-gray-400 hover:text-[#32325D] hover:bg-gray-100 rounded transition-colors cursor-pointer"
@@ -2172,7 +2288,7 @@ export default function HomePage() {
               )}
               <button
                 onClick={() => {
-                  showToast(`Simulated PO PDF download for ${selectedPo.id}`);
+                  window.print();
                 }}
                 className="flex-1 flex items-center justify-center gap-2 bg-[#F8F9FE] hover:bg-gray-200 text-[#32325D] py-2.5 rounded-lg font-semibold text-xs transition-colors cursor-pointer border border-[#E9ECEF]"
               >
@@ -2206,7 +2322,6 @@ export default function HomePage() {
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(selectedInv.id);
-                        showToast(`Copied Invoice #${selectedInv.id}`);
                       }}
                       title="Copy Invoice Number"
                       className="p-1 text-gray-400 hover:text-[#32325D] hover:bg-gray-100 rounded transition-colors cursor-pointer"
@@ -2502,14 +2617,12 @@ export default function HomePage() {
 
                       {item.status !== "Normal" && (
                         <div className="flex justify-end pt-1">
-                          <button
-                            onClick={() => {
-                              showToast(`Initiated replenishment PO for ${item.name}`);
-                            }}
+                          <Link
+                            href="/purchase/purchase_requests/new"
                             className="px-3 py-1 bg-[#3B7CED] hover:bg-[#3065c3] text-white font-semibold text-[11px] rounded-lg transition-colors cursor-pointer"
                           >
                             Create Restock Request
-                          </button>
+                          </Link>
                         </div>
                       )}
                     </div>
@@ -2754,13 +2867,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-2.5 bg-gray-900/90 backdrop-blur-xs text-white text-xs font-semibold rounded-xl shadow-xl border border-gray-700 animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
     </div>
   );
 }

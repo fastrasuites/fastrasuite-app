@@ -17,6 +17,9 @@ import { useGetProjectCostingProjectsQuery } from "@/api/projectCostingApi";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { extractErrorMessage } from "@/lib/utils";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useGetUserByIdQuery } from "@/api/settings/usersApi";
+import { useGetVendorByIdQuery, useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
 
 const DataField = ({ label, value, fullWidth = false }: { label: string; value: string | React.ReactNode; fullWidth?: boolean }) => (
   <div className={`flex flex-col gap-1 ${fullWidth ? "col-span-2" : ""}`}>
@@ -150,14 +153,109 @@ export default function RequestDetailsPage() {
     detail?.project_details?.name || 
     getProjectName(request?.project || detail?.project);
 
-  const requestedBy = 
-    (request?.created_by_details && `${request.created_by_details.first_name || ""} ${request.created_by_details.last_name || ""}`.trim()) ||
-    request?.created_by_details?.username ||
-    request?.created_by_details?.email ||
-    (detail?.requester_details?.user && `${detail.requester_details.user.first_name || ""} ${detail.requester_details.user.last_name || ""}`.trim()) ||
-    detail?.requester_details?.user?.username ||
-    detail?.created_by_name ||
-    (request?.created_by ? `User #${request.created_by}` : "N/A");
+  const { fullName: currentUserName, user: currentUser } = useCurrentUser();
+
+  const creatorTenantId = 
+    detail?.requester_details?.id ||
+    detail?.created_by_id ||
+    request?.created_by;
+
+  const { data: creatorTenantUser } = useGetUserByIdQuery(
+    Number(creatorTenantId),
+    { skip: !creatorTenantId || isNaN(Number(creatorTenantId)) }
+  );
+
+  const vendorId =
+    detail?.vendor?.id ||
+    detail?.vendor ||
+    detail?.vendor_id ||
+    (request as any)?.vendor?.id ||
+    (request as any)?.vendor ||
+    (request as any)?.vendor_id;
+
+  const { data: vendorFromApi } = useGetVendorByIdQuery(Number(vendorId), {
+    skip: !vendorId || isNaN(Number(vendorId)),
+  });
+
+  const { data: activeVendors = [] } = useGetActiveVendorsQuery(undefined, {
+    skip: Boolean(vendorFromApi),
+  });
+
+  const subcontractorName = React.useMemo(() => {
+    if (vendorFromApi?.vendor_name) return vendorFromApi.vendor_name;
+    if (detail?.vendor_details?.vendor_name) return detail.vendor_details.vendor_name;
+    if (typeof detail?.vendor_name === "string" && detail.vendor_name.trim().length > 0) {
+      return detail.vendor_name.trim();
+    }
+    if (vendorId && activeVendors.length > 0) {
+      const match = activeVendors.find((v: any) => String(v.id) === String(vendorId));
+      if (match?.vendor_name) return match.vendor_name;
+    }
+    if (vendorId) return `Vendor #${vendorId}`;
+    return "N/A";
+  }, [vendorFromApi, detail, activeVendors, vendorId]);
+
+  const requestedBy = React.useMemo(() => {
+    // 1. If creator matches current user, use complete name from current user profile
+    const creatorEmail = request?.created_by_details?.email || detail?.requester_details?.user?.email;
+    const isCurrent =
+      (creatorEmail && currentUser?.email && creatorEmail.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (request?.created_by && currentUser?.id && Number(request.created_by) === Number(currentUser.id));
+    if (isCurrent && currentUserName && currentUserName !== "Current User") {
+      return currentUserName;
+    }
+
+    // 2. Try tenant user record
+    if (creatorTenantUser) {
+      const tName = `${creatorTenantUser.first_name || ""} ${creatorTenantUser.last_name || ""}`.trim();
+      if (tName && tName.toLowerCase() !== "admin") return tName;
+      if (creatorTenantUser.user?.username && creatorTenantUser.user.username.toLowerCase() !== "admin") {
+        return creatorTenantUser.user.username;
+      }
+    }
+
+    // 3. Try created_by_details
+    if (request?.created_by_details) {
+      const u = request.created_by_details;
+      const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+      if (fullName && fullName.toLowerCase() !== "admin") return fullName;
+      if (u.username && u.username.toLowerCase() !== "admin") return u.username;
+    }
+
+    // 4. Try requester_details in detail
+    if (detail?.requester_details?.user) {
+      const u = detail.requester_details.user;
+      const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+      if (fullName && fullName.toLowerCase() !== "admin") return fullName;
+      if (u.username && u.username.toLowerCase() !== "admin") return u.username;
+    }
+
+    // 5. If currentUserName is available, use it over generic "admin"
+    if (currentUserName && currentUserName !== "Current User") {
+      return currentUserName;
+    }
+
+    const fallbackUsername = detail?.requester_details?.user?.username || request?.created_by_details?.username;
+    if (fallbackUsername) return fallbackUsername;
+
+    const rawName = request?.created_by_details?.first_name || detail?.created_by_name;
+    if (rawName) {
+      return rawName.charAt(0).toUpperCase() + rawName.slice(1);
+    }
+
+    return "Admin User";
+  }, [request, detail, currentUserName, currentUser, creatorTenantUser]);
+
+  const subcontractorNote = React.useMemo(() => {
+    return (
+      detail?.justification_notes ||
+      detail?.notes ||
+      detail?.description ||
+      (request as any)?.justification_notes ||
+      (request as any)?.notes ||
+      "N/A"
+    );
+  }, [detail, request]);
 
   const specificRefId =
     detail?.reference_id ||
@@ -213,7 +311,17 @@ export default function RequestDetailsPage() {
     if (isMaterialConsumption) {
       return (detail.lines || []).reduce((sum: number, l: any) => sum + Number(l.total_cost || (Number(l.quantity || 0) * Number(l.unit_cost || 0))), 0);
     }
-    if (isPettyCash) return Number(detail.amountRequested || detail.amount || 0);
+    if (isPettyCash) {
+      return Number(
+        detail.amount_requested ||
+        detail.amountRequested ||
+        detail.amount ||
+        detail.project_request?.request_amount ||
+        (request as any)?.request_amount ||
+        (request as any)?.amount ||
+        0
+      );
+    }
     if (isLabour) {
       if (detail.projected_cost && parseFloat(detail.projected_cost) > 0)
         return parseFloat(detail.projected_cost);
@@ -292,7 +400,7 @@ export default function RequestDetailsPage() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: "easeOut" }}
-      className="min-h-screen bg-[#F9FAFB] pb-32"
+      className="min-h-screen bg-[#F9FAFB] pb-56 md:pb-64"
     >
       {/* Custom Header */}
       <header className="w-full border-b border-gray-100 bg-white sticky top-0 z-30">
@@ -323,7 +431,7 @@ export default function RequestDetailsPage() {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 pt-6 bg-white min-h-[calc(100vh-64px)] shadow-sm">
+      <main className="max-w-2xl mx-auto px-4 pt-6 bg-white min-h-[calc(100vh-64px)] shadow-sm pb-56 md:pb-64">
         {isRequestLoading ? (
           <div className="flex flex-col gap-6 py-6">
             <Skeleton className="h-5 w-40 bg-gray-200" />
@@ -402,9 +510,10 @@ export default function RequestDetailsPage() {
               {isSubcontractor && (
                 <>
                   <DataField label="Scope of Work" value={detail.scope_of_work || "N/A"} />
-                  <DataField label="Subcontractor Name" value={detail.vendor_details?.vendor_name || detail.vendor_name || "N/A"} fullWidth />
+                  <DataField label="Subcontractor Name" value={subcontractorName} fullWidth />
                   <DataField label="Start Date" value={formatDate(detail.start_date)} />
                   <DataField label="End Date" value={formatDate(detail.end_date)} />
+                  <DataField label="Note" value={subcontractorNote} fullWidth />
                 </>
               )}
 
@@ -449,7 +558,7 @@ export default function RequestDetailsPage() {
                 label="Activity" 
                 value={activityName} 
               />
-              {availableBudget > 0 && (
+              {availableBudget > 0 && !isMaterialConsumption && (
                 <DataField label="Activity Available Budget" value={formatCurrency(availableBudget)} />
               )}
             </div>
@@ -506,7 +615,18 @@ export default function RequestDetailsPage() {
               <>
                 <SectionHeader title="Cost Details" />
                 <div className="grid grid-cols-2 gap-y-5 gap-x-4">
-                  <DataField label="Amount Requested" value={formatCurrency(detail.amountRequested || detail.amount)} fullWidth />
+                  <DataField
+                    label="Amount Requested"
+                    value={formatCurrency(
+                      detail.amount_requested ||
+                      detail.amountRequested ||
+                      detail.amount ||
+                      detail.project_request?.request_amount ||
+                      (request as any)?.request_amount ||
+                      (request as any)?.amount
+                    )}
+                    fullWidth
+                  />
                   <DataField label="Note" value={detail.notes || detail.justification_notes || "N/A"} fullWidth />
                 </div>
               </>
@@ -538,7 +658,8 @@ export default function RequestDetailsPage() {
                 <div className="grid grid-cols-2 gap-y-5 gap-x-4">
                   <DataField label="Contract Value (Estimated)" value={formatCurrency(detail.contract_value)} />
                   <DataField label="Payment Terms" value={detail.payment_terms || "N/A"} />
-                  <DataField label="Note" value={detail.justification_notes || detail.notes || "N/A"} fullWidth />
+                  <DataField label="Payment Type" value={detail.payment_type ? (detail.payment_type === "milestone" ? "Milestone" : "Lump sum") : "N/A"} />
+                  <DataField label="Note" value={subcontractorNote} fullWidth />
                 </div>
               </>
             )}

@@ -263,13 +263,19 @@ export function RequestForm<T extends Record<string, any>>({
   const prevProjectRef = React.useRef(projectVal);
   const prevPhaseRef = React.useRef(phaseVal);
 
+  const defaultValuesRef = React.useRef<string>("");
+
   React.useEffect(() => {
     if (config.defaultValues) {
-      const defaultProject = (config.defaultValues as any)["project"] || (config.defaultValues as any)["project_id"] || "";
-      const defaultPhase = (config.defaultValues as any)["phase"] || "";
-      prevProjectRef.current = defaultProject;
-      prevPhaseRef.current = defaultPhase;
-      reset(config.defaultValues as any);
+      const stringified = JSON.stringify(config.defaultValues);
+      if (defaultValuesRef.current !== stringified) {
+        defaultValuesRef.current = stringified;
+        const defaultProject = (config.defaultValues as any)["project"] || (config.defaultValues as any)["project_id"] || "";
+        const defaultPhase = (config.defaultValues as any)["phase"] || "";
+        prevProjectRef.current = defaultProject;
+        prevPhaseRef.current = defaultPhase;
+        reset(config.defaultValues as any);
+      }
     }
   }, [config.defaultValues, reset]);
 
@@ -282,7 +288,7 @@ export function RequestForm<T extends Record<string, any>>({
     ? rawProjectOptions
     : (rawProjectOptions as any)?.results || [];
   const projectSelectOptions = projectOptionsList.map((p: any) => ({
-    label: p.project_code ? `${p.name} (${p.project_code})` : p.name,
+    label: p.name,
     value: String(p.id),
   }));
 
@@ -297,7 +303,7 @@ export function RequestForm<T extends Record<string, any>>({
     ? rawPhaseOptions
     : (rawPhaseOptions as any)?.results || [];
   const phaseSelectOptions = phaseOptionsList.map((ph: any) => ({
-    label: ph.code ? `${ph.code} - ${ph.name}` : ph.name,
+    label: ph.name,
     value: String(ph.id),
     amount: ph.current_budget ?? ph.original_amount,
   }));
@@ -329,6 +335,7 @@ export function RequestForm<T extends Record<string, any>>({
   );
 
   const selectedActivity = activityOptionsList.find((a: any) => String(a.id) === String(taskVal));
+  const fallbackBudget = Number((config as any)?.defaultBudget) || 0;
   const availableBudgetAmount =
     selectedActivity?.available_budget !== undefined && selectedActivity.available_budget !== null
       ? Number(selectedActivity.available_budget)
@@ -336,7 +343,7 @@ export function RequestForm<T extends Record<string, any>>({
       ? Number(selectedActivity.current_budget)
       : budgetData?.available_budget !== undefined && budgetData.available_budget !== null
       ? Number(budgetData.available_budget)
-      : 0;
+      : fallbackBudget;
 
   const selectedCostCode =
     (selectedActivity as any)?.cost_code || (selectedActivity as any)?.code || budgetCostCode || "-";
@@ -553,27 +560,57 @@ export function RequestForm<T extends Record<string, any>>({
                           if (field.type === "select") {
                             let options = field.options || [];
 
-                            if (field.name === "project" && (!field.options || field.options.length === 0)) {
-                              options = projectSelectOptions;
+                            if (field.name === "project") {
+                              const base = projectSelectOptions.length > 0 ? projectSelectOptions : (field.options || []);
+                              options = [...base];
+                              if (controllerField.value && !options.some((o: any) => String(o.value) === String(controllerField.value))) {
+                                const fallback = (field.options || []).find((o: any) => String(o.value) === String(controllerField.value));
+                                if (fallback) {
+                                  options = [fallback, ...options];
+                                }
+                              }
                             }
 
                             if (field.name === "phase") {
-                              options = phaseSelectOptions;
+                              const base = phaseSelectOptions.length > 0 ? phaseSelectOptions : (field.options || []);
+                              options = [...base];
+                              if (controllerField.value && !options.some((o: any) => String(o.value) === String(controllerField.value))) {
+                                const fallback = (field.options || []).find((o: any) => String(o.value) === String(controllerField.value));
+                                if (fallback) {
+                                  options = [fallback, ...options];
+                                }
+                              }
                             }
 
                             if (field.name === "task" || field.name === "wbsElement" || field.name === "activity") {
-                              options = activitySelectOptions;
+                              const base = activitySelectOptions.length > 0 ? activitySelectOptions : (field.options || []);
+                              options = [...base];
+                              if (controllerField.value && !options.some((o: any) => String(o.value) === String(controllerField.value))) {
+                                const fallback = (field.options || []).find((o: any) => String(o.value) === String(controllerField.value));
+                                if (fallback) {
+                                  options = [fallback, ...options];
+                                }
+                              }
+                            }
+
+                            if (field.name === "vendor") {
+                              if (controllerField.value && !options.some((o: any) => String(o.value) === String(controllerField.value))) {
+                                const fallback = (field.options || []).find((o: any) => String(o.value) === String(controllerField.value));
+                                if (fallback) {
+                                  options = [fallback, ...options];
+                                }
+                              }
                             }
 
                             const isFieldDisabled =
                               field.disabled ||
-                              (field.name === "phase" && !projectVal) ||
-                              ((field.name === "task" || field.name === "wbsElement" || field.name === "activity") && !phaseVal);
+                              (field.name === "phase" && !projectVal && !controllerField.value) ||
+                              ((field.name === "task" || field.name === "wbsElement" || field.name === "activity") && !phaseVal && !controllerField.value);
 
                             const computedPlaceholder =
-                              field.name === "phase" && !projectVal
+                              field.name === "phase" && !projectVal && !controllerField.value
                                 ? "Select a project first"
-                                : (field.name === "task" || field.name === "wbsElement" || field.name === "activity") && !phaseVal
+                                : (field.name === "task" || field.name === "wbsElement" || field.name === "activity") && !phaseVal && !controllerField.value
                                 ? "Select a phase first"
                                 : dynamicPlaceholder;
 
@@ -720,6 +757,7 @@ export function RequestForm<T extends Record<string, any>>({
 
               {/* WBS section budget & cost code summary right below task */}
               {!section.renderBottom &&
+                !section.hideCostSummary &&
                 (section.title === "WBS" ||
                   section.fields.some(
                     (f) => f.name === "task" || f.name === "wbsElement",

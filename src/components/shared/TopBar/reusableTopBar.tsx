@@ -171,23 +171,21 @@ export function NavBar({
   return (
     <header className="w-full border-b border-gray-100 bg-white sticky top-0 z-30">
       <div className="max-w-360 mx-auto px-4 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2 md:gap-4">
+        <div className="flex items-center gap-1.5 md:gap-4">
+          <button
+            onClick={onMenuToggle || toggleSidebar}
+            className="p-2 -ml-1 rounded-lg hover:bg-gray-100 transition-colors md:hidden flex items-center justify-center text-gray-700"
+            aria-label="Toggle navigation menu"
+          >
+            <Menu size={22} />
+          </button>
           {showBackButton && (
             <button
               onClick={handleBack}
-              className="p-2 -ml-2 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center"
+              className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center text-gray-600"
               aria-label="Go back"
             >
-              <ArrowLeft size={24} className="text-gray-600" />
-            </button>
-          )}
-          {!showBackButton && (
-            <button
-              onClick={onMenuToggle || toggleSidebar}
-              className="p-2 rounded-lg hover:bg-gray-100 transition-colors md:hidden"
-              aria-label="Toggle menu"
-            >
-              <Menu size={24} className="text-gray-600" />
+              <ArrowLeft size={20} />
             </button>
           )}
           <div className="flex items-center">

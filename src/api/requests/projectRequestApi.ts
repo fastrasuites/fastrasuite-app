@@ -340,6 +340,12 @@ export const projectRequestApi = createApi({
         params,
       }),
     }),
+    getProjectRequestProducts: builder.query<any[], void | { search?: string }>({
+      query: (params) => ({
+        url: "/project-requests/project-requests/products/",
+        params: params || undefined,
+      }),
+    }),
   }),
 });
 
@@ -356,4 +362,5 @@ export const {
   useGetProjectOptionsQuery,
   useGetPhaseOptionsQuery,
   useGetActivityOptionsQuery,
+  useGetProjectRequestProductsQuery,
 } = projectRequestApi;

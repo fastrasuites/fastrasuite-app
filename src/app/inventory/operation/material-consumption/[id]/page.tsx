@@ -54,9 +54,14 @@ export default function MaterialConsumptionDetailPage() {
       project: (apiData as any).project_details?.name || `Project #${apiData.project_request || 'Unknown'}`,
       wbsPhase: (apiData as any).phase_details?.name || "Unknown Phase",
       wbsActivity: (apiData as any).activity_details?.name || "Unknown Activity",
-      equipmentId: (apiData as any).equipment_details?.name || "-",
-      requester: (apiData as any).created_by_name || (apiData as any).requester_details?.name || "-",
-      gateReceiver: (apiData as any).gate_receiver_details?.name || "-",
+      requester: (() => {
+        const u = (apiData as any).requester_details?.user || (apiData as any).created_by_details || (apiData as any).project_request?.created_by_details;
+        if (u) {
+          const fullName = `${u.first_name || ""} ${u.last_name || ""}`.trim();
+          return fullName || u.username || u.email || "-";
+        }
+        return (apiData as any).created_by_name || (apiData as any).requester_details?.name || (apiData as any).requester_name || "-";
+      })(),
       requisitionDate: apiData.date_consumed || new Date(apiData.created_at || Date.now()).toISOString().split('T')[0],
       issueDate: (apiData as any).issue_date || "-",
       totalCost: apiData.lines?.reduce((sum: number, line: any) => sum + (parseFloat(line.total_cost) || 0), 0) || 0,
@@ -175,7 +180,14 @@ export default function MaterialConsumptionDetailPage() {
 
   const handleDelete = async () => {
     try {
-      await deleteRequest(Number(reqId)).unwrap();
+      const deleteId =
+        req?.parentRequestId ||
+        (typeof (apiData as any)?.project_request === "object"
+          ? (apiData as any)?.project_request?.id
+          : (apiData as any)?.project_request) ||
+        (apiData as any)?.project_request_id ||
+        Number(reqId);
+      await deleteRequest(Number(deleteId)).unwrap();
       setIsConfirmDeleteOpen(false);
       statusModal.showSuccess("Deleted", "Material Consumption request deleted successfully.");
       router.push("/inventory/operation/material-consumption");

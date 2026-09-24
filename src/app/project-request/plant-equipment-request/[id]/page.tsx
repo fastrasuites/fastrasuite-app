@@ -50,7 +50,6 @@ export default function PlantEquipmentRequestDetailPage() {
   const { id } = useParams();
   const statusModal = useStatusModal();
   const { canDo } = useModulePermissions();
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const numericId = Number(id);
   const { data: apiRequest, isLoading: apiLoading, refetch } = useGetPlantEquipmentRequestQuery(numericId, {
@@ -211,14 +210,33 @@ export default function PlantEquipmentRequestDetailPage() {
     return 5000000;
   }, [apiRequest, projectCosting, request]);
 
-  const handleDelete = async () => {
-    try {
-      await deleteRequest(numericId).unwrap();
-      setIsConfirmingDelete(false);
-      statusModal.showSuccess("Request Deleted", "The plant and equipment request has been deleted.");
-    } catch (err) {
-      statusModal.showError("Delete Failed", extractErrorMessage(err, "Failed to delete the request."));
-    }
+  const handleDelete = () => {
+    statusModal.showConfirm(
+      "Delete Plant & Equipment Request",
+      "Are you sure you want to delete this plant and equipment request? This action cannot be undone.",
+      async () => {
+        try {
+          const parentId =
+            (typeof (apiRequest as any)?.project_request === "object"
+              ? (apiRequest as any)?.project_request?.id
+              : (apiRequest as any)?.project_request) ||
+            (apiRequest as any)?.project_request_id ||
+            numericId;
+          await deleteRequest(Number(parentId)).unwrap();
+          statusModal.showSuccess(
+            "Request Deleted",
+            "The plant and equipment request has been deleted successfully.",
+            "Go to Requests",
+            () => {
+              statusModal.close();
+              router.push("/project-request/plant-equipment-request");
+            }
+          );
+        } catch (err) {
+          statusModal.showError("Delete Failed", extractErrorMessage(err, "Failed to delete the request."));
+        }
+      }
+    );
   };
 
   const handleSubmit = async () => {
@@ -236,8 +254,9 @@ export default function PlantEquipmentRequestDetailPage() {
   };
 
   const handleModalClose = () => {
+    const isDeleted = statusModal.type === "success" && statusModal.title === "Request Deleted";
     statusModal.close();
-    if (statusModal.type === "success" && !isConfirmingDelete) {
+    if (isDeleted) {
       router.push("/project-request/plant-equipment-request");
     }
   };
@@ -461,63 +480,38 @@ export default function PlantEquipmentRequestDetailPage() {
           {(canEdit || canDelete || canSubmit) && (
             <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 p-3.5 z-40 shadow-lg">
               <div className="max-w-[430px] mx-auto flex items-center justify-between gap-3">
-                {isConfirmingDelete ? (
-                  <div className="w-full flex items-center justify-between gap-2 bg-red-50 p-2 rounded-xl border border-red-100">
-                    <span className="text-xs font-semibold text-red-700 flex items-center gap-1.5 pl-1">
-                      <AlertCircle size={16} className="text-red-600" /> Confirm delete?
-                    </span>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setIsConfirmingDelete(false)}
-                        className="h-9 text-xs bg-white border-gray-200 text-gray-700 rounded-lg"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleDelete}
-                        disabled={isDeleting}
-                        className="h-9 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg"
-                      >
-                        {isDeleting ? "Deleting..." : "Delete"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="w-full flex items-center justify-end gap-2.5">
-                    {canDelete && (
-                      <Button
-                        variant="outline"
-                        onClick={() => setIsConfirmingDelete(true)}
-                        className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
-                      >
-                        <Trash2 size={15} /> Delete
-                      </Button>
-                    )}
+                <div className="w-full flex items-center justify-end gap-2.5">
+                  {canDelete && (
+                    <Button
+                      variant="outline"
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
+                    >
+                      <Trash2 size={15} /> {isDeleting ? "Deleting..." : "Delete"}
+                    </Button>
+                  )}
 
-                    {canEdit && (
-                      <Button
-                        variant="outline"
-                        onClick={() => router.push(`/project-request/plant-equipment-request/edit/${numericId}`)}
-                        className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
-                      >
-                        <Edit3 size={15} /> Edit
-                      </Button>
-                    )}
+                  {canEdit && (
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push(`/project-request/plant-equipment-request/edit/${numericId}`)}
+                      className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
+                    >
+                      <Edit3 size={15} /> Edit
+                    </Button>
+                  )}
 
-                    {canSubmit && (
-                      <Button
-                        disabled={isSubmitting}
-                        onClick={handleSubmit}
-                        className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
-                      >
-                        <Send size={14} /> Submit
-                      </Button>
-                    )}
-                  </div>
-                )}
+                  {canSubmit && (
+                    <Button
+                      disabled={isSubmitting}
+                      onClick={handleSubmit}
+                      className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
+                    >
+                      <Send size={14} /> Submit
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -529,9 +523,11 @@ export default function PlantEquipmentRequestDetailPage() {
             type={statusModal.type}
             title={statusModal.title}
             message={statusModal.message}
-            actionText="Back to List"
-            onAction={handleModalClose}
-            showCloseButton={false}
+            actionText={statusModal.actionText}
+            onAction={statusModal.onAction}
+            secondaryText={statusModal.secondaryText}
+            onSecondary={statusModal.onSecondary}
+            actionVariant={statusModal.actionVariant}
           />
         </div>
       </motion.div>

@@ -315,7 +315,7 @@ export const projectPurchaseRequestApi = createApi({
     }),
     deleteProjectPurchaseRequest: builder.mutation<void, string | number>({
       query: (id) => ({
-        url: `/project-requests/purchase-requests/${id}/`,
+        url: `/project-requests/project-requests/${id}/`,
         method: "DELETE",
       }),
       invalidatesTags: ["ProjectPurchaseRequest"],

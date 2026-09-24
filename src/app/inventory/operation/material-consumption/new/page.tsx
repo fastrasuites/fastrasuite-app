@@ -314,7 +314,7 @@ export default function NewMaterialConsumptionPage() {
                 <SelectContent>
                   {projects.map((p: any) => (
                     <SelectItem key={p.id} value={String(p.id)}>
-                      {p.name} {p.project_code ? `(${p.project_code})` : ""}
+                      {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -387,7 +387,7 @@ export default function NewMaterialConsumptionPage() {
             </div>
             
             <div>
-              <Label className="text-gray-600 mb-1.5 block">Justification Notes</Label>
+              <Label className="text-gray-600 mb-1.5 block">Note</Label>
               <Textarea
                 placeholder="Enter reason for material consumption..."
                 value={notes}

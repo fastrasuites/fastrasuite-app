@@ -10,7 +10,8 @@ import { GridCardIcon } from "@/components/icons/gridCardIcon";
 import { useGetUsersQuery, useDeleteUserMutation } from "@/api/settings/usersApi";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Trash2, AlertTriangle, Loader2 } from "lucide-react";
+import { Trash2, AlertTriangle, Loader2, Lock } from "lucide-react";
+import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
 import {
   Dialog,
   DialogContent,
@@ -58,8 +59,17 @@ export default function Users() {
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const statusModal = useStatusModal();
 
+  const { isUserAccessible, restrictedUsersCount } = useSubscriptionLimits();
+
   // Navigate to user detail page
   const handleUserClick = (id?: string | number) => {
+    if (id && !isUserAccessible(id)) {
+      statusModal.showError(
+        "User Access Restricted",
+        "This user account was created under a higher subscription plan and is currently locked because your account exceeds the user limit for your current plan. Upgrade your plan to restore access."
+      );
+      return;
+    }
     router.push(`/settings/users/${id}`);
   };
 
@@ -198,6 +208,23 @@ export default function Users() {
 
   return (
     <div className="py-4 w-full">
+      {restrictedUsersCount > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3.5 mb-4 flex items-center justify-between text-amber-900 text-xs shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              <strong>{restrictedUsersCount} recent user(s)</strong> are currently locked due to plan tier limits. Upgrade your plan to restore access.
+            </span>
+          </div>
+          <Button
+            onClick={() => router.push("/settings/billing")}
+            className="bg-amber-700 hover:bg-amber-800 text-white text-[11px] h-7 px-3 font-semibold rounded cursor-pointer"
+          >
+            Upgrade Plan
+          </Button>
+        </div>
+      )}
+
       {viewMode === "grid" ? (
         <SettingsGrid
           icon={<GridCardIcon />}
@@ -228,6 +255,7 @@ export default function Users() {
           checkbox
           renderCell={(row, key) => {
             if (key === "name") {
+              const isAccessible = row.id ? isUserAccessible(row.id) : true;
               return (
                 <div className="flex items-center">
                   <span className="inline-flex items-center justify-center w-10 h-10 rounded-full mr-2 bg-[#E8EFFD]">
@@ -237,7 +265,14 @@ export default function Users() {
                       className="w-full h-full object-cover rounded-full"
                     />
                   </span>
-                  {row[key]}
+                  <div className="flex items-center gap-2">
+                    <span>{row[key]}</span>
+                    {!isAccessible && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        <Lock className="w-3 h-3" /> Locked
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             }

@@ -12,7 +12,7 @@ import {
   usePatchProjectPurchaseRequestMutation,
   useSubmitProjectPurchaseRequestMutation,
 } from "@/api/requests/projectPurchaseRequestApi";
-import { StatusModal } from "@/components/shared/StatusModal";
+import { StatusModal, useStatusModal, extractErrorMessage } from "@/components/shared/StatusModal";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { motion } from "framer-motion";
@@ -196,18 +196,7 @@ export default function PurchaseRequestDetailPage() {
   const { id } = useParams();
   const { canDo } = useModulePermissions();
   const [request, setRequest] = useState<PurchaseRequestItem | null>(null);
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-  const [statusModal, setStatusModal] = useState<{
-    isOpen: boolean;
-    type: "success" | "error";
-    title: string;
-    description: string;
-  }>({
-    isOpen: false,
-    type: "success",
-    title: "",
-    description: "",
-  });
+  const statusModal = useStatusModal();
 
   const { data: apiData, isLoading: isApiLoading } = useGetProjectPurchaseRequestQuery(
     id as string,
@@ -277,18 +266,45 @@ export default function PurchaseRequestDetailPage() {
     return 5000000;
   }, [projectCosting, activityId]);
 
-  const handleDelete = async () => {
-    try {
-      await deleteRequest(id as string).unwrap();
-      setIsConfirmingDelete(false);
+  const handleDelete = () => {
+    statusModal.showConfirm(
+      "Delete Purchase Request",
+      "Are you sure you want to delete this purchase request? This action cannot be undone.",
+      async () => {
+        try {
+          const deleteId =
+            (typeof apiData?.project_request === "object"
+              ? (apiData?.project_request as any)?.id
+              : apiData?.project_request) ||
+            (apiData as any)?.project_request_id ||
+            apiData?.id ||
+            id;
+          await deleteRequest(deleteId).unwrap();
+          statusModal.showSuccess(
+            "Request Deleted",
+            "The purchase request has been deleted successfully.",
+            "Go to Requests",
+            () => {
+              statusModal.close();
+              router.push("/project-request/purchase-request");
+            }
+          );
+        } catch (error: any) {
+          console.error("Failed to delete request:", error);
+          statusModal.showError(
+            "Delete Failed",
+            extractErrorMessage(error, formatApiError(error) || "Failed to delete purchase request. Please try again.")
+          );
+        }
+      }
+    );
+  };
+
+  const handleModalClose = () => {
+    const isDeleted = statusModal.type === "success" && statusModal.title === "Request Deleted";
+    statusModal.close();
+    if (isDeleted) {
       router.push("/project-request/purchase-request");
-    } catch (error) {
-      setStatusModal({
-        isOpen: true,
-        type: "error",
-        title: "Delete Failed",
-        description: "Failed to delete purchase request. Please try again.",
-      });
     }
   };
 
@@ -407,12 +423,10 @@ export default function PurchaseRequestDetailPage() {
           if (request) {
             setRequest((prev) => (prev ? { ...prev, status: newStatus } : null));
           }
-          setStatusModal({
-            isOpen: true,
-            type: "success",
-            title: "Request Submitted",
-            description: "Your purchase request has been submitted for approval.",
-          });
+          statusModal.showSuccess(
+            "Request Submitted",
+            "Your purchase request has been submitted for approval."
+          );
           return;
         }
       }
@@ -421,21 +435,17 @@ export default function PurchaseRequestDetailPage() {
       if (request) {
         setRequest((prev) => (prev ? { ...prev, status: newStatus } : null));
       }
-      setStatusModal({
-        isOpen: true,
-        type: "success",
-        title: "Status Updated",
-        description: `Request status has been updated to ${newStatus}.`,
-      });
+      statusModal.showSuccess(
+        "Status Updated",
+        `Request status has been updated to ${newStatus}.`
+      );
     } catch (error: any) {
       console.error("API Error Response:", error);
       const errorMsg = formatApiError(error);
-      setStatusModal({
-        isOpen: true,
-        type: "error",
-        title: "Submission Failed",
-        description: errorMsg,
-      });
+      statusModal.showError(
+        "Submission Failed",
+        errorMsg
+      );
     }
   };
 
@@ -667,63 +677,38 @@ export default function PurchaseRequestDetailPage() {
         {(canEdit || canDelete || canSubmit) && (
           <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 p-3.5 z-40 shadow-lg">
             <div className="max-w-[430px] mx-auto flex items-center justify-between gap-3">
-              {isConfirmingDelete ? (
-                <div className="w-full flex items-center justify-between gap-2 bg-red-50 p-2 rounded-xl border border-red-100">
-                  <span className="text-xs font-semibold text-red-700 flex items-center gap-1.5 pl-1">
-                    <AlertCircle size={16} className="text-red-600" /> Confirm delete?
-                  </span>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setIsConfirmingDelete(false)}
-                      className="h-9 text-xs bg-white border-gray-200 text-gray-700 rounded-lg"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={handleDelete}
-                      disabled={isDeleting}
-                      className="h-9 text-xs bg-red-600 hover:bg-red-700 text-white rounded-lg"
-                    >
-                      {isDeleting ? "Deleting..." : "Delete"}
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="w-full flex items-center justify-end gap-2.5">
-                  {canDelete && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setIsConfirmingDelete(true)}
-                      className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
-                    >
-                      <Trash2 size={15} /> Delete
-                    </Button>
-                  )}
+              <div className="w-full flex items-center justify-end gap-2.5">
+                {canDelete && (
+                  <Button
+                    variant="outline"
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
+                  >
+                    <Trash2 size={15} /> {isDeleting ? "Deleting..." : "Delete"}
+                  </Button>
+                )}
 
-                  {canEdit && (
-                    <Button
-                      variant="outline"
-                      onClick={() => router.push(`/project-request/purchase-request/${request.id}/edit`)}
-                      className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
-                    >
-                      <Edit3 size={15} /> Edit
-                    </Button>
-                  )}
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/project-request/purchase-request/${request.id}/edit`)}
+                    className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
+                  >
+                    <Edit3 size={15} /> Edit
+                  </Button>
+                )}
 
-                  {canSubmit && (
-                    <Button
-                      disabled={isSubmitting || isUpdating}
-                      onClick={() => handleStatusChange("pending")}
-                      className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
-                    >
-                      <Send size={14} /> Submit
-                    </Button>
-                  )}
-                </div>
-              )}
+                {canSubmit && (
+                  <Button
+                    disabled={isSubmitting || isUpdating}
+                    onClick={() => handleStatusChange("pending")}
+                    className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
+                  >
+                    <Send size={14} /> Submit
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -731,11 +716,15 @@ export default function PurchaseRequestDetailPage() {
         {/* Status Modal */}
         <StatusModal
           isOpen={statusModal.isOpen}
-          type={statusModal.type as any}
+          onClose={handleModalClose}
+          type={statusModal.type}
           title={statusModal.title}
-          message={statusModal.description}
-          onClose={() => setStatusModal((prev) => ({ ...prev, isOpen: false }))}
-          onAction={() => setStatusModal((prev) => ({ ...prev, isOpen: false }))}
+          message={statusModal.message}
+          actionText={statusModal.actionText}
+          onAction={statusModal.onAction}
+          secondaryText={statusModal.secondaryText}
+          onSecondary={statusModal.onSecondary}
+          actionVariant={statusModal.actionVariant}
         />
       </div>
     </motion.div>

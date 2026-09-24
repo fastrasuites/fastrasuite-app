@@ -92,6 +92,7 @@ export default function NewPettyCashRequestPage() {
       },
       {
         title: "WBS",
+        hideCostSummary: true,
         fields: [
           {
             name: "phase",

@@ -13,6 +13,7 @@ import {
   ArrowLeftFromLine,
   ArrowRightFromLine,
   Lock,
+  X,
 } from "lucide-react";
 import { usePermission } from "@/hooks/usePermission";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
@@ -84,41 +85,30 @@ interface NavSectionItem {
 
 const navSections: NavSectionItem[] = [
   {
-    id: "invoice",
-    label: "Invoice",
-    icon: InvoiceIcon,
-    route: "/invoice/approved-requests",
-    moduleKey: "invoice",
+    id: "project-costing",
+    label: "Project Costing",
+    icon: Clipboard,
+    route: "/project-costing",
+    moduleKey: "projectCosting",
+  },
+  {
+    id: "project-request",
+    label: "Project Request",
+    icon: ClipboardPenLine,
+    route: "/project-request",
+    moduleKey: "projectRequest",
     children: [
       {
+        id: "make-a-request",
+        label: "Make a Request",
+        route: "/project-request/make-request",
+        entitlement: "create",
+      },
+      {
         id: "approved-request",
-        label: "Approved request",
-        route: "/invoice/approved-requests",
-        entitlement: "view_approved_requests",
-      },
-      {
-        id: "purchase-order",
-        label: "Purchase Order",
-        route: "/invoice/purchase-order",
-        entitlement: "view_purchase_orders",
-      },
-      {
-        id: "payment-queue",
-        label: "Payment Queue",
-        route: "/invoice/payment-queue",
-        entitlement: "view_accounts_payable_queue",
-      },
-      {
-        id: "charts-of-account",
-        label: "Charts of Account",
-        route: "/invoice/chart-of-account",
-        entitlement: "view_cash_flow",
-      },
-      {
-        id: "account-ledger",
-        label: "Account Ledger",
-        route: "/invoice/account-ledger",
-        entitlement: "view_cash_flow",
+        label: "Approved Request",
+        route: "/project-request/approve",
+        entitlement: "approve",
       },
     ],
   },
@@ -162,32 +152,43 @@ const navSections: NavSectionItem[] = [
     ],
   },
   {
-    id: "project-request",
-    label: "Project Request",
-    icon: ClipboardPenLine,
-    route: "/project-request",
-    moduleKey: "projectRequest",
+    id: "invoice",
+    label: "Invoices",
+    icon: InvoiceIcon,
+    route: "/invoice/approved-requests",
+    moduleKey: "invoice",
     children: [
       {
-        id: "make-a-request",
-        label: "Make a Request",
-        route: "/project-request/make-request",
-        entitlement: "create",
+        id: "approved-request",
+        label: "Approved request",
+        route: "/invoice/approved-requests",
+        entitlement: "view_approved_requests",
       },
       {
-        id: "approved-request",
-        label: "Approved Request",
-        route: "/project-request/approve",
-        entitlement: "approve",
+        id: "purchase-order",
+        label: "Purchase Order",
+        route: "/invoice/purchase-order",
+        entitlement: "view_purchase_orders",
+      },
+      {
+        id: "payment-queue",
+        label: "Payment Queue",
+        route: "/invoice/payment-queue",
+        entitlement: "view_accounts_payable_queue",
+      },
+      {
+        id: "charts-of-account",
+        label: "Charts of Account",
+        route: "/invoice/chart-of-account",
+        entitlement: "view_cash_flow",
+      },
+      {
+        id: "account-ledger",
+        label: "Account Ledger",
+        route: "/invoice/account-ledger",
+        entitlement: "view_cash_flow",
       },
     ],
-  },
-  {
-    id: "project-costing",
-    label: "Project Costing",
-    icon: Clipboard,
-    route: "/project-costing",
-    moduleKey: "projectCosting",
   },
 ];
 
@@ -390,14 +391,33 @@ const Sidebar: React.FC<SidebarProps> = ({
     setTooltip(null);
   };
 
+  // On mobile devices (when opened as drawer), always show expanded full view
+  const effectiveExpanded = isExpanded || isOpen;
+
   return (
     <>
       <nav
-        className={`fixed top-0 left-0 h-screen bg-white border-r border-gray-100 flex flex-col py-6 z-40 overflow-y-auto scrollbar-hide transition-all duration-300 ease-in-out select-none
-        ${isOpen ? "translate-x-0" : "-translate-x-full"}
-        md:translate-x-0 w-64 ${isExpanded ? "md:w-64 px-4.5" : "md:w-16 px-2"}`}
+        className={`fixed top-0 left-0 h-screen bg-white border-r border-gray-100 flex flex-col py-6 z-50 overflow-y-auto scrollbar-hide transition-all duration-300 ease-in-out select-none
+        ${isOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"}
+        md:translate-x-0 w-72 max-w-[85vw] ${isExpanded ? "md:w-64 px-4.5" : "md:w-16 px-4.5 md:px-2"}`}
         aria-label="Main navigation"
       >
+        {/* Mobile Header with Brand & Close Button */}
+        <div className="flex md:hidden items-center justify-between px-1 pb-4 mb-2 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#3B7CED] flex items-center justify-center text-white font-bold text-base shadow-xs">
+              F
+            </div>
+            <span className="font-bold text-gray-900 text-base">Fastra Suite</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            aria-label="Close menu"
+          >
+            <X size={20} />
+          </button>
+        </div>
         {/* Navigation Content */}
         <div className="flex-1 flex flex-col space-y-4">
           {/* Dashboard */}
@@ -407,7 +427,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               onMouseEnter={(e) => showSimpleTooltip(e, "Dashboard")}
               onMouseLeave={hideSimpleTooltip}
               className={`w-full flex items-center py-2 px-2.5 rounded-lg transition-colors group cursor-pointer ${
-                !isExpanded ? "justify-center" : ""
+                !effectiveExpanded ? "justify-center" : ""
               } ${
                 isDashboardActive
                   ? "text-[#2563EB]"
@@ -422,7 +442,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   className="transition-colors group-hover:text-gray-700"
                 />
               </div>
-              {isExpanded && (
+              {effectiveExpanded && (
                 <span
                   className={`text-[15px] font-medium ml-3 whitespace-nowrap overflow-hidden text-ellipsis ${
                     isDashboardActive
@@ -444,7 +464,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             const active = isSectionActive(section);
 
             // Collapsed (icon-only mode)
-            if (!isExpanded) {
+            if (!effectiveExpanded) {
               return (
                 <div
                   key={section.id}
@@ -579,7 +599,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             onMouseEnter={(e) => showSimpleTooltip(e, "Upgrade plan")}
             onMouseLeave={hideSimpleTooltip}
             className={`w-full flex items-center py-2 px-2.5 rounded-lg transition-colors group cursor-pointer ${
-              !isExpanded ? "justify-center" : ""
+              !effectiveExpanded ? "justify-center" : ""
             } ${
               isUpgradePlanActive
                 ? "text-[#2563EB]"
@@ -594,7 +614,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 className="transition-colors group-hover:text-gray-700"
               />
             </div>
-            {isExpanded && (
+            {effectiveExpanded && (
               <span className="text-[15px] font-medium ml-3 text-gray-400 group-hover:text-gray-700 transition-colors whitespace-nowrap overflow-hidden text-ellipsis">
                 Upgrade plan
               </span>
@@ -608,7 +628,7 @@ const Sidebar: React.FC<SidebarProps> = ({
               onMouseEnter={(e) => showSimpleTooltip(e, "Settings")}
               onMouseLeave={hideSimpleTooltip}
               className={`w-full flex items-center py-2 px-2.5 rounded-lg transition-colors group cursor-pointer ${
-                !isExpanded ? "justify-center" : ""
+                !effectiveExpanded ? "justify-center" : ""
               } ${
                 isSettingsActive
                   ? "text-[#2563EB]"
@@ -623,7 +643,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                   className="transition-colors group-hover:text-gray-700"
                 />
               </div>
-              {isExpanded && (
+              {effectiveExpanded && (
                 <span className="text-[15px] font-medium ml-3 text-gray-400 group-hover:text-gray-700 transition-colors whitespace-nowrap overflow-hidden text-ellipsis">
                   Settings
                 </span>
@@ -632,7 +652,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           )}
 
           {/* Collapse/Expand Toggle Button at bottom */}
-          <div className="pt-2">
+          <div className="pt-2 hidden md:block">
             <button
               onClick={onToggleExpanded}
               onMouseEnter={(e) =>

@@ -90,6 +90,8 @@ const PLAN_PRICES = {
   },
 };
 
+const TIER_ORDER: Record<string, number> = { trial: 0, starter: 1, core: 1, professional: 2, enterprise: 3 };
+
 export default function BillingPage() {
   const [activeTab, setActiveTab] = useState<"plan" | "payment">("plan");
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annually">("monthly");
@@ -126,6 +128,8 @@ export default function BillingPage() {
     maxUsers,
     currentWarehouses,
     maxWarehouses,
+    restrictedProjectsCount,
+    restrictedUsersCount,
   } = useSubscriptionLimits();
 
   // Automatic Paystack return payment verification
@@ -195,6 +199,18 @@ export default function BillingPage() {
   const [createdInvoice, setCreatedInvoice] = useState<any>(null);
 
   const handleOpenPlanModal = (defaultTier?: "starter" | "professional" | "enterprise") => {
+    const targetTier = defaultTier || selectedPlanTier;
+    const currentTierRank = TIER_ORDER[currentPlanTier] || 0;
+    const targetTierRank = TIER_ORDER[targetTier] || 0;
+
+    if (subStatus?.status === "active" && targetTierRank < currentTierRank) {
+      statusModal.showError(
+        "Downgrade Not Allowed",
+        "You cannot downgrade your plan while you have an active subscription. You can change your plan after your current subscription expires."
+      );
+      return;
+    }
+
     if (defaultTier) setSelectedPlanTier(defaultTier);
     setCreatedInvoice(null);
     setModalStep(1);
@@ -476,8 +492,6 @@ export default function BillingPage() {
 </html>`);
     printWindow.document.close();
   };
-
-  const tierOrder = { trial: 0, core: 1, starter: 1, professional: 2, enterprise: 3 };
 
   // Invoice dynamic details for A4 sheet
   const today = new Date();
@@ -873,6 +887,23 @@ export default function BillingPage() {
                 </div>
               </div>
 
+              {/* Over-quota data restriction alert banner */}
+              {(restrictedProjectsCount > 0 || restrictedUsersCount > 0) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3 text-amber-900 shadow-2xs">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <p className="font-bold text-sm text-amber-900">Plan Quota Exceeded (Access Restricted)</p>
+                    <p>
+                      Your account currently exceeds your plan tier limit:
+                      {restrictedProjectsCount > 0 && ` ${restrictedProjectsCount} recent project(s)`}
+                      {restrictedProjectsCount > 0 && restrictedUsersCount > 0 && " and"}
+                      {restrictedUsersCount > 0 && ` ${restrictedUsersCount} recent user(s)`}
+                      {" "}are locked and restricted from access. Upgrade your plan to instantly restore access.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* 3 Pricing Cards Grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {(["starter", "professional", "enterprise"] as const).map((tier) => {
@@ -883,10 +914,16 @@ export default function BillingPage() {
                   const unitText = billingCycle === "monthly" ? "/month" : "/year";
                   const features = PLAN_FEATURES[tier];
 
-                  const currentRank = tierOrder[currentPlanTier as keyof typeof tierOrder] || 0;
-                  const thisRank = tierOrder[tier];
+                  const currentRank = TIER_ORDER[currentPlanTier] || 0;
+                  const thisRank = TIER_ORDER[tier] || 0;
+                  const isDowngrade = !isTrial && thisRank < currentRank;
+                  const isActiveSub = subStatus?.status === "active";
+                  const isDowngradeDisabled = isDowngrade && isActiveSub;
+
                   const buttonText = isCurrent
                     ? "Current Plan"
+                    : isDowngradeDisabled
+                    ? "Downgrade Unavailable"
                     : isTrial || thisRank > currentRank
                     ? "Upgrade"
                     : "Downgrade";
@@ -943,16 +980,23 @@ export default function BillingPage() {
 
                       <div className="pt-8">
                         <Button
-                          disabled={isCurrent}
+                          disabled={isCurrent || isDowngradeDisabled}
                           onClick={() => handleOpenPlanModal(tier)}
                           className={`w-full h-11 text-xs font-semibold rounded-lg transition-all ${
                             isCurrent
                               ? "bg-slate-400 text-white cursor-default"
+                              : isDowngradeDisabled
+                              ? "bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300 shadow-none"
                               : "bg-[#3B7CED] hover:bg-[#2d63c7] text-white shadow-2xs"
                           }`}
                         >
                           {buttonText}
                         </Button>
+                        {isDowngradeDisabled && (
+                          <p className="text-[11px] text-amber-700 mt-2 text-center font-medium leading-tight">
+                            Downgrades are not permitted while subscription is active.
+                          </p>
+                        )}
                       </div>
                     </div>
                   );

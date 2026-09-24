@@ -40,6 +40,12 @@ export interface PlanLimits {
   canUseCostLedgerForecasting: boolean;
   canUseAdvancedReports: boolean;
 
+  // Access restriction helpers for downgraded expired subscriptions
+  isProjectAccessible: (projectId: number | string) => boolean;
+  isUserAccessible: (userId: number | string) => boolean;
+  restrictedProjectsCount: number;
+  restrictedUsersCount: number;
+
   // Helpers
   isModuleAllowed: (moduleName: string) => boolean;
 }
@@ -125,6 +131,36 @@ export function useSubscriptionLimits(): PlanLimits {
 
   const canCreateProject = currentProjects < maxProjects;
 
+  // Chronological accessibility for projects (oldest first up to maxProjects)
+  const accessibleProjectIds = useMemo(() => {
+    if (!Array.isArray(projects)) return new Set<number | string>();
+    const activeProjects = projects.filter((p) => {
+      const s = (p.status || "").toUpperCase();
+      return !["ARCHIVED", "COMPLETED", "REJECTED", "CANCELLED"].includes(s);
+    });
+
+    const sorted = [...activeProjects].sort((a: any, b: any) => {
+      const timeA = a.created_at || a.date_created ? new Date(a.created_at || a.date_created).getTime() : 0;
+      const timeB = b.created_at || b.date_created ? new Date(b.created_at || b.date_created).getTime() : 0;
+      if (timeA !== timeB && timeA > 0 && timeB > 0) return timeA - timeB;
+      return Number(a.id || 0) - Number(b.id || 0);
+    });
+
+    const allowed = sorted.slice(0, maxProjects);
+    return new Set<number | string>(allowed.map((p) => p.id));
+  }, [projects, maxProjects]);
+
+  const isProjectAccessible = (projectId: number | string) => {
+    if (!Array.isArray(projects)) return true;
+    if (currentProjects <= maxProjects) return true;
+    return accessibleProjectIds.has(projectId);
+  };
+
+  const restrictedProjectsCount = useMemo(() => {
+    if (!Array.isArray(projects)) return 0;
+    return Math.max(0, currentProjects - maxProjects);
+  }, [currentProjects, maxProjects, projects]);
+
   // Max users
   const maxUsers = useMemo(() => {
     if (
@@ -145,6 +181,36 @@ export function useSubscriptionLimits(): PlanLimits {
   }, [users]);
 
   const canAddUser = currentUsers < maxUsers;
+
+  // Chronological accessibility for users (oldest first up to maxUsers)
+  const accessibleUserIds = useMemo(() => {
+    if (!Array.isArray(users)) return new Set<number | string>();
+    const sorted = [...users].sort((a: any, b: any) => {
+      const timeA = a.date_created || a.created_at ? new Date(a.date_created || a.created_at).getTime() : 0;
+      const timeB = b.date_created || b.created_at ? new Date(b.date_created || b.created_at).getTime() : 0;
+      if (timeA !== timeB && timeA > 0 && timeB > 0) return timeA - timeB;
+      return Number(a.id || a.user_id || 0) - Number(b.id || b.user_id || 0);
+    });
+
+    const allowed = sorted.slice(0, maxUsers);
+    const ids = new Set<number | string>();
+    allowed.forEach((u: any) => {
+      if (u.id !== undefined) ids.add(u.id);
+      if (u.user_id !== undefined) ids.add(u.user_id);
+    });
+    return ids;
+  }, [users, maxUsers]);
+
+  const isUserAccessible = (userId: number | string) => {
+    if (!Array.isArray(users)) return true;
+    if (currentUsers <= maxUsers) return true;
+    return accessibleUserIds.has(userId);
+  };
+
+  const restrictedUsersCount = useMemo(() => {
+    if (!Array.isArray(users)) return 0;
+    return Math.max(0, currentUsers - maxUsers);
+  }, [currentUsers, maxUsers, users]);
 
   // Max warehouses / locations
   const maxWarehouses = useMemo(() => {
@@ -219,6 +285,11 @@ export function useSubscriptionLimits(): PlanLimits {
     canUseAdvancedApproval,
     canUseCostLedgerForecasting,
     canUseAdvancedReports,
+
+    isProjectAccessible,
+    isUserAccessible,
+    restrictedProjectsCount,
+    restrictedUsersCount,
 
     isModuleAllowed,
   };

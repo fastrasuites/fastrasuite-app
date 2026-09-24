@@ -166,22 +166,11 @@ export function TransactionHistoryTable({ transactions = [], isLoading = false, 
                   month: "short",
                   year: "numeric",
                 }) : "-";
-                const recordId =
-                  tx.reference_id ||
-                  tx.detail?.project_request?.reference_id ||
-                  tx.record_id ||
-                  tx.recordId ||
-                  tx.reference_no ||
-                  tx.reference ||
-                  tx.ref ||
-                  tx.transaction_number ||
-                  tx.transaction_id ||
-                  tx.code ||
-                  tx.item_code ||
-                  (tx.id ? (String(tx.id).startsWith("#") || String(tx.id).includes("-") ? String(tx.id) : `PjR-${tx.id}`) : "-");
-                const subRef =
-                  tx.detail?.request_id ||
-                  (tx.detail?.reference_id && tx.detail.reference_id !== recordId ? tx.detail.reference_id : null);
+                const primaryRef = tx.detail?.reference_id || tx.detail?.request_id;
+                const mainRef = tx.reference_id || tx.record_id || tx.recordId || tx.reference_no || tx.reference || tx.ref;
+
+                const recordId = primaryRef || mainRef || (tx.id ? (String(tx.id).startsWith("#") || String(tx.id).includes("-") ? String(tx.id) : `PjR-${tx.id}`) : "-");
+                const subRef = (primaryRef && mainRef && String(primaryRef) !== String(mainRef)) ? mainRef : null;
                 const catStr = formatCategory(tx.category || tx.request_type || tx.type || tx.project_type || "-");
                 const amountVal = extractAmount(tx);
                 const amountStr = `₦${Number(amountVal).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -209,14 +198,7 @@ export function TransactionHistoryTable({ transactions = [], isLoading = false, 
                   >
                     <TableCell className="text-[#525F7F] py-3.5 px-6 text-sm">{dateStr}</TableCell>
                     <TableCell className="text-[#32325D] py-3.5 px-6 font-semibold text-sm">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span>{recordId}</span>
-                        {subRef && (
-                          <span className="text-xs font-normal text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                            {subRef}
-                          </span>
-                        )}
-                      </div>
+                      <span>{recordId}</span>
                     </TableCell>
                     <TableCell className="text-[#525F7F] py-3.5 px-6 text-sm">{catStr}</TableCell>
                     <TableCell className="text-[#32325D] font-bold py-3.5 px-6 text-sm">{amountStr}</TableCell>

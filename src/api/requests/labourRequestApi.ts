@@ -361,7 +361,7 @@ export const labourRequestApi = createApi({
     }),
     deleteLabourRequest: builder.mutation<void, number>({
       query: (id) => ({
-        url: `/project-requests/labour-requests/${id}/`,
+        url: `/project-requests/project-requests/${id}/`,
         method: "DELETE",
       }),
       invalidatesTags: (result, error, id) => [{ type: "LabourRequest", id }, "LabourRequest"],

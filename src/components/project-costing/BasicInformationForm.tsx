@@ -85,6 +85,14 @@ export function BasicInformationForm({
     setSiteLocation(newLocationId);
   };
 
+  const todayStr = React.useMemo(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
+
   return (
     <section>
       <h2 className="text-[#3B7CED] text-xl mb-6">Basic Information</h2>
@@ -128,6 +136,7 @@ export function BasicInformationForm({
           <Label className="text-gray-700 font-medium">Start date</Label>
           <Input
             type="date"
+            min={todayStr}
             placeholder="Enter date"
             className="bg-white border-gray-300 rounded"
             value={startDate}
@@ -138,6 +147,7 @@ export function BasicInformationForm({
           <Label className="text-gray-700 font-medium">Expected End Date</Label>
           <Input
             type="date"
+            min={startDate || todayStr}
             placeholder="Enter date"
             className="bg-white border-gray-300 rounded"
             value={expectedEndDate}

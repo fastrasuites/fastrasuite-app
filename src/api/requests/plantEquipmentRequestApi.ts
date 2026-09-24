@@ -158,7 +158,7 @@ export const plantEquipmentRequestApi = createApi({
     }),
     deletePlantEquipmentRequest: builder.mutation<void, number>({
       query: (id) => ({
-        url: `/project-requests/plant-equipment/${id}/`,
+        url: `/project-requests/project-requests/${id}/`,
         method: "DELETE",
       }),
       invalidatesTags: (result, error, id) => [{ type: "PlantEquipmentRequest", id }, "PlantEquipmentRequest"],
