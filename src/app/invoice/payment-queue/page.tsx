@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -10,14 +10,18 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  CircleDollarSign,
+  Wallet,
+  BadgeCheck,
+  Clock,
+  FileCheck,
+  type LucideIcon,
 } from "lucide-react";
 import {
   useGetVendorBillsQuery,
-  useGetPaymentQueueVendorBillsQuery,
   type VendorBill,
 } from "@/api/invoice/vendorBillsApi";
 import { PageGuard } from "@/components/auth/PageGuard";
-import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 /* -------------------------------------------------------------------------- */
 /*                               Helpers                                      */
@@ -57,6 +61,80 @@ const paymentStatusStyles: Record<string, string> = {
 };
 
 const PAGE_SIZE = 10;
+
+/* -------------------------------------------------------------------------- */
+/*                         Summary cards config                               */
+/* Payment-focused + overdue — best signal for a payment queue               */
+/* -------------------------------------------------------------------------- */
+
+type SummaryCardConfig = {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  iconClass: string;
+  countClass: string;
+  /** How this card matches an invoice */
+  match: (inv: any) => boolean;
+  /** Optional: set this payment_status filter when clicked */
+  paymentStatusFilter?: string;
+  /** Optional: set this status filter when clicked */
+  statusFilter?: string;
+  /** Special: overdue is computed, not a filter field */
+  isOverdueCard?: boolean;
+};
+
+const SUMMARY_CARDS: SummaryCardConfig[] = [
+  {
+    key: "unpaid",
+    label: "Unpaid",
+    icon: CircleDollarSign,
+    iconClass: "text-orange-500",
+    countClass: "text-orange-600",
+    match: (inv) => (inv.payment_status || "").toLowerCase() === "unpaid",
+    paymentStatusFilter: "unpaid",
+  },
+  {
+    key: "partial",
+    label: "Partial",
+    icon: Wallet,
+    iconClass: "text-blue-500",
+    countClass: "text-blue-600",
+    match: (inv) => (inv.payment_status || "").toLowerCase() === "partial",
+    paymentStatusFilter: "partial",
+  },
+  {
+    key: "paid",
+    label: "Paid",
+    icon: BadgeCheck,
+    iconClass: "text-emerald-500",
+    countClass: "text-emerald-600",
+    match: (inv) => (inv.payment_status || "").toLowerCase() === "paid",
+    paymentStatusFilter: "paid",
+  },
+  {
+    key: "overdue",
+    label: "Overdue",
+    icon: Clock,
+    iconClass: "text-red-500",
+    countClass: "text-red-600",
+    match: (inv) => {
+      const days = getDaysUntilDue(inv.due_date);
+      const payment = (inv.payment_status || "").toLowerCase();
+      // Only count as overdue if still not fully paid
+      return days !== null && days < 0 && payment !== "paid";
+    },
+    isOverdueCard: true,
+  },
+  {
+    key: "submitted",
+    label: "Submitted",
+    icon: FileCheck,
+    iconClass: "text-amber-500",
+    countClass: "text-amber-600",
+    match: (inv) => (inv.status || "").toLowerCase() === "submitted",
+    statusFilter: "submitted",
+  },
+];
 
 /* -------------------------------------------------------------------------- */
 /*                               Skeleton                                     */
@@ -121,6 +199,8 @@ export default function PaymentQueuePage() {
     source_type: "",
     vendor: "",
   });
+  /** When true, table only shows overdue (unpaid/partial with past due date) */
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   const {
     data: invoices = [],
@@ -128,11 +208,21 @@ export default function PaymentQueuePage() {
     isFetching,
   } = useGetVendorBillsQuery();
 
-  // const {
-  //   data: invoices = [],
-  //   isLoading,
-  //   isFetching,
-  // } = useGetPaymentQueueVendorBillsQuery();
+  /* ---------- Summary counts (from full list) ---------- */
+  const summaryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const card of SUMMARY_CARDS) {
+      counts[card.key] = 0;
+    }
+    for (const inv of invoices) {
+      for (const card of SUMMARY_CARDS) {
+        if (card.match(inv)) {
+          counts[card.key] = (counts[card.key] || 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }, [invoices]);
 
   const filtered = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -150,6 +240,7 @@ export default function PaymentQueuePage() {
         !term ||
         (inv.bill_number || "").toLowerCase().includes(term) ||
         (inv.vendor_name || "").toLowerCase().includes(term) ||
+        (inv.vendor_details?.vendor_name || "").toLowerCase().includes(term) ||
         String(inv.id).includes(term);
 
       const matchesStatus =
@@ -170,17 +261,29 @@ export default function PaymentQueuePage() {
         !filters.vendor ||
         (inv.vendor_name || "")
           .toLowerCase()
+          .includes(filters.vendor.toLowerCase()) ||
+        (inv.vendor_details?.vendor_name || "")
+          .toLowerCase()
           .includes(filters.vendor.toLowerCase());
+
+      const matchesOverdue =
+        !overdueOnly ||
+        (() => {
+          const days = getDaysUntilDue(inv.due_date);
+          const payment = (inv.payment_status || "").toLowerCase();
+          return days !== null && days < 0 && payment !== "paid";
+        })();
 
       return (
         matchesSearch &&
         matchesStatus &&
         matchesPayment &&
         matchesSource &&
-        matchesVendor
+        matchesVendor &&
+        matchesOverdue
       );
     });
-  }, [invoices, searchTerm, filters]);
+  }, [invoices, searchTerm, filters, overdueOnly]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -188,8 +291,61 @@ export default function PaymentQueuePage() {
   const resetFilters = () => {
     setFilters({ status: "", payment_status: "", source_type: "", vendor: "" });
     setSearchTerm("");
+    setOverdueOnly(false);
     setPage(1);
   };
+
+  const handleCardClick = (card: SummaryCardConfig) => {
+    setPage(1);
+
+    if (card.isOverdueCard) {
+      // Toggle overdue-only mode; clear other payment/status filters for clarity
+      setOverdueOnly((prev) => !prev);
+      if (!overdueOnly) {
+        setFilters((f) => ({ ...f, payment_status: "", status: "" }));
+      }
+      return;
+    }
+
+    setOverdueOnly(false);
+
+    if (card.paymentStatusFilter) {
+      setFilters((f) => ({
+        ...f,
+        payment_status:
+          f.payment_status === card.paymentStatusFilter
+            ? ""
+            : card.paymentStatusFilter!,
+        status: "",
+      }));
+      return;
+    }
+
+    if (card.statusFilter) {
+      setFilters((f) => ({
+        ...f,
+        status: f.status === card.statusFilter ? "" : card.statusFilter!,
+        payment_status: "",
+      }));
+    }
+  };
+
+  const isCardActive = (card: SummaryCardConfig) => {
+    if (card.isOverdueCard) return overdueOnly;
+    if (card.paymentStatusFilter)
+      return filters.payment_status === card.paymentStatusFilter;
+    if (card.statusFilter) return filters.status === card.statusFilter;
+    return false;
+  };
+
+  const hasActiveFilters = Boolean(
+    filters.status ||
+    filters.payment_status ||
+    filters.source_type ||
+    filters.vendor ||
+    searchTerm ||
+    overdueOnly,
+  );
 
   const isTableLoading = isLoading || isFetching;
 
@@ -204,6 +360,7 @@ export default function PaymentQueuePage() {
           <span className="text-gray-300">›</span>
           <span className="text-gray-800 font-medium">Payment Queue</span>
         </nav>
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
@@ -241,6 +398,51 @@ export default function PaymentQueuePage() {
             </button>
           </div>
         </div>
+
+        {/* ── Summary cards ──────────────────────────────────────────────── */}
+        <div className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-y sm:divide-y-0 divide-gray-100">
+            {SUMMARY_CARDS.map((card) => {
+              const Icon = card.icon;
+              const count = summaryCounts[card.key] ?? 0;
+              const active = isCardActive(card);
+
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  onClick={() => handleCardClick(card)}
+                  className={`flex flex-col items-start gap-3 px-5 py-4 min-h-[96px] text-left transition-colors hover:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                    active ? "bg-blue-50/60" : ""
+                  }`}
+                  aria-pressed={active}
+                  title={
+                    active
+                      ? "Click to clear this filter"
+                      : `Filter by ${card.label}`
+                  }
+                >
+                  <div className="flex items-center gap-2">
+                    <Icon className={`w-4 h-4 shrink-0 ${card.iconClass}`} />
+                    <span className="text-sm font-medium text-gray-600 leading-tight">
+                      {card.label}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-2xl font-semibold tabular-nums ${card.countClass}`}
+                  >
+                    {isLoading ? (
+                      <span className="inline-block h-7 w-8 rounded bg-gray-200 animate-pulse" />
+                    ) : (
+                      count
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Filters panel */}
         {showFilters && (
           <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -252,6 +454,7 @@ export default function PaymentQueuePage() {
                 value={filters.status}
                 onChange={(e) => {
                   setFilters((f) => ({ ...f, status: e.target.value }));
+                  setOverdueOnly(false);
                   setPage(1);
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -273,6 +476,7 @@ export default function PaymentQueuePage() {
                 value={filters.payment_status}
                 onChange={(e) => {
                   setFilters((f) => ({ ...f, payment_status: e.target.value }));
+                  setOverdueOnly(false);
                   setPage(1);
                 }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
@@ -327,6 +531,27 @@ export default function PaymentQueuePage() {
             </div>
           </div>
         )}
+
+        {/* Active filter hint */}
+        {hasActiveFilters && (
+          <div className="mb-3 flex items-center justify-between text-sm text-gray-500">
+            <span>
+              <span className="font-medium text-gray-800">
+                {filtered.length}
+              </span>{" "}
+              bill{filtered.length === 1 ? "" : "s"}
+              {overdueOnly ? " · overdue only" : " (filtered)"}
+            </span>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
         {/* Table */}
         {isTableLoading ? (
           <TableSkeleton />
@@ -457,7 +682,9 @@ export default function PaymentQueuePage() {
                             </span>
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap">
-                            {isOverdue ? (
+                            {isOverdue &&
+                            (inv.payment_status || "").toLowerCase() !==
+                              "paid" ? (
                               <TriangleAlert className="w-5 h-5 text-red-500" />
                             ) : (
                               <CircleCheck className="w-5 h-5 text-gray-400" />

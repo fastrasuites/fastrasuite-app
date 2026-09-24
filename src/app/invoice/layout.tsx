@@ -22,9 +22,20 @@ export default function InvoiceLayout({
     },
     {
       label: "Payment Queue",
-      href: "/invoice/payment-queue",
-      application: "invoice",
-      module: "invoice",
+      children: [
+        {
+          label: "Vendor Bills",
+          href: "/invoice/payment-queue",
+          application: "invoice",
+          module: "invoice",
+        },
+        {
+          label: "Disbursements",
+          href: "/invoice/payment-queue/disbursement",
+          application: "invoice",
+          module: "invoice",
+        },
+      ],
     },
     {
       label: "Chart of Accounts",
