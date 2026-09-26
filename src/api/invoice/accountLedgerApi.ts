@@ -11,6 +11,16 @@ export type AccountLedgerTransactionType =
   | "inventory"
   | "expense";
 
+export type AccountLedgerPeriod =
+  | "today"
+  | "yesterday"
+  | "this_week"
+  | "last_week"
+  | "this_month"
+  | "last_month"
+  | "this_year"
+  | "last_year";
+
 export interface AccountLedgerEntry {
   id: number;
   account_code: string;
@@ -81,16 +91,12 @@ export interface AccountLedgerListParams {
   debit_min?: number;
   credit_max?: number;
   credit_min?: number;
-  period?:
-    | "today"
-    | "yesterday"
-    | "this_week"
-    | "last_week"
-    | "this_month"
-    | "last_month"
-    | "this_year"
-    | "last_year";
+  period?: AccountLedgerPeriod;
   [key: string]: string | number | boolean | undefined;
+}
+
+export interface AccountLedgerByIdParams extends AccountLedgerListParams {
+  id: number;
 }
 
 export interface AccountLedgerExportParams {
@@ -220,9 +226,27 @@ export const accountLedgerApi = createApi({
           : [{ type: "AccountLedger", id: "LIST" }],
     }),
 
-    getAccountLedgerById: builder.query<AccountLedgerDetail, number>({
-      query: (id) => `/invoicing/account-ledger/${id}/`,
-      providesTags: (_result, _error, id) => [{ type: "AccountLedger", id }],
+    /** Detail supports same date/period filters as the list. */
+    getAccountLedgerById: builder.query<
+      AccountLedgerDetail,
+      number | AccountLedgerByIdParams
+    >({
+      query: (arg) => {
+        if (typeof arg === "number") {
+          return `/invoicing/account-ledger/${arg}/`;
+        }
+        const { id, ...params } = arg;
+        return {
+          url: `/invoicing/account-ledger/${id}/`,
+          params,
+        };
+      },
+      providesTags: (_result, _error, arg) => [
+        {
+          type: "AccountLedger",
+          id: typeof arg === "number" ? arg : arg.id,
+        },
+      ],
     }),
 
     exportAccountLedger: builder.query<any, AccountLedgerExportParams>({
