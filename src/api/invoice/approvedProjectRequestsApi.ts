@@ -81,8 +81,15 @@ export interface SubcontractorMilestone {
   id: number;
   name?: string;
   description?: string;
+  completion_criteria?: string;
   amount?: number | string;
   percentage?: number | string;
+  is_completed?: boolean;
+  is_paid?: boolean;
+  /** Backend flag — true when a vendor bill already exists for this milestone */
+  is_billed?: boolean;
+  subcontractor_request?: number;
+  completion_record?: string;
   [key: string]: unknown;
 }
 
