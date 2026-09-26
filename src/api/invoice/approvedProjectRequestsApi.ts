@@ -13,6 +13,23 @@ export interface ApprovedProjectRequest {
   required_amount: string;
 }
 
+export interface TenantUser {
+  url?: string;
+  id?: number;
+  user?: {
+    url?: string;
+    id?: number;
+    username?: string;
+    first_name?: string;
+    last_name?: string;
+    email?: string;
+  };
+  phone_number?: string;
+  language?: string;
+  timezone?: string;
+  in_app_notifications?: boolean;
+  email_notifications?: boolean;
+}
 export interface GetApprovedProjectRequestsParams {
   ordering?: string;
   search?: string;
@@ -125,6 +142,7 @@ export interface ApprovedProjectRequestDetails {
   duration_unit?: string;
   estimated_daily_rate?: string;
   projected_cost?: string;
+  requester_details?: TenantUser | undefined;
 
   // Petty Cash
   amount_requested?: string;
@@ -138,7 +156,10 @@ const getTenantBaseUrl = (state: RootState): string => {
   const tenantSchemaName = state.auth.tenant_schema_name;
   const apiDomain =
     process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
+  const protocol =
+    apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
+      ? "http"
+      : "https";
   return `${protocol}://${tenantSchemaName}.${apiDomain}`;
 };
 

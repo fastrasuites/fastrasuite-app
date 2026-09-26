@@ -148,8 +148,10 @@ export default function CreateVendorBillLabourReqModal({
   const { data: bankAccountsResponse, isLoading: isBanksLoading } =
     useGetCompanyBankAccountsQuery(undefined, { skip: !isOpen });
 
-  const { data: accountsPayableAccountsResponse, isLoading: isAccountsPayableLoading } =
-    useGetAccountsPayableAccountsQuery(undefined, { skip: !isOpen });
+  const {
+    data: accountsPayableAccountsResponse,
+    isLoading: isAccountsPayableLoading,
+  } = useGetAccountsPayableAccountsQuery(undefined, { skip: !isOpen });
 
   // const { data: vendorsResponse, isLoading: isVendorsLoading } =
   //   useGetActiveVendorsQuery(undefined, { skip: !isOpen });
@@ -190,12 +192,15 @@ export default function CreateVendorBillLabourReqModal({
     ? `${details.duration ?? "—"} ${details.duration_unit || ""}`.trim()
     : "—";
   const dateRequired = details?.date_required?.slice(0, 10) || "—";
-  const requester = details?.created_by_name || request?.supplierName || "—";
+  const requester =
+    details?.requester_details?.user?.username ||
+    details?.requester_details?.user?.first_name ||
+    "—";
   const projectName = details?.project_details?.name || "—";
   const wbs = details
     ? `${details.project_details?.name || "—"} › ${details.phase_details?.name || "—"} › ${details.activity_details?.name || "—"}`
     : request?.wbs || "—";
-  const refId = details?.project_request?.reference_id || request?.id || "—";
+  const refId = details?.reference_id || request?.id || "—";
 
   const effectiveInvoiceAmount =
     invoiceAmount !== null ? invoiceAmount : String(projectedCost || "");
@@ -299,7 +304,10 @@ export default function CreateVendorBillLabourReqModal({
     formData.append("invoice_date", new Date().toISOString().split("T")[0]);
     formData.append("payment_term", String(effectivePaymentTermId));
     // formData.append("company_bank_account", String(bankAccountId));
-    formData.append("accounts_payable_account", String(accountsPayableAccountId));
+    formData.append(
+      "accounts_payable_account",
+      String(accountsPayableAccountId),
+    );
     if (uploadedFile) {
       formData.append("document", uploadedFile);
     }
@@ -643,7 +651,7 @@ export default function CreateVendorBillLabourReqModal({
                 )}
               </div>
 
-{/* Bank Account (commented out - no longer required)
+              {/* Bank Account (commented out - no longer required)
                <div>
                  <h3 className="text-sm font-semibold text-gray-700 mb-1">
                    Company Bank Account
@@ -680,40 +688,42 @@ export default function CreateVendorBillLabourReqModal({
                </div>
              */}
 
-               {/* Accounts Payable Account */}
-               <div>
-                 <h3 className="text-sm font-semibold text-gray-700 mb-1">
-                   Accounts Payable Account
-                 </h3>
-                 <p className="text-xs text-gray-500 mb-3">
-                   The liability account to record this vendor bill against.
-                 </p>
-                 {isAccountsPayableLoading ? (
-                   <div className="flex items-center gap-2 text-sm text-gray-500">
-                     <Loader2 className="w-4 h-4 animate-spin" />
-                     Loading accounts…
-                   </div>
-                 ) : accountsPayableAccounts.length === 0 ? (
-                   <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
-                     No accounts payable accounts found. Configure accounts under
-                     Chart of Accounts before submitting.
-                   </div>
-                 ) : (
-                   <select
-                     value={accountsPayableAccountId}
-                     onChange={(e) => setAccountsPayableAccountId(e.target.value)}
-                     disabled={isSubmitting}
-                     className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
-                   >
-                     <option value="">Select accounts payable account</option>
-                     {accountsPayableAccounts.map((a: any) => (
-                       <option key={a.id} value={a.id}>
-                         {a.label}
-                       </option>
-                     ))}
-                   </select>
-                 )}
-               </div>
+              {/* Accounts Payable Account */}
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700 mb-1">
+                  Accounts Payable Account
+                </h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  The liability account to record this vendor bill against.
+                </p>
+                {isAccountsPayableLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading accounts…
+                  </div>
+                ) : accountsPayableAccounts.length === 0 ? (
+                  <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                    No accounts payable accounts found. Configure accounts under
+                    Chart of Accounts before submitting.
+                  </div>
+                ) : (
+                  <select
+                    value={accountsPayableAccountId}
+                    onChange={(e) =>
+                      setAccountsPayableAccountId(e.target.value)
+                    }
+                    disabled={isSubmitting}
+                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+                  >
+                    <option value="">Select accounts payable account</option>
+                    {accountsPayableAccounts.map((a: any) => (
+                      <option key={a.id} value={a.id}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
 
               {/* Payment Term */}
               <div>
@@ -775,21 +785,21 @@ export default function CreateVendorBillLabourReqModal({
             >
               Cancel
             </button>
-<button
+            <button
               ref={submitButtonRef}
               type="button"
               onClick={handleSubmit}
-               disabled={
-                 isSubmitting ||
-                 isDetailsLoading ||
-                 accountsPayableAccounts.length === 0 ||
-                 labourVendors.length === 0 ||
+              disabled={
+                isSubmitting ||
+                isDetailsLoading ||
+                accountsPayableAccounts.length === 0 ||
+                labourVendors.length === 0 ||
                 !vendorId ||
                 !selectedVendor ||
                 vendorStale ||
                 paymentTerms.length === 0
-               }
-               className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              }
+              className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? (
                 <>

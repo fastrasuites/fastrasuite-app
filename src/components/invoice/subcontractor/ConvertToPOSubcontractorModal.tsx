@@ -272,8 +272,7 @@ export default function ConvertToPOSubcontractorModal({
   const paymentTermsText = detailsData?.payment_terms || "—";
   const startDate = detailsData?.start_date || "—";
   const endDate = detailsData?.end_date || "—";
-  const referenceId =
-    detailsData?.project_request?.reference_id || request?.id || "—";
+  const referenceId = detailsData?.reference_id || request?.id || "—";
   const milestones = detailsData?.milestones ?? [];
   const justification = detailsData?.justification_notes || "";
 
@@ -781,7 +780,7 @@ export default function ConvertToPOSubcontractorModal({
               <InfoCard label="Project Name" value={projectName} />
               <InfoCard label="WBS Element" value={wbsLabel} />
               <InfoCard label="Payment Type" value={paymentType} />
-              <InfoCard label="Payment Terms" value={paymentTermsText} />
+              {/* <InfoCard label="Payment Terms" value={paymentTermsText} /> */}
               <InfoCard label="Start Date" value={startDate} />
               <InfoCard label="End Date" value={endDate} />
             </div>
@@ -846,13 +845,9 @@ export default function ConvertToPOSubcontractorModal({
     <>
       <div className="space-y-6">
         <InfoBanner type="warning">
-          Once confirmed, a <strong>Vendor Bill</strong> will be created for{" "}
-          <strong>
-            <TruncateWithTooltip text={vendorName} maxLength={28} />
-          </strong>
-          . The Committed Amount of{" "}
-          <strong>{formatCurrency(contractValue)}</strong> remains locked
-          against{" "}
+          Once confirmed, a <strong>Vendor Bill</strong> will be created. The
+          Committed Amount of <strong>{formatCurrency(contractValue)}</strong>{" "}
+          remains locked against{" "}
           <strong>
             <TruncateWithTooltip text={wbsLabel} maxLength={36} />
           </strong>{" "}
@@ -868,7 +863,7 @@ export default function ConvertToPOSubcontractorModal({
           <InfoCard label="Project Name" value={projectName} />
           <InfoCard label="Payment Type" value={paymentType} />
           <InfoCard label="WBS Element" value={wbsLabel} />
-          <InfoCard label="Payment Terms" value={paymentTermsText} />
+          {/* <InfoCard label="Payment Terms" value={paymentTermsText} /> */}
           <InfoCard label="Start Date" value={startDate} />
           <InfoCard label="End Date" value={endDate} />
         </div>
