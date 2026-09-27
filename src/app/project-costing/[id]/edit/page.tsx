@@ -16,7 +16,13 @@ import {
   useSubmitProjectMutation,
   useAddProjectDocumentMutation,
   useUpdatePhaseBundleMutation,
+  useCreateAddPhaseActivityMutation,
+  useDeletePhaseMutation,
 } from "@/api/projectCostingApi";
+import type {
+  PhaseBundlePhaseUpdate,
+  PhaseBundleActivityUpdate,
+} from "@/types/projectCosting";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { extractErrorMessage } from "@/lib/utils";
 import { PageGuard } from "@/components/auth/PageGuard";
@@ -24,6 +30,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ModuleWizard } from "@/components/shared/wizard/ModuleWizard";
 import { ToastNotification } from "@/components/shared/ToastNotification";
+
+const isUUID = (str: string | undefined | null): boolean => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+};
 
 interface EditProjectPageProps {
   params: Promise<{ id: string }>;
@@ -55,10 +66,15 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
   const [linkUrl, setLinkUrl] = useState("");
   const [isPanelOpen, setIsPanelOpen] = useState(false);
 
+  const originalPhasesRef = useRef<Phase[]>([]);
+  const isInitialLoadedRef = useRef(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [patchProject, { isLoading: isPatching }] = usePatchProjectCostingProjectMutation();
   const [submitProject, { isLoading: isSubmittingPending }] = useSubmitProjectMutation();
-  const [updatePhaseBundle] = useUpdatePhaseBundleMutation();
+  const [updatePhaseBundle, { isLoading: isUpdatingPhaseBundle }] = useUpdatePhaseBundleMutation();
+  const [createAddPhaseActivity] = useCreateAddPhaseActivityMutation();
+  const [deletePhase] = useDeletePhaseMutation();
   const [addProjectDocument] = useAddProjectDocumentMutation();
   const statusModal = useStatusModal();
 
@@ -78,7 +94,8 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
 
   // Populate form with existing project data once loaded
   useEffect(() => {
-    if (project) {
+    if (project && !isInitialLoadedRef.current) {
+      isInitialLoadedRef.current = true;
       setName(project.name || "");
       setClientName(project.client_name || "");
       setProjectType(project.project_type || "");
@@ -93,20 +110,20 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
           const parsedPhases = typeof project.phases === "string" ? JSON.parse(project.phases) : project.phases;
           if (Array.isArray(parsedPhases)) {
             const formattedPhases: Phase[] = parsedPhases.map((p: any, pIdx: number) => ({
-              id: String(p.id || `phase-${pIdx + 1}`),
+              id: String(p.id || p.uuid || `phase-${pIdx + 1}`),
               name: p.name || `Phase ${pIdx + 1}`,
               activities: Array.isArray(p.activities)
                 ? p.activities.map((a: any, aIdx: number) => {
                     const actObj: Activity = {
-                      id: String(a.id || `act-${aIdx + 1}`),
+                      id: String(a.id || a.uuid || `act-${aIdx + 1}`),
                       sn: a.sn || a.serial_number || `${pIdx + 1}.${aIdx + 1}`,
                       name: a.name || "",
                       quantity: Number(a.quantity) || 1,
                       rate: Number(a.rate || (Number(a.amount || 0) / Number(a.quantity || 1))) || 0,
-                      budget: Number(a.current_budget || a.amount || 0),
+                      budget: Number(a.current_budget || a.amount || (Number(a.quantity || 1) * Number(a.rate || 0))),
                     };
                     // Extract extra custom columns
-                    const standardKeys = new Set(["id", "sn", "serial_number", "name", "quantity", "rate", "budget", "amount", "current_budget"]);
+                    const standardKeys = new Set(["id", "uuid", "sn", "serial_number", "name", "quantity", "rate", "budget", "amount", "current_budget"]);
                     Object.keys(a).forEach((k) => {
                       if (!standardKeys.has(k)) {
                         (actObj as any)[k] = a[k];
@@ -117,12 +134,13 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
                 : [],
             }));
             setPhases(formattedPhases);
+            originalPhasesRef.current = JSON.parse(JSON.stringify(formattedPhases));
 
             // Extract custom columns
             const colSet = new Set<string>();
             formattedPhases.forEach((p) => {
               p.activities.forEach((act) => {
-                const standardKeys = new Set(["id", "sn", "name", "quantity", "rate", "budget"]);
+                const standardKeys = new Set(["id", "uuid", "sn", "name", "quantity", "rate", "budget"]);
                 Object.keys(act).forEach((k) => {
                   if (!standardKeys.has(k)) colSet.add(k);
                 });
@@ -145,7 +163,7 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
     }
   }, [project]);
 
-  const isProcessing = isSubmitting || isPatching || isSubmittingPending;
+  const isProcessing = isSubmitting || isPatching || isSubmittingPending || isUpdatingPhaseBundle;
 
   // Handler for adding a URL Link
   const handleAddLink = () => {
@@ -394,29 +412,9 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
 
     setIsSubmitting(true);
 
-    const phasesPayload = phases.map((phase) => ({
-      name: phase.name,
-      activities: phase.activities.map((a) => {
-        const payloadAct: any = {
-          name: a.name,
-          amount: a.budget || 0,
-          quantity: a.quantity || 1,
-          rate: a.rate || a.budget || 0,
-        };
-        extraColumns.forEach((col) => {
-          if ((a as any)[col] !== undefined) {
-            payloadAct[col] = (a as any)[col];
-          }
-        });
-        if (a.sn) {
-          payloadAct.sn = a.sn;
-        }
-        return payloadAct;
-      }),
-    }));
-
     try {
-      const payload = {
+      // 1. Update project core metadata (excluding phases)
+      const projectPayload = {
         name,
         client_name: clientName,
         project_type: projectType,
@@ -424,25 +422,180 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
         expected_end_date: expectedEndDate || new Date().toISOString().split("T")[0],
         description,
         site_location: siteLocation,
-        phases: phasesPayload,
-      } as any;
+      };
 
-      // Update project core data
-      await patchProject({ id: projectId, body: payload }).unwrap();
+      await patchProject({ id: projectId, body: projectPayload }).unwrap();
 
-      // Update WBS phases specifically if endpoint exists
-      try {
-        await updatePhaseBundle({ id: projectId, body: { phases: phasesPayload } }).unwrap();
-      } catch (phaseErr) {
-        console.warn("Phase bundle update note:", phaseErr);
+      // 2. Handle Phase Deletions (if any phases with UUID were removed from original)
+      const originalPhases = originalPhasesRef.current || [];
+      for (const origP of originalPhases) {
+        if (!isUUID(origP.id)) continue;
+        const stillExists = phases.some((p) => p.id === origP.id);
+        if (!stillExists) {
+          try {
+            await deletePhase({ id: projectId, body: { phase_id: origP.id } }).unwrap();
+          } catch (delErr) {
+            console.error("Failed to delete phase:", origP.id, delErr);
+          }
+        }
       }
 
-      // If user clicked Submit for Approval
-      if (isSubmitForApproval) {
-        await submitProject({ id: projectId }).unwrap();
+      // 3. Handle Activity Deletions (if any activities with UUID were removed from existing phases)
+      for (const origP of originalPhases) {
+        if (!isUUID(origP.id)) continue;
+        const currentP = phases.find((p) => p.id === origP.id);
+        if (currentP) {
+          const removedActivityIds: string[] = [];
+          for (const origA of origP.activities || []) {
+            if (!isUUID(origA.id)) continue;
+            const actStillExists = (currentP.activities || []).some((a) => a.id === origA.id);
+            if (!actStillExists) {
+              removedActivityIds.push(origA.id);
+            }
+          }
+          if (removedActivityIds.length > 0) {
+            try {
+              await deletePhase({
+                id: projectId,
+                body: { phase_id: origP.id, activity_ids: removedActivityIds },
+              }).unwrap();
+            } catch (delActErr) {
+              console.error("Failed to delete activities in phase:", origP.id, delActErr);
+            }
+          }
+        }
       }
 
-      // Upload new documents if added
+      // 4. Build Phase Bundle Update Payload
+      // Dedicated endpoint: PATCH /project-costing/projects/{project_id}/update_phase_bundle/
+      const phasesBundle: PhaseBundlePhaseUpdate[] = [];
+
+      for (const phase of phases) {
+        if (!isUUID(phase.id)) continue; // Completely new phases handled in step 5
+
+        const origP = originalPhases.find((op) => op.id === phase.id);
+        const phaseObj: PhaseBundlePhaseUpdate = { id: phase.id };
+        let phaseHasChanges = false;
+
+        // Check if phase name changed
+        if (!origP || phase.name !== origP.name) {
+          phaseObj.name = phase.name;
+          phaseHasChanges = true;
+        }
+
+        // Check existing activities in this phase
+        const activityUpdates: PhaseBundleActivityUpdate[] = [];
+        for (const act of phase.activities || []) {
+          if (!isUUID(act.id)) continue; // New activities handled in step 5
+
+          const origA = origP?.activities.find((oa) => oa.id === act.id);
+          const actObj: PhaseBundleActivityUpdate = { id: act.id };
+          let actHasChanges = false;
+
+          if (!origA) {
+            // No original baseline, include name, quantity, rate
+            actObj.name = act.name;
+            actObj.quantity = Number(act.quantity || 1).toFixed(2);
+            actObj.rate = Number(act.rate || 0).toFixed(2);
+            actHasChanges = true;
+          } else {
+            if (act.name !== origA.name) {
+              actObj.name = act.name;
+              actHasChanges = true;
+            }
+            if (Number(act.quantity) !== Number(origA.quantity)) {
+              actObj.quantity = Number(act.quantity || 1).toFixed(2);
+              actHasChanges = true;
+            }
+            if (Number(act.rate) !== Number(origA.rate)) {
+              actObj.rate = Number(act.rate || 0).toFixed(2);
+              actHasChanges = true;
+            }
+          }
+
+          if (actHasChanges) {
+            activityUpdates.push(actObj);
+          }
+        }
+
+        if (activityUpdates.length > 0) {
+          phaseObj.activities = activityUpdates;
+          phaseHasChanges = true;
+        }
+
+        if (phaseHasChanges) {
+          phasesBundle.push(phaseObj);
+        }
+      }
+
+      // Fallback: If original baseline had no phases, send all existing phases & activities
+      if (originalPhases.length === 0 && phases.length > 0) {
+        phases.forEach((p) => {
+          if (isUUID(p.id)) {
+            phasesBundle.push({
+              id: p.id,
+              name: p.name,
+              activities: (p.activities || [])
+                .filter((a) => isUUID(a.id))
+                .map((a) => ({
+                  id: a.id,
+                  name: a.name,
+                  quantity: Number(a.quantity || 1).toFixed(2),
+                  rate: Number(a.rate || 0).toFixed(2),
+                })),
+            });
+          }
+        });
+      }
+
+      // Execute update_phase_bundle if any phases or activities have updates
+      if (phasesBundle.length > 0) {
+        await updatePhaseBundle({
+          id: projectId,
+          body: { phases: phasesBundle },
+        }).unwrap();
+      }
+
+      // 5. Handle New Phases or New Activities (via createAddPhaseActivity)
+      // 5a. New activities inside existing phases
+      for (const phase of phases) {
+        if (isUUID(phase.id)) {
+          const newActivities = (phase.activities || []).filter((a) => !isUUID(a.id));
+          if (newActivities.length > 0) {
+            await createAddPhaseActivity({
+              id: projectId,
+              body: {
+                phase_id: phase.id,
+                activities: newActivities.map((a) => ({
+                  name: a.name,
+                  quantity: Number(a.quantity || 1),
+                  rate: Number(a.rate || 0),
+                  amount: Number(a.quantity || 1) * Number(a.rate || 0),
+                })),
+              },
+            }).unwrap();
+          }
+        }
+      }
+
+      // 5b. Completely new phases
+      const brandNewPhases = phases.filter((p) => !isUUID(p.id));
+      for (const newPhase of brandNewPhases) {
+        await createAddPhaseActivity({
+          id: projectId,
+          body: {
+            name: newPhase.name,
+            activities: (newPhase.activities || []).map((a) => ({
+              name: a.name,
+              quantity: Number(a.quantity || 1),
+              rate: Number(a.rate || 0),
+              amount: Number(a.quantity || 1) * Number(a.rate || 0),
+            })),
+          },
+        }).unwrap();
+      }
+
+      // 6. Handle New Document Uploads
       const newFilesToUpload = documents.filter((d) => d.file);
       if (newFilesToUpload.length > 0) {
         for (const doc of newFilesToUpload) {
@@ -460,6 +613,14 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
         }
       }
 
+      // 7. Submit for Approval if requested
+      if (isSubmitForApproval) {
+        await submitProject({ id: projectId }).unwrap();
+      }
+
+      // Update baseline after successful save
+      originalPhasesRef.current = JSON.parse(JSON.stringify(phases));
+
       if (isSubmitForApproval) {
         statusModal.showSuccess(
           "Project Submitted for Approval",
@@ -472,6 +633,7 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
         );
       }
     } catch (err: any) {
+      console.error("Project costing update error:", err);
       statusModal.showError(
         isSubmitForApproval ? "Submission Failed" : "Update Failed",
         extractErrorMessage(
@@ -654,7 +816,7 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
             variant="outline"
             className="border-[#3B7CED] text-[#3B7CED] hover:bg-blue-50 text-xs h-9 px-5 font-medium"
           >
-            {isPatching && !isSubmitting ? (
+            {isProcessing && !isSubmittingPending ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
                 Saving...

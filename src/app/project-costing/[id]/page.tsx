@@ -70,6 +70,22 @@ import {
   Cell,
 } from "recharts";
 
+const formatYAxisNaira = (val: number): string => {
+  if (val === 0) return "₦0";
+  if (val >= 1_000_000_000) {
+    const b = val / 1_000_000_000;
+    return `₦${b % 1 === 0 ? b.toFixed(0) : b.toFixed(1)}B`;
+  }
+  if (val >= 1_000_000) {
+    const m = val / 1_000_000;
+    return `₦${m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)}M`;
+  }
+  if (val >= 1_000) {
+    return `₦${Math.round(val / 1_000)}k`;
+  }
+  return `₦${val.toLocaleString()}`;
+};
+
 const getStatusVariant = (status: string) => {
   switch (status?.toUpperCase()) {
     case "ACTIVE":
@@ -814,13 +830,26 @@ export default function ProjectDashboardPage() {
     const backendTimeline = fin?.spend_over_time || fin?.monthly_spend || fin?.spend_history || project?.spend_over_time;
 
     if (Array.isArray(backendTimeline) && backendTimeline.length > 0) {
-      dynamicLineChartData = backendTimeline.map((item: any) => ({
-        name: item.period || item.month || item.date || item.name,
-        fullName: item.full_name || item.period || item.name,
-        planned: parseNumber(item.planned ?? item.planned_budget ?? item.budget ?? 0),
-        actual: parseNumber(item.actual ?? item.spent ?? item.actual_spend ?? 0),
-        committed: parseNumber(item.committed ?? item.committed_spend ?? 0),
-      }));
+      const totalPoints = backendTimeline.length;
+      dynamicLineChartData = backendTimeline.map((item: any, idx: number) => {
+        let plannedVal = parseNumber(item.planned ?? item.planned_budget ?? item.budget ?? 0);
+
+        // If planned budget is not provided per period in spend_over_time, calculate the planned S-curve budget progression
+        if (plannedVal === 0 && chartBudget > 0) {
+          const t = (idx + 1) / totalPoints;
+          // Standard S-curve (smoothstep) progression: 3*t^2 - 2*t^3
+          const sFactor = (3 * Math.pow(t, 2) - 2 * Math.pow(t, 3));
+          plannedVal = Math.round(chartBudget * sFactor);
+        }
+
+        return {
+          name: item.period || item.month || item.date || item.name,
+          fullName: item.full_name || item.period || item.name,
+          planned: plannedVal,
+          actual: parseNumber(item.actual ?? item.spent ?? item.actual_spend ?? 0),
+          committed: parseNumber(item.committed ?? item.committed_spend ?? 0),
+        };
+      });
     } else {
       // 2. Real Project Date Timeline from start_date to expected_end_date
       const start = project?.start_date ? new Date(project.start_date) : null;
@@ -834,17 +863,11 @@ export default function ProjectDashboardPage() {
         : 1;
 
       if (monthDiff > 1 && hasValidDates && start && end) {
-        dynamicLineChartData.push({
-          name: "Start",
-          fullName: "Project Start",
-          planned: 0,
-          actual: 0,
-          committed: 0,
-        });
-
         for (let i = 0; i < monthDiff; i++) {
           const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-          const plannedValue = Math.round((budgetNum / monthDiff) * (i + 1));
+          const t = (i + 1) / monthDiff;
+          const sFactor = (3 * Math.pow(t, 2) - 2 * Math.pow(t, 3));
+          const plannedValue = Math.round(chartBudget * sFactor);
 
           dynamicLineChartData.push({
             name: d.toLocaleString('default', { month: 'short' }),
@@ -1004,14 +1027,19 @@ export default function ProjectDashboardPage() {
     const items = rawCatList
       .map((cat: any) => {
         const amt = parseNumber(cat.amount || cat.value || cat.spent || 0);
-        let pct =
+        let rawPct =
           cat.percentage !== undefined && cat.percentage !== null && !isNaN(Number(cat.percentage))
             ? Number(cat.percentage)
             : 0;
 
-        // If backend percentage is not supplied or 0, accurately calculate from total category amounts
-        if (pct <= 0 && totalCatAmount > 0 && amt > 0) {
-          pct = (amt / totalCatAmount) * 100;
+        let pct = rawPct;
+        // Backend sends decimal budget share (e.g. 0.63 for 63%). Multiply by 100 to get display percentage.
+        if (pct > 0 && pct <= 1) {
+          pct = Math.round(pct * 100);
+        } else if (pct <= 0 && totalCatAmount > 0 && amt > 0) {
+          pct = Math.round((amt / totalCatAmount) * 100);
+        } else {
+          pct = Math.round(pct);
         }
 
         const nameKey = cat.request_type || cat.name || cat.category || cat.type || "General";
@@ -1019,7 +1047,7 @@ export default function ProjectDashboardPage() {
           name: formatCostCategory(nameKey),
           amount: amt,
           percentage: pct,
-          value: Number(pct.toFixed(2)),
+          value: pct,
         };
       })
       .filter((item: any) => item.percentage > 0 || item.amount > 0)
@@ -1325,9 +1353,9 @@ export default function ProjectDashboardPage() {
                   </button>
                 </div>
               </div>
-              <div className="flex-1 w-full min-h-[300px] relative">
+              <div className="w-full h-[340px] min-h-[340px] relative">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dynamicLineChartData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                  <AreaChart data={dynamicLineChartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
                     <defs>
                       <linearGradient id="plannedGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3B7CED" stopOpacity={0.12}/>
@@ -1347,18 +1375,15 @@ export default function ProjectDashboardPage() {
                       dataKey="name" 
                       axisLine={{ stroke: '#E5E7EB' }} 
                       tickLine={false} 
-                      tick={{ fill: '#6B7280', fontSize: 12 }} 
+                      tick={{ fill: '#6B7280', fontSize: 11 }} 
                       dy={10} 
                     />
                     <YAxis 
+                      width={75}
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: '#6B7280', fontSize: 12 }} 
-                      tickFormatter={(val) => {
-                        if (val === 0) return "₦0";
-                        if (val >= 1000000) return `₦${(val / 1000000).toFixed(1)}M`;
-                        return `₦${Math.round(val / 1000)}k`;
-                      }} 
+                      tick={{ fill: '#6B7280', fontSize: 11, fontWeight: 500 }} 
+                      tickFormatter={formatYAxisNaira} 
                     />
                     <Tooltip 
                       content={({ active, payload, label }) => {
@@ -1366,21 +1391,24 @@ export default function ProjectDashboardPage() {
                           const dataPoint = payload[0]?.payload;
                           const fullName = dataPoint?.fullName || label;
                           return (
-                            <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-100 text-xs">
-                              <p className="font-semibold text-gray-800 mb-2 border-b border-gray-100 pb-1">{fullName}</p>
+                            <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-100 text-xs min-w-[210px] space-y-1.5">
+                              <p className="font-semibold text-gray-800 border-b border-gray-100 pb-1.5">{fullName}</p>
                               {payload.map((entry: any, index: number) => {
                                 const isPlanned = entry.dataKey === "planned";
                                 const isCommitted = entry.dataKey === "committed";
                                 const color = isPlanned ? "#3B7CED" : isCommitted ? "#F59E0B" : "#2BA24D";
                                 const name = isPlanned ? "Planned Budget" : isCommitted ? "Committed Spent" : "Actual Spent";
-                                const value = entry.value !== null && entry.value !== undefined ? `₦${Number(entry.value).toLocaleString()}` : "Not reached";
+                                const valNum = Number(entry.value || 0);
+                                const value = entry.value !== null && entry.value !== undefined 
+                                  ? `₦${valNum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+                                  : "Not reached";
                                 return (
                                   <div key={`item-${index}`} className="flex items-center justify-between gap-4 py-0.5">
-                                    <span className="flex items-center gap-1.5 text-gray-600">
+                                    <span className="flex items-center gap-1.5 text-gray-600 font-medium">
                                       <span className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
                                       {name}:
                                     </span>
-                                    <span className="font-medium text-gray-900">{value}</span>
+                                    <span className="font-semibold text-gray-900">{value}</span>
                                   </div>
                                 );
                               })}
@@ -1529,7 +1557,7 @@ export default function ProjectDashboardPage() {
                     </Pie>
                     <Tooltip 
                       formatter={(val: any, name: any) => [
-                        `${Number(val).toFixed(1)}%`,
+                        `${Math.round(Number(val))}%`,
                         name
                       ]}
                       contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}
@@ -1538,7 +1566,9 @@ export default function ProjectDashboardPage() {
                   {/* Center Stat inside the Donut Hole */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                     <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Share</span>
-                    <span className="text-sm font-bold text-gray-800">100%</span>
+                    <span className="text-sm font-bold text-gray-800">
+                      {categoryTotal > 0 ? `${Math.round(categoryTotal)}%` : "0%"}
+                    </span>
                   </div>
                 </div>
 
@@ -1546,7 +1576,7 @@ export default function ProjectDashboardPage() {
                 {pieChartData.length > 0 ? (
                   <div className="flex flex-col gap-2.5 flex-1 min-w-0 w-full sm:w-auto">
                     {pieChartData.map((entry, index) => {
-                      const pct = Number(entry.percentage || entry.value || 0).toFixed(1);
+                      const pct = Math.round(Number(entry.percentage || entry.value || 0));
                       return (
                         <div key={index} className="flex items-center justify-between gap-3 text-xs">
                           <div className="flex items-center gap-2 truncate">
@@ -1721,14 +1751,14 @@ export default function ProjectDashboardPage() {
                     .filter((a: any) => ["PENDING", "PENDING_APPROVAL", "DRAFT"].includes(a.status?.toUpperCase()))
                     .map((adj: any, i: number) => {
                       const totalAdj = Number(adj.total_adjustment || adj.amount || 0);
-                      const lines = adj.lines && adj.lines.length > 0 ? adj.lines : [
+                      const lines = adj.lines && adj.lines.length > 0 ? adj.lines : (adj.reason ? [
                         {
-                          adjustment_type: "NEW",
-                          activity_name: adj.reason || "Planning Phase Activity",
-                          reason: "Budget line adjustment",
+                          adjustment_type: "GENERAL",
+                          activity_name: adj.reason,
+                          reason: adj.reason,
                           adjustment_amount: totalAdj
                         }
-                      ];
+                      ] : []);
                       
                       return (
                         <div key={i} className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
@@ -1739,7 +1769,7 @@ export default function ProjectDashboardPage() {
                                 Adjustment {adj.reference_no || `ADJ-00${i + 1}`}
                               </div>
                               <div className="text-xs text-gray-400 mt-1">
-                                Submitted by {adj.requested_by_name || "John Doe"} on {adj.created_at ? new Date(adj.created_at).toLocaleDateString() : "5/20/2026"}
+                                Submitted by {adj.requested_by_name || adj.created_by?.username || adj.user?.username || adj.user || "User"} on {adj.created_at ? new Date(adj.created_at).toLocaleDateString() : "-"}
                               </div>
                             </div>
                             <div className="text-right">
@@ -1887,14 +1917,14 @@ export default function ProjectDashboardPage() {
                     .filter((a: any) => ["APPROVED", "COMPLETED"].includes(a.status?.toUpperCase()))
                     .map((adj: any, i: number) => {
                       const totalAdj = Number(adj.total_adjustment || adj.amount || 0);
-                      const lines = adj.lines && adj.lines.length > 0 ? adj.lines : [
+                      const lines = adj.lines && adj.lines.length > 0 ? adj.lines : (adj.reason ? [
                         {
-                          adjustment_type: "NEW",
-                          activity_name: adj.reason || "Planning Phase Activity",
-                          reason: "Budget line adjustment",
+                          adjustment_type: "GENERAL",
+                          activity_name: adj.reason,
+                          reason: adj.reason,
                           adjustment_amount: totalAdj
                         }
-                      ];
+                      ] : []);
 
                       return (
                         <div key={i} className="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
@@ -1911,7 +1941,7 @@ export default function ProjectDashboardPage() {
                                   </Badge>
                                 </div>
                                 <div className="text-xs text-gray-400 mt-1">
-                                  Submitted by {adj.requested_by_name || "John Doe"} on {adj.created_at ? new Date(adj.created_at).toLocaleDateString() : "5/20/2026"}
+                                  Submitted by {adj.requested_by_name || adj.created_by?.username || adj.user?.username || adj.user || "User"} on {adj.created_at ? new Date(adj.created_at).toLocaleDateString() : "-"}
                                 </div>
                               </div>
                             </div>
@@ -2177,7 +2207,7 @@ export default function ProjectDashboardPage() {
                   const catStr = formatCategory(tx.category || tx.type || tx.request_type || tx.project_type || "-");
                   const amountVal = extractAmount(tx);
                   const amountStr = `₦${Number(amountVal).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                  const statusStr = tx.status || "Approved";
+                  const statusStr = tx.status || "-";
                   const statusLower = statusStr.toLowerCase();
 
                   let badgeClass = "bg-gray-150 text-gray-700";

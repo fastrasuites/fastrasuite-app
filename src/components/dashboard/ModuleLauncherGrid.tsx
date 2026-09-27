@@ -193,17 +193,26 @@ export function ModuleLauncherGrid(): ReactElement {
   return (
     <div className="max-w-350 mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <section aria-labelledby="dashboard-heading" className="mb-8">
-        <div
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-          role="list"
-          aria-label="Dashboard modules"
-        >
-          {filteredModules.map((m) => (
-            <div key={m.id} role="listitem">
-              <ModuleCard module={m} />
-            </div>
-          ))}
-        </div>
+        {filteredModules.length > 0 ? (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+            role="list"
+            aria-label="Dashboard modules"
+          >
+            {filteredModules.map((m) => (
+              <div key={m.id} role="listitem">
+                <ModuleCard module={m} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 p-8 text-center max-w-md mx-auto">
+            <p className="text-sm font-semibold text-gray-800">No modules available</p>
+            <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+              Your account currently does not have access to any functional modules. Please contact your organization administrator to assign module permissions.
+            </p>
+          </div>
+        )}
       </section>
     </div>
   );

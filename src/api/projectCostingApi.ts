@@ -111,40 +111,39 @@ export const projectCostingApi = createApi({
         body,
       });
 
-      const contentType = response.headers.get("content-type") || "";
-      const isJson = contentType.includes("application/json");
-
-      if (!response.ok) {
-        let errorData: any = {};
-        if (isJson) {
-          errorData = await response.json().catch(() => ({}));
-        } else {
-          const text = await response.text().catch(() => "");
-          errorData = { message: text || response.statusText };
-        }
-        return {
-          error: {
-            status: response.status,
-            data: errorData,
-          },
-        };
-      }
-
       if (response.status === 204) {
         return { data: null };
       }
 
+      const contentType = response.headers.get("content-type") || "";
+      const isJson = contentType.includes("application/json");
+
       let data: any = null;
-      if (isJson) {
-        data = await response.json().catch(() => null);
-      } else {
-        const text = await response.text().catch(() => null);
-        try {
-          data = text ? JSON.parse(text) : null;
-        } catch {
-          data = text;
+      let text = "";
+      try {
+        if (isJson) {
+          data = await response.json();
+        } else {
+          text = await response.text();
+          try {
+            data = text ? JSON.parse(text) : null;
+          } catch {
+            data = text;
+          }
         }
+      } catch {
+        data = null;
       }
+
+      if (!response.ok) {
+        return {
+          error: {
+            status: response.status,
+            data: data || { message: text || response.statusText },
+          },
+        };
+      }
+
       return { data };
     } catch (error) {
       return {
@@ -252,6 +251,10 @@ export const projectCostingApi = createApi({
         method: "POST",
         body,
       }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "ProjectCosting", id },
+        "ProjectCosting",
+      ],
     }),
     deletePhase: builder.mutation<void, { id: number; body: DeletePhaseRequest }>({
       query: ({ id, body }) => ({
@@ -259,13 +262,21 @@ export const projectCostingApi = createApi({
         method: "DELETE",
         body,
       }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "ProjectCosting", id },
+        "ProjectCosting",
+      ],
     }),
-    updatePhaseBundle: builder.mutation<{ updated: Activity[]; created: Activity[] }, { id: number; body: UpdatePhaseBundleRequest }>({
+    updatePhaseBundle: builder.mutation<any, { id: number; body: UpdatePhaseBundleRequest }>({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/update_phase_bundle/`,
         method: "PATCH",
         body,
       }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "ProjectCosting", id },
+        "ProjectCosting",
+      ],
     }),
 
     // Budget Adjustments

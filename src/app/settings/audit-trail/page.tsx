@@ -44,13 +44,13 @@ export default function AuditTrailListPage() {
   const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [selectedModule, setSelectedModule] = useState<string>("all");
   const [selectedActionType, setSelectedActionType] = useState<string>("all");
-  const [sortOrder, setSortOrder] = useState<"-created_at" | "created_at">("-created_at");
+  const [isNewestFirst, setIsNewestFirst] = useState<boolean>(true);
   const [page, setPage] = useState<number>(1);
   const pageSize = 15;
 
   const { data: rawAuditTrails, isLoading, isFetching, refetch } = useGetAuditTrailsQuery({
     search: searchTerm || undefined,
-    ordering: sortOrder,
+    ordering: "created_at",
   });
 
   const breadcrumbs: BreadcrumbItem[] = [
@@ -87,10 +87,10 @@ export default function AuditTrailListPage() {
     return Array.from(mods).sort();
   }, [rawAuditTrails]);
 
-  // Filter client-side
+  // Filter and sort client-side
   const filteredList = useMemo(() => {
     if (!rawAuditTrails) return [];
-    return rawAuditTrails.filter((item) => {
+    const list = rawAuditTrails.filter((item) => {
       if (selectedModule !== "all" && item.module?.toLowerCase() !== selectedModule.toLowerCase()) {
         return false;
       }
@@ -112,7 +112,13 @@ export default function AuditTrailListPage() {
       }
       return true;
     });
-  }, [rawAuditTrails, selectedModule, selectedActionType, searchTerm]);
+
+    return [...list].sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return isNewestFirst ? timeB - timeA : timeA - timeB;
+    });
+  }, [rawAuditTrails, selectedModule, selectedActionType, searchTerm, isNewestFirst]);
 
   // Pagination
   const totalPages = Math.ceil(filteredList.length / pageSize) || 1;
@@ -257,13 +263,13 @@ export default function AuditTrailListPage() {
               variant="outline"
               size="sm"
               onClick={() => {
-                setSortOrder((prev) => (prev === "-created_at" ? "created_at" : "-created_at"));
+                setIsNewestFirst((prev) => !prev);
                 setPage(1);
               }}
               className="text-xs font-medium text-[#32325D] border-gray-200 h-9"
             >
               <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 text-[#8898AA]" />
-              {sortOrder === "-created_at" ? "Newest First" : "Oldest First"}
+              {isNewestFirst ? "Newest First" : "Oldest First"}
             </Button>
           </div>
         </div>

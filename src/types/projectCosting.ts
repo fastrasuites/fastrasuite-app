@@ -63,9 +63,23 @@ export interface CreateAddPhaseActivityRequest {
   activities: Activity[];
 }
 
-export interface UpdatePhaseBundleRequest {
+export interface PhaseBundleActivityUpdate {
+  id: string | number;
   name?: string;
-  activities?: Activity[];
+  quantity?: string | number;
+  rate?: string | number;
+  [key: string]: any;
+}
+
+export interface PhaseBundlePhaseUpdate {
+  id: string | number;
+  name?: string;
+  activities?: PhaseBundleActivityUpdate[];
+  [key: string]: any;
+}
+
+export interface UpdatePhaseBundleRequest {
+  phases: PhaseBundlePhaseUpdate[];
   [key: string]: any;
 }
 
