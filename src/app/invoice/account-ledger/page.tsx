@@ -1,5 +1,5 @@
 "use client";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   useGetAccountLedgerQuery,
   useLazyGetAccountLedgerByIdQuery,
@@ -7,6 +7,8 @@ import {
 import type {
   AccountLedgerSummary,
   AccountLedgerDetail,
+  AccountLedgerListParams,
+  AccountLedgerPeriod,
 } from "@/api/invoice/accountLedgerApi";
 import {
   Search,
@@ -71,7 +73,6 @@ const SkeletonDetailRow = () => (
   </tr>
 );
 
-/** Proper Naira via Intl (₦) */
 const formatCurrency = (value: number | string | null | undefined) => {
   if (value === null || value === undefined) return "—";
   const num = typeof value === "string" ? parseFloat(value) : value;
@@ -278,45 +279,139 @@ const SUMMARY_CARDS: SummaryCardConfig[] = [
   },
 ];
 
+type FilterDraft = {
+  dateFrom: string;
+  dateTo: string;
+  period: AccountLedgerPeriod | "";
+};
+
+const EMPTY_FILTERS: FilterDraft = {
+  dateFrom: "",
+  dateTo: "",
+  period: "",
+};
+
+/** Build API params from applied filters + search */
+function buildListParams(
+  search: string,
+  applied: FilterDraft,
+): AccountLedgerListParams {
+  const params: AccountLedgerListParams = {};
+
+  if (search.trim()) params.search = search.trim();
+
+  // Prefer period over custom range when both somehow set
+  if (applied.period) {
+    params.period = applied.period;
+  } else {
+    if (applied.dateFrom) params.date_from = applied.dateFrom;
+    if (applied.dateTo) params.date_to = applied.dateTo;
+  }
+
+  return params;
+}
+
 export default function AccountLedgerPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [period, setPeriod] = useState("");
+
+  // Draft (form) vs applied (what the API uses)
+  const [draftFilters, setDraftFilters] = useState<FilterDraft>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] =
+    useState<FilterDraft>(EMPTY_FILTERS);
+
+  const queryParams = useMemo(
+    () => buildListParams(searchTerm, appliedFilters),
+    [searchTerm, appliedFilters],
+  );
+
+  const hasActiveFilters = Boolean(
+    appliedFilters.period || appliedFilters.dateFrom || appliedFilters.dateTo,
+  );
 
   const {
     data: ledgers = [],
     isLoading,
+    isFetching,
     isError,
     error,
-  } = useGetAccountLedgerQuery({ search: searchTerm || undefined });
+  } = useGetAccountLedgerQuery(queryParams);
 
   const [
     fetchAccountById,
     { data: selectedAccount, isLoading: isLoadingDetail },
   ] = useLazyGetAccountLedgerByIdQuery();
 
-  const filtered = useMemo(
-    () =>
-      ledgers.filter(
-        (acc) =>
-          acc.account_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          acc.account_code.toLowerCase().includes(searchTerm.toLowerCase()),
-      ),
-    [ledgers, searchTerm],
-  );
+  // Client-side refine still helps while typing search if API already filtered
+  const filtered = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return ledgers;
+    return ledgers.filter(
+      (acc) =>
+        acc.account_name.toLowerCase().includes(term) ||
+        acc.account_code.toLowerCase().includes(term),
+    );
+  }, [ledgers, searchTerm]);
 
-  const handleRowClick = (id: number) => {
-    if (expandedRowId === id) {
-      setExpandedRowId(null);
-    } else {
-      setExpandedRowId(id);
-      fetchAccountById(id);
+  const handleApplyFilters = () => {
+    // Mutual exclusivity: period wins if chosen; else use date range
+    const next: FilterDraft = { ...draftFilters };
+    if (next.period) {
+      next.dateFrom = "";
+      next.dateTo = "";
     }
+    setAppliedFilters(next);
+    setDraftFilters(next);
+    setExpandedRowId(null);
   };
+
+  const handleClearFilters = () => {
+    setDraftFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
+    setExpandedRowId(null);
+  };
+
+  const handlePeriodChange = (value: string) => {
+    setDraftFilters((prev) => ({
+      ...prev,
+      period: value as AccountLedgerPeriod | "",
+      // Clear custom range when picking a preset period
+      dateFrom: value ? "" : prev.dateFrom,
+      dateTo: value ? "" : prev.dateTo,
+    }));
+  };
+
+  const handleDateFromChange = (value: string) => {
+    setDraftFilters((prev) => ({
+      ...prev,
+      dateFrom: value,
+      period: value || prev.dateTo ? "" : prev.period,
+    }));
+  };
+
+  const handleDateToChange = (value: string) => {
+    setDraftFilters((prev) => ({
+      ...prev,
+      dateTo: value,
+      period: value || prev.dateFrom ? "" : prev.period,
+    }));
+  };
+
+  const handleRowClick = useCallback(
+    (id: number) => {
+      if (expandedRowId === id) {
+        setExpandedRowId(null);
+        return;
+      }
+      setExpandedRowId(id);
+      // Re-fetch detail with the same date/period filters so entries match the summary
+      const filterParams = buildListParams("", appliedFilters);
+      fetchAccountById({ id, ...filterParams });
+    },
+    [expandedRowId, appliedFilters, fetchAccountById],
+  );
 
   if (isError) {
     return (
@@ -359,14 +454,17 @@ export default function AccountLedgerPage() {
             <button
               type="button"
               onClick={() => setShowFilters(!showFilters)}
-              className={`flex items-center gap-2 rounded border px-4 py-2.5 text-sm font-medium transition-all ${
-                showFilters
+              className={`relative flex items-center gap-2 rounded border px-4 py-2.5 text-sm font-medium transition-all ${
+                showFilters || hasActiveFilters
                   ? "border-blue-500 bg-blue-50 text-blue-600"
                   : "border-gray-200 text-gray-700 hover:bg-gray-50"
               }`}
             >
               <Filter className="h-4 w-4" />
               <span className="hidden sm:inline">Filter</span>
+              {hasActiveFilters && (
+                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-blue-600" />
+              )}
             </button>
             <div className="relative">
               <PermissionGuard module="invoice" entitlement="view_cash_flow">
@@ -431,9 +529,10 @@ export default function AccountLedgerPage() {
                 </label>
                 <input
                   type="date"
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                  value={draftFilters.dateFrom}
+                  onChange={(e) => handleDateFromChange(e.target.value)}
+                  disabled={Boolean(draftFilters.period)}
                 />
               </div>
               <div className="min-w-[160px]">
@@ -442,9 +541,10 @@ export default function AccountLedgerPage() {
                 </label>
                 <input
                   type="date"
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                  value={draftFilters.dateTo}
+                  onChange={(e) => handleDateToChange(e.target.value)}
+                  disabled={Boolean(draftFilters.period)}
                 />
               </div>
               <div className="min-w-[160px]">
@@ -452,9 +552,12 @@ export default function AccountLedgerPage() {
                   <Hash className="h-3.5 w-3.5" /> Period
                 </label>
                 <select
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
+                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                  value={draftFilters.period}
+                  onChange={(e) => handlePeriodChange(e.target.value)}
+                  disabled={Boolean(
+                    draftFilters.dateFrom || draftFilters.dateTo,
+                  )}
                 >
                   <option value="">All Time</option>
                   <option value="today">Today</option>
@@ -467,22 +570,88 @@ export default function AccountLedgerPage() {
                   <option value="last_year">Last Year</option>
                 </select>
               </div>
-              <button
-                type="button"
-                className="rounded bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-              >
-                Apply Filters
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleApplyFilters}
+                  className="rounded bg-blue-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                >
+                  Apply Filters
+                </button>
+                {(hasActiveFilters ||
+                  draftFilters.period ||
+                  draftFilters.dateFrom ||
+                  draftFilters.dateTo) && (
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
+            <p className="mt-3 text-xs text-gray-500">
+              Use either a preset <strong>Period</strong> or a custom{" "}
+              <strong>From / To</strong> range — not both.
+            </p>
           </div>
         )}
 
-        {/* Summary cards – CoA / PO style */}
+        {/* Active filter chips */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-gray-500">Active:</span>
+            {appliedFilters.period && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                Period: {appliedFilters.period.replace(/_/g, " ")}
+                <button
+                  type="button"
+                  aria-label="Remove period filter"
+                  onClick={() => {
+                    const next = { ...appliedFilters, period: "" as const };
+                    setAppliedFilters(next);
+                    setDraftFilters(next);
+                  }}
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-blue-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+            {(appliedFilters.dateFrom || appliedFilters.dateTo) && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                {appliedFilters.dateFrom || "…"} →{" "}
+                {appliedFilters.dateTo || "…"}
+                <button
+                  type="button"
+                  aria-label="Remove date range"
+                  onClick={() => {
+                    const next = {
+                      ...appliedFilters,
+                      dateFrom: "",
+                      dateTo: "",
+                    };
+                    setAppliedFilters(next);
+                    setDraftFilters(next);
+                  }}
+                  className="ml-0.5 rounded-full p-0.5 hover:bg-blue-100"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Summary cards */}
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
           <div className="grid grid-cols-1 divide-y divide-gray-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {SUMMARY_CARDS.map((card) => {
               const Icon = card.icon;
-              const raw = isLoading ? null : card.getValue(filtered);
+              const raw =
+                isLoading || isFetching ? null : card.getValue(filtered);
               return (
                 <div
                   key={card.key}
@@ -552,6 +721,15 @@ export default function AccountLedgerPage() {
             <p className="mt-1 text-sm text-gray-500">
               Try adjusting your search or filter criteria
             </p>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleClearFilters}
+                className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                Clear filters
+              </button>
+            )}
           </div>
         )}
 
@@ -656,6 +834,9 @@ export default function AccountLedgerPage() {
                                       {selectedAccount.entries.length === 0 ? (
                                         <div className="py-8 text-center text-sm text-gray-500">
                                           No transactions found for this account
+                                          {hasActiveFilters
+                                            ? " in the selected period"
+                                            : ""}
                                         </div>
                                       ) : (
                                         <div className="overflow-x-auto rounded border border-gray-200">

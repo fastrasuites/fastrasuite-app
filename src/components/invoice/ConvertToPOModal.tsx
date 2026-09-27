@@ -213,8 +213,7 @@ export default function ConvertToPOModal({
     ? `${detailsData.project_details?.name || "—"} › ${detailsData.phase_details?.name || "—"} › ${detailsData.activity_details?.name || "—"}`
     : request?.wbs || "—";
 
-  const referenceId =
-    detailsData?.project_request?.reference_id || request?.id || "—";
+  const referenceId = detailsData?.reference_id || request?.id || "—";
 
   const vendorObj = vendors.find(
     (v: any) => v.id.toString() === selectedVendor,

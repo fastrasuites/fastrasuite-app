@@ -41,6 +41,20 @@ const formatToSentenceCase = (text?: string | null) => {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
+/** UI-only labels for source_request_type (API values unchanged) */
+function formatRequestTypeLabel(type?: string | null): string {
+  if (!type) return "—";
+  const key = type.toLowerCase().trim();
+
+  const labels: Record<string, string> = {
+    project_purchase_request: "Purchase Request",
+  };
+
+  if (labels[key]) return labels[key];
+
+  return formatToSentenceCase(type);
+}
+
 const formatDate = (value?: string | null) => {
   if (!value) return "—";
   try {
@@ -54,7 +68,6 @@ const formatDate = (value?: string | null) => {
   }
 };
 
-/** Human-readable WBS when backend sends details; otherwise null */
 function resolveWbsLabel(order: any): string | null {
   const details =
     order.wbs_element_details ||
@@ -109,7 +122,7 @@ const getStatusBadge = (status?: string | null) => {
 
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${color}`}
+      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${color}`}
     >
       {label}
     </span>
@@ -128,18 +141,12 @@ const STATUS_OPTIONS = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-/* -------------------------------------------------------------------------- */
-/*                         Summary cards config                               */
-/* Status-focused — more useful than type for a PO list                       */
-/* -------------------------------------------------------------------------- */
-
 type SummaryCardConfig = {
   key: string;
   label: string;
   icon: LucideIcon;
   iconClass: string;
   countClass: string;
-  /** Status values this card aggregates (lowercased) */
   matchStatuses: string[];
 };
 
@@ -182,7 +189,6 @@ const SUMMARY_CARDS: SummaryCardConfig[] = [
     icon: Receipt,
     iconClass: "text-violet-600",
     countClass: "text-violet-600",
-    // Group partially + fully billed for a cleaner row
     matchStatuses: ["partially_billed", "fully_billed"],
   },
   {
@@ -194,10 +200,6 @@ const SUMMARY_CARDS: SummaryCardConfig[] = [
     matchStatuses: ["cancelled", "canceled"],
   },
 ];
-
-/* -------------------------------------------------------------------------- */
-/*                                 Skeleton                                   */
-/* -------------------------------------------------------------------------- */
 
 function TableSkeleton({ rows = 8 }: { rows?: number }) {
   return (
@@ -231,10 +233,6 @@ function TableSkeleton({ rows = 8 }: { rows?: number }) {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*                                   Page                                     */
-/* -------------------------------------------------------------------------- */
-
 export default function PurchaseOrderPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -253,7 +251,6 @@ export default function PurchaseOrderPage() {
     ? purchaseOrders
     : (purchaseOrders as any)?.results || [];
 
-  /** Distinct request types from data for filter dropdown */
   const requestTypes = useMemo(() => {
     const set = new Set<string>();
     orders.forEach((o: any) => {
@@ -262,7 +259,6 @@ export default function PurchaseOrderPage() {
     return Array.from(set).sort();
   }, [orders]);
 
-  /* ---------- Status summary counts (from full list) ---------- */
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const card of SUMMARY_CARDS) {
@@ -300,6 +296,7 @@ export default function PurchaseOrderPage() {
         order.po_number,
         order.vendor_name,
         order.source_request_type,
+        formatRequestTypeLabel(order.source_request_type),
         order.status,
         wbsLabel,
         order.project_name,
@@ -320,10 +317,7 @@ export default function PurchaseOrderPage() {
     setTypeFilter("");
   };
 
-  // Clicking a summary card applies that status filter (toggle off if same)
   const handleCardClick = (card: SummaryCardConfig) => {
-    // For the "Billed" card which groups two statuses, set filter to first
-    // or clear if already filtering one of them
     if (card.key === "billed") {
       if (
         statusFilter === "partially_billed" ||
@@ -331,8 +325,6 @@ export default function PurchaseOrderPage() {
       ) {
         setStatusFilter("");
       } else {
-        // Default to fully_billed when clicking the grouped card;
-        // user can refine via Filters dropdown
         setStatusFilter("fully_billed");
       }
       return;
@@ -341,7 +333,6 @@ export default function PurchaseOrderPage() {
     setStatusFilter((prev) => (prev === target ? "" : target));
   };
 
-  // Show WBS column only if at least one row has a readable label
   const showWbsColumn = useMemo(
     () => filteredOrders.some((o: any) => resolveWbsLabel(o)),
     [filteredOrders],
@@ -352,14 +343,12 @@ export default function PurchaseOrderPage() {
   return (
     <PageGuard module="invoice" entitlement="view_purchase_orders">
       <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-        {/* Breadcrumb */}
         <nav className="mb-4 flex flex-wrap items-center gap-2 text-sm text-gray-500">
           <span>Invoice</span>
           <span className="text-gray-300">›</span>
           <span className="font-medium text-gray-900">Purchase Orders</span>
         </nav>
 
-        {/* Header */}
         <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">
@@ -383,9 +372,8 @@ export default function PurchaseOrderPage() {
           </button>
         </div>
 
-        {/* ── Status summary cards ───────────────────────────────────────── */}
         <div className="mb-6 overflow-hidden rounded-xl border border-gray-200 bg-white">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-y sm:divide-y-0 divide-gray-100">
+          <div className="grid grid-cols-2 divide-x divide-y divide-gray-100 sm:grid-cols-3 sm:divide-y-0 lg:grid-cols-6">
             {SUMMARY_CARDS.map((card) => {
               const Icon = card.icon;
               const count = statusCounts[card.key] ?? 0;
@@ -400,7 +388,7 @@ export default function PurchaseOrderPage() {
                   key={card.key}
                   type="button"
                   onClick={() => handleCardClick(card)}
-                  className={`flex flex-col items-start gap-3 px-5 py-4 min-h-[96px] text-left transition-colors hover:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                  className={`flex min-h-[96px] flex-col items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
                     isActive ? "bg-blue-50/60" : ""
                   }`}
                   aria-pressed={isActive}
@@ -411,8 +399,8 @@ export default function PurchaseOrderPage() {
                   }
                 >
                   <div className="flex items-center gap-2">
-                    <Icon className={`w-4 h-4 shrink-0 ${card.iconClass}`} />
-                    <span className="text-sm font-medium text-gray-600 leading-tight">
+                    <Icon className={`h-4 w-4 shrink-0 ${card.iconClass}`} />
+                    <span className="text-sm font-medium leading-tight text-gray-600">
                       {card.label}
                     </span>
                   </div>
@@ -420,7 +408,7 @@ export default function PurchaseOrderPage() {
                     className={`text-2xl font-semibold tabular-nums ${card.countClass}`}
                   >
                     {isLoading ? (
-                      <span className="inline-block h-7 w-8 rounded bg-gray-200 animate-pulse" />
+                      <span className="inline-block h-7 w-8 animate-pulse rounded bg-gray-200" />
                     ) : (
                       count
                     )}
@@ -431,7 +419,6 @@ export default function PurchaseOrderPage() {
           </div>
         </div>
 
-        {/* Search + filters */}
         <div className="mb-4 space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative max-w-md flex-1">
@@ -503,7 +490,7 @@ export default function PurchaseOrderPage() {
                   <option value="">All types</option>
                   {requestTypes.map((t) => (
                     <option key={t} value={t}>
-                      {formatToSentenceCase(t)}
+                      {formatRequestTypeLabel(t)}
                     </option>
                   ))}
                 </select>
@@ -512,7 +499,6 @@ export default function PurchaseOrderPage() {
           )}
         </div>
 
-        {/* Result count */}
         <div className="mb-3 flex items-center justify-between text-sm text-gray-500">
           <span>
             {isLoading ? (
@@ -535,7 +521,6 @@ export default function PurchaseOrderPage() {
           )}
         </div>
 
-        {/* Table */}
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
             <table data-wizard="inv-po-table" className="w-full min-w-[720px]">
@@ -627,7 +612,6 @@ export default function PurchaseOrderPage() {
                         key={order.id}
                         className="transition-colors hover:bg-gray-50/80"
                       >
-                        {/* PO Number */}
                         <td className="px-4 py-3.5 text-sm font-medium">
                           <Link
                             href={`/invoice/purchase-order/${order.id}`}
@@ -642,25 +626,22 @@ export default function PurchaseOrderPage() {
                           )}
                         </td>
 
-                        {/* Request Type */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-4 py-3.5">
                           <span
-                            className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${getTypeColor(
+                            className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${getTypeColor(
                               order.source_request_type,
                             )}`}
                           >
-                            {formatToSentenceCase(order.source_request_type)}
+                            {formatRequestTypeLabel(order.source_request_type)}
                           </span>
                         </td>
 
-                        {/* Vendor */}
                         <td className="px-4 py-3.5 text-sm text-gray-800">
                           {order.vendor_name || "—"}
                         </td>
 
-                        {/* WBS Element */}
                         {showWbsColumn && (
-                          <td className="px-4 py-3.5 text-sm text-gray-600 max-w-[200px]">
+                          <td className="max-w-[200px] px-4 py-3.5 text-sm text-gray-600">
                             {wbsLabel ? (
                               <span
                                 className="block truncate"
@@ -674,17 +655,14 @@ export default function PurchaseOrderPage() {
                           </td>
                         )}
 
-                        {/* Amount */}
                         <td className="px-4 py-3.5 text-right text-sm font-semibold text-gray-900">
                           {formatCurrency(Number(order.total_amount || 0))}
                         </td>
 
-                        {/* Status */}
-                        <td className="px-4 py-3.5 whitespace-nowrap">
+                        <td className="whitespace-nowrap px-4 py-3.5">
                           {getStatusBadge(order.status)}
                         </td>
 
-                        {/* Actions */}
                         <td className="px-4 py-3.5">
                           <div className="flex items-center justify-center">
                             <Link

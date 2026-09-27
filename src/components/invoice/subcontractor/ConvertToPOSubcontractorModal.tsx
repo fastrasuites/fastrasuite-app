@@ -95,9 +95,9 @@ function InfoCard({
 }) {
   return (
     <div
-      className={`rounded-lg px-4 py-3 border border-gray-200 bg-gray-50 ${className}`}
+      className={`rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 ${className}`}
     >
-      <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
+      <p className="mb-1 text-xs uppercase tracking-wider text-gray-500">
         {label}
       </p>
       <p className="text-sm font-medium text-gray-900">
@@ -116,12 +116,12 @@ const InfoBanner = ({
 }) => {
   const styles =
     type === "warning"
-      ? "bg-amber-50 border-amber-200 text-amber-800"
-      : "bg-blue-50 border-blue-100 text-blue-800";
+      ? "border-amber-200 bg-amber-50 text-amber-800"
+      : "border-blue-100 bg-blue-50 text-blue-800";
   const Icon = type === "warning" ? AlertTriangle : InfoIcon;
   return (
-    <div className={`border rounded-lg px-4 py-3 flex gap-2 ${styles}`}>
-      <Icon className="w-4 h-4 mt-0.5 shrink-0" />
+    <div className={`flex gap-2 rounded-lg border px-4 py-3 ${styles}`}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
       <p className="text-sm">{children}</p>
     </div>
   );
@@ -153,14 +153,12 @@ export default function ConvertToPOSubcontractorModal({
   currentStep,
   onNextStep,
   onBackStep,
-  onConvertToInvoice,
   formatCurrency,
   request,
   isIssuing = false,
 }: ConvertToPOSubcontractorModalProps) {
   const router = useRouter();
 
-  /* ─── Visibility / toast state ─────────────────── */
   const [isVisible, setIsVisible] = useState(false);
   const [toast, setToast] = useState<{
     type: "success" | "error";
@@ -168,7 +166,6 @@ export default function ConvertToPOSubcontractorModal({
   } | null>(null);
   const primaryButtonRef = useRef<HTMLButtonElement>(null);
 
-  /* ─── Form state ────────────────────────────────── */
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [vendorId, setVendorId] = useState("");
@@ -177,9 +174,12 @@ export default function ConvertToPOSubcontractorModal({
   const [markingMilestoneId, setMarkingMilestoneId] = useState<number | null>(
     null,
   );
+  /** Milestone selected for Create Bill (per-milestone billing) */
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<number | null>(
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  /* ─── Request ID ────────────────────────────────── */
   const requestId = (() => {
     if (request?.backendId) return Number(request.backendId);
     if (request?.sourceId) return Number(request.sourceId);
@@ -187,7 +187,6 @@ export default function ConvertToPOSubcontractorModal({
     return match ? Number(match[1]) : undefined;
   })();
 
-  /* ─── Queries ───────────────────────────────────── */
   const {
     data: detailsData,
     isLoading: isDetailsLoading,
@@ -221,22 +220,17 @@ export default function ConvertToPOSubcontractorModal({
   const [markMilestoneComplete] =
     useMarkSubcontractorMilestoneCompleteMutation();
 
-  /* ─── Derived data ─────────────────────────────── */
   const vendors = Array.isArray(vendorsResponse) ? vendorsResponse : [];
-
   const subcontractorVendors = vendors.filter(
     (v: any) => v.vendor_type === "subcontractor",
   );
-
   const accountsPayableAccounts = Array.isArray(accountsPayableAccountsResponse)
     ? accountsPayableAccountsResponse
     : [];
-
   const paymentTerms = Array.isArray(paymentTermsResponse)
     ? paymentTermsResponse.filter((t: any) => t.is_active)
     : [];
 
-  /* ─── Vendor & payment-term selection logic ─────── */
   const resolvedVendorId =
     vendorId || (detailsData?.vendor ? String(detailsData.vendor) : "");
   const effectiveVendorId = subcontractorVendors.some(
@@ -257,7 +251,6 @@ export default function ConvertToPOSubcontractorModal({
     (t: any) => t.id === Number(effectivePaymentTermId),
   )?.name;
 
-  /* ─── Detail-derived display values ─────────────── */
   const vendorName =
     detailsData?.vendor_name ||
     (detailsData?.vendor ? `Vendor #${detailsData.vendor}` : "Not specified");
@@ -269,23 +262,22 @@ export default function ConvertToPOSubcontractorModal({
     ? `${detailsData.project_details?.name || "—"} › ${detailsData.phase_details?.name || "—"} › ${detailsData.activity_details?.name || "—"}`
     : "—";
   const paymentType = formatLabel(detailsData?.payment_type);
-  const paymentTermsText = detailsData?.payment_terms || "—";
   const startDate = detailsData?.start_date || "—";
   const endDate = detailsData?.end_date || "—";
-  const referenceId =
-    detailsData?.project_request?.reference_id || request?.id || "—";
+  const referenceId = detailsData?.reference_id || request?.id || "—";
   const milestones = detailsData?.milestones ?? [];
   const justification = detailsData?.justification_notes || "";
 
   const rawPaymentType = detailsData?.payment_type || "lump_sum";
   const isMilestoneType = rawPaymentType === "milestone";
 
-  // All milestones must be completed before we can create the bill
-  const allMilestonesCompleted =
-    milestones.length > 0 &&
-    milestones.every((m: any) => m.is_completed === true);
+  const selectedMilestone = milestones.find(
+    (m: any) => m.id === selectedMilestoneId,
+  );
+  const billAmount = isMilestoneType
+    ? Number(selectedMilestone?.amount) || 0
+    : contractValue;
 
-  /* ─── Can submit? ───────────────────────────────── */
   const canSubmit =
     !isSubmitting &&
     !isDetailsLoading &&
@@ -298,13 +290,14 @@ export default function ConvertToPOSubcontractorModal({
     !vendorStale &&
     Boolean(accountsPayableAccountId) &&
     Boolean(effectivePaymentTermId) &&
-    // Extra gate for milestone type
-    (!isMilestoneType || allMilestonesCompleted);
+    // Milestone: must have selected an unbilled completed milestone
+    (!isMilestoneType ||
+      (selectedMilestoneId != null &&
+        selectedMilestone?.is_completed === true &&
+        selectedMilestone?.is_billed !== true));
 
-  /* ─── Focus on open ─────────────────────────────── */
   useEffect(() => {
     if (isOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsVisible(true);
       setTimeout(() => primaryButtonRef.current?.focus(), 100);
     } else {
@@ -315,17 +308,16 @@ export default function ConvertToPOSubcontractorModal({
 
   useEffect(() => {
     if (!isOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setToast(null);
       setUploadedFile(null);
       setVendorId("");
       setAccountsPayableAccountId("");
       setPaymentTermId("");
       setMarkingMilestoneId(null);
+      setSelectedMilestoneId(null);
     }
   }, [isOpen]);
 
-  // Pre-fill vendor + payment term when details arrive
   useEffect(() => {
     if (!isOpen || !detailsData) return;
 
@@ -346,7 +338,6 @@ export default function ConvertToPOSubcontractorModal({
 
   if (!isOpen && !isVisible) return null;
 
-  /* ─── Handlers ──────────────────────────────────── */
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4500);
@@ -373,13 +364,32 @@ export default function ConvertToPOSubcontractorModal({
     try {
       await markMilestoneComplete(milestoneId).unwrap();
       showToast("success", "Milestone marked as completed");
-      // Refresh the details so the UI updates immediately
       await refetchDetails();
     } catch (err: unknown) {
       showToast("error", extractErrorMessage(err));
     } finally {
       setMarkingMilestoneId(null);
     }
+  };
+
+  /** Per-milestone: open step 2 to bill this completed milestone */
+  const handleCreateBillForMilestone = (milestoneId: number) => {
+    const m = milestones.find((x: any) => x.id === milestoneId);
+    if (!m?.is_completed) {
+      showToast("error", "Milestone must be completed before creating a bill.");
+      return;
+    }
+    if (m.is_billed) {
+      showToast("error", "A bill has already been created for this milestone.");
+      return;
+    }
+    setSelectedMilestoneId(milestoneId);
+    onNextStep();
+  };
+
+  const handleBack = () => {
+    setSelectedMilestoneId(null);
+    onBackStep();
   };
 
   const handleSubmit = async () => {
@@ -400,12 +410,23 @@ export default function ConvertToPOSubcontractorModal({
       return;
     }
 
-    if (isMilestoneType && !allMilestonesCompleted) {
-      showToast(
-        "error",
-        "All milestones must be marked as completed before creating the vendor bill.",
-      );
-      return;
+    if (isMilestoneType) {
+      if (selectedMilestoneId == null) {
+        showToast("error", "No milestone selected for billing.");
+        return;
+      }
+      const m = milestones.find((x: any) => x.id === selectedMilestoneId);
+      if (!m?.is_completed) {
+        showToast("error", "Selected milestone is not completed.");
+        return;
+      }
+      if (m.is_billed) {
+        showToast(
+          "error",
+          "A bill has already been created for this milestone.",
+        );
+        return;
+      }
     }
 
     const subcontractorRequestId = Number(detailsData?.id ?? requestId);
@@ -433,23 +454,17 @@ export default function ConvertToPOSubcontractorModal({
       formData.append("document", uploadedFile);
     }
 
-    /* ─── Line mapping based on payment_type ────────────── */
     if (isMilestoneType) {
-      const completed = milestones.filter((m: any) => m.is_completed);
-      if (completed.length === 0) {
-        showToast("error", "No completed milestones found.");
-        return;
-      }
+      // One bill per milestone — send only the selected milestone id
       formData.append(
         "lines",
-        JSON.stringify(
-          completed.map((m: any) => ({
-            subcontractor_milestone: Number(m.id),
-          })),
-        ),
+        JSON.stringify([
+          {
+            subcontractor_milestone: Number(selectedMilestoneId),
+          },
+        ]),
       );
     } else {
-      // lump_sum – link the entire contract to the subcontractor request
       formData.append(
         "lines",
         JSON.stringify([
@@ -477,31 +492,30 @@ export default function ConvertToPOSubcontractorModal({
     }
   };
 
-  /* ─── Step indicator ─────────────────────────────────── */
   const renderStepIndicator = () => (
-    <div className="flex items-center gap-4 mb-6" aria-label="Progress">
+    <div className="mb-6 flex items-center gap-4" aria-label="Progress">
       <div className="flex items-center gap-2">
         <div
-          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
             currentStep === 1
               ? "bg-blue-600 text-white"
               : "bg-green-500 text-white"
           }`}
         >
-          {currentStep === 1 ? 1 : <CheckCircle className="w-4 h-4" />}
+          {currentStep === 1 ? 1 : <CheckCircle className="h-4 w-4" />}
         </div>
         <span
           className={`text-sm ${
-            currentStep === 1 ? "text-gray-900 font-medium" : "text-gray-500"
+            currentStep === 1 ? "font-medium text-gray-900" : "text-gray-500"
           }`}
         >
           Review Details
         </span>
       </div>
-      <ChevronRight className="w-4 h-4 text-gray-300" aria-hidden />
+      <ChevronRight className="h-4 w-4 text-gray-300" aria-hidden />
       <div className="flex items-center gap-2">
         <div
-          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
+          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
             currentStep === 2
               ? "bg-blue-600 text-white"
               : "bg-gray-200 text-gray-600"
@@ -511,7 +525,7 @@ export default function ConvertToPOSubcontractorModal({
         </div>
         <span
           className={`text-sm ${
-            currentStep === 2 ? "text-gray-900 font-medium" : "text-gray-500"
+            currentStep === 2 ? "font-medium text-gray-900" : "text-gray-500"
           }`}
         >
           Confirm & Convert
@@ -520,49 +534,42 @@ export default function ConvertToPOSubcontractorModal({
     </div>
   );
 
-  /* ─── Milestone status helpers ───────────────────────── */
   const getMilestoneStatus = (milestone: any, index: number) => {
     if (milestone.is_completed) return "completed";
-
-    // Find the first incomplete milestone → that one is "in progress"
     const firstIncompleteIndex = milestones.findIndex(
       (m: any) => !m.is_completed,
     );
     if (index === firstIncompleteIndex) return "in_progress";
-
     return "locked";
   };
 
-  /* ─── Milestones UI (Step 1 – with Mark as Complete) ─── */
   const renderMilestonesStep1 = () => {
     if (!milestones.length) {
       return (
-        <div className="border border-gray-200 rounded-lg px-4 py-6 text-center text-sm text-gray-500">
+        <div className="rounded-lg border border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
           No milestones defined
         </div>
       );
     }
 
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
+      <div className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200">
         {milestones.map((m: any, index: number) => {
           const status = getMilestoneStatus(m, index);
           const isMarking = markingMilestoneId === m.id;
+          const isBilled = m.is_billed === true;
 
           return (
             <div
               key={m.id ?? index}
-              className="px-4 py-4 flex flex-col sm:flex-row sm:items-start gap-3"
+              className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start"
             >
-              {/* Left side – icon + name + badge + description */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  {status === "completed" ? (
-                    <Unlock className="w-4 h-4 text-amber-500 shrink-0" />
-                  ) : status === "in_progress" ? (
-                    <Unlock className="w-4 h-4 text-amber-500 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  {status === "locked" ? (
+                    <Lock className="h-4 w-4 shrink-0 text-gray-400" />
                   ) : (
-                    <Lock className="w-4 h-4 text-gray-400 shrink-0" />
+                    <Unlock className="h-4 w-4 shrink-0 text-amber-500" />
                   )}
 
                   <span className="text-sm font-medium text-gray-900">
@@ -570,50 +577,52 @@ export default function ConvertToPOSubcontractorModal({
                   </span>
 
                   {status === "completed" && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
                       Completed
                     </span>
                   )}
                   {status === "in_progress" && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                    <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
                       In progress
                     </span>
                   )}
                   {status === "locked" && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
                       Locked
+                    </span>
+                  )}
+                  {isBilled && (
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                      Billed
                     </span>
                   )}
                 </div>
 
-                {/* Description / completion criteria */}
                 {(m.completion_criteria || m.description) && (
-                  <p className="text-xs text-gray-500 mt-0.5 ml-6">
+                  <p className="ml-6 mt-0.5 text-xs text-gray-500">
                     {m.completion_criteria || m.description}
                   </p>
                 )}
 
-                {/* Optional green completion record box – only when backend later provides richer data */}
                 {status === "completed" && m.completion_record && (
-                  <div className="mt-2 ml-6 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-xs text-green-800">
-                    <p className="font-medium mb-0.5">PM Completion Record</p>
-                    <p>{m.completion_record}</p>
+                  <div className="ml-6 mt-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+                    <p className="mb-0.5 font-medium">PM Completion Record</p>
+                    <p>{String(m.completion_record)}</p>
                   </div>
                 )}
               </div>
 
-              {/* Right side – amount + action */}
-              <div className="flex items-center gap-3 shrink-0 sm:ml-4">
+              <div className="flex shrink-0 items-center gap-3 sm:ml-4">
                 {status === "in_progress" && (
                   <button
                     type="button"
                     onClick={() => handleMarkComplete(m.id)}
                     disabled={isMarking || isSubmitting}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg disabled:opacity-50 flex items-center gap-1.5"
+                    className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     {isMarking ? (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         Marking…
                       </>
                     ) : (
@@ -622,7 +631,26 @@ export default function ConvertToPOSubcontractorModal({
                   </button>
                 )}
 
-                <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">
+                {status === "completed" &&
+                  (isBilled ? (
+                    <span
+                      className="inline-flex items-center rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-500"
+                      title="A vendor bill has already been created for this milestone"
+                    >
+                      Bill created
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleCreateBillForMilestone(m.id)}
+                      disabled={isSubmitting}
+                      className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      Create Bill
+                    </button>
+                  ))}
+
+                <span className="whitespace-nowrap text-sm font-semibold text-gray-900">
                   {formatCurrency(Number(m.amount) || 0)}
                 </span>
               </div>
@@ -633,65 +661,72 @@ export default function ConvertToPOSubcontractorModal({
     );
   };
 
-  /* ─── Milestones UI (Step 2 – read-only, all completed) ─ */
   const renderMilestonesStep2 = () => {
-    if (!milestones.length) {
+    if (!isMilestoneType) {
       return (
-        <div className="border border-gray-200 rounded-lg px-4 py-6 text-center text-sm text-gray-500">
+        <div className="rounded-lg border border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
           No milestones defined (Lump Sum contract)
         </div>
       );
     }
 
+    if (!selectedMilestone) {
+      return (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+          No milestone selected. Go back and choose <strong>Create Bill</strong>{" "}
+          on a completed milestone.
+        </div>
+      );
+    }
+
     return (
-      <div className="border border-gray-200 rounded-lg overflow-hidden divide-y divide-gray-100">
-        {milestones.map((m: any, index: number) => (
-          <div
-            key={m.id ?? index}
-            className="px-4 py-3 flex items-center justify-between gap-4"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <Unlock className="w-4 h-4 text-amber-500 shrink-0" />
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-gray-900 truncate">
-                    {m.name || `Milestone ${index + 1}`}
-                  </span>
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    Completed
-                  </span>
-                </div>
-                {(m.completion_criteria || m.description) && (
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    <TruncateWithTooltip
-                      text={String(m.completion_criteria || m.description)}
-                      maxLength={60}
-                    />
-                  </p>
-                )}
+      <div className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200">
+        <div className="flex items-center justify-between gap-4 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <Unlock className="h-4 w-4 shrink-0 text-amber-500" />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="truncate text-sm font-medium text-gray-900">
+                  {selectedMilestone.name ||
+                    `Milestone #${selectedMilestone.id}`}
+                </span>
+                <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
+                  Completed
+                </span>
               </div>
+              {(selectedMilestone.completion_criteria ||
+                selectedMilestone.description) && (
+                <p className="mt-0.5 text-xs text-gray-500">
+                  <TruncateWithTooltip
+                    text={String(
+                      selectedMilestone.completion_criteria ||
+                        selectedMilestone.description,
+                    )}
+                    maxLength={60}
+                  />
+                </p>
+              )}
             </div>
-            <span className="text-sm font-semibold text-gray-900 shrink-0">
-              {formatCurrency(Number(m.amount) || 0)}
-            </span>
           </div>
-        ))}
+          <span className="shrink-0 text-sm font-semibold text-gray-900">
+            {formatCurrency(Number(selectedMilestone.amount) || 0)}
+          </span>
+        </div>
       </div>
     );
   };
 
-  /* ─── File upload UI ─────────────────────────────────── */
   const renderFileUpload = () => (
     <div>
-      <h3 className="text-sm font-semibold text-gray-700 mb-1">
+      <h3 className="mb-1 text-sm font-semibold text-gray-700">
         Supplier Invoice / Timesheet (optional)
       </h3>
-      <p className="text-xs text-gray-500 mb-3">
+      <p className="mb-3 text-xs text-gray-500">
         PDF or image up to 20 MB. Upload does not block submission.
       </p>
       {!uploadedFile ? (
         <div
-          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+          className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors ${
             isDragging
               ? "border-blue-500 bg-blue-50"
               : "border-gray-300 hover:border-gray-400"
@@ -709,12 +744,12 @@ export default function ConvertToPOSubcontractorModal({
           }}
           onClick={() => fileInputRef.current?.click()}
         >
-          <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+          <Upload className="mx-auto mb-3 h-10 w-10 text-gray-400" />
           <p className="text-sm text-gray-600">
             Drop document here or{" "}
-            <span className="text-blue-600 font-medium">browse</span>
+            <span className="font-medium text-blue-600">browse</span>
           </p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="mt-1 text-xs text-gray-400">
             PDF, PNG, JPG up to 20 MB
           </p>
           <input
@@ -729,11 +764,11 @@ export default function ConvertToPOSubcontractorModal({
           />
         </div>
       ) : (
-        <div className="border border-gray-200 rounded-lg p-4 flex items-center justify-between bg-gray-50">
-          <div className="flex items-center gap-3 min-w-0">
-            <File className="w-8 h-8 text-blue-600 shrink-0" />
+        <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <File className="h-8 w-8 shrink-0 text-blue-600" />
             <div className="min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
+              <p className="truncate text-sm font-medium text-gray-900">
                 {uploadedFile.name}
               </p>
               <p className="text-xs text-gray-500">
@@ -748,31 +783,30 @@ export default function ConvertToPOSubcontractorModal({
               setUploadedFile(null);
               if (fileInputRef.current) fileInputRef.current.value = "";
             }}
-            className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-400 hover:text-red-600"
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-red-600"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       )}
     </div>
   );
 
-  /* ─── Step 1: Review Details ──────────────────────── */
   const renderStep1 = () => (
     <>
       <div className="space-y-6">
         {isDetailsLoading ? (
-          <div className="flex items-center justify-center py-16 gap-2 text-sm text-gray-500">
-            <Loader2 className="w-5 h-5 animate-spin" />
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-gray-500">
+            <Loader2 className="h-5 w-5 animate-spin" />
             Loading subcontractor details…
           </div>
         ) : isDetailsError ? (
-          <div className="border border-red-200 bg-red-50 rounded-lg p-4 text-sm text-red-700">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             Failed to load details. Please close and try again.
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
               <InfoCard label="Scope of Work" value={scopeOfWork} />
               <InfoCard
                 label="Contract Value"
@@ -781,14 +815,13 @@ export default function ConvertToPOSubcontractorModal({
               <InfoCard label="Project Name" value={projectName} />
               <InfoCard label="WBS Element" value={wbsLabel} />
               <InfoCard label="Payment Type" value={paymentType} />
-              <InfoCard label="Payment Terms" value={paymentTermsText} />
               <InfoCard label="Start Date" value={startDate} />
               <InfoCard label="End Date" value={endDate} />
             </div>
 
             {justification && (
-              <div className="rounded-lg px-4 py-3 border border-gray-200 bg-gray-50">
-                <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="mb-1 text-xs uppercase tracking-wider text-gray-500">
                   Justification Notes
                 </p>
                 <p className="text-sm text-gray-900">{justification}</p>
@@ -796,13 +829,13 @@ export default function ConvertToPOSubcontractorModal({
             )}
 
             <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-3">
+              <h3 className="mb-3 text-sm font-medium text-gray-700">
                 Milestones
               </h3>
               {isMilestoneType ? (
                 renderMilestonesStep1()
               ) : (
-                <div className="border border-gray-200 rounded-lg px-4 py-6 text-center text-sm text-gray-500">
+                <div className="rounded-lg border border-gray-200 px-4 py-6 text-center text-sm text-gray-500">
                   No milestones defined (Lump Sum contract)
                 </div>
               )}
@@ -811,97 +844,96 @@ export default function ConvertToPOSubcontractorModal({
         )}
       </div>
 
-      <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-6 border-t border-gray-200 mb-6">
+      <div className="mb-6 flex flex-col-reverse items-center justify-between gap-3 border-t border-gray-200 pt-6 sm:flex-row">
         <button
           type="button"
           onClick={onClose}
           disabled={isIssuing}
-          className="w-full sm:w-auto px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium disabled:opacity-50"
+          className="w-full rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 sm:w-auto"
         >
           Cancel
         </button>
-        <button
-          ref={primaryButtonRef}
-          type="button"
-          onClick={onNextStep}
-          disabled={
-            isIssuing ||
-            isDetailsLoading ||
-            isDetailsError ||
-            (isMilestoneType && !allMilestonesCompleted)
-          }
-          className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isMilestoneType && !allMilestonesCompleted
-            ? "Complete all milestones first"
-            : "Review & Confirm"}
-          <ChevronRight className="w-4 h-4" />
-        </button>
+
+        {/* Lump sum only: Review & Confirm. Milestone uses per-row Create Bill. */}
+        {!isMilestoneType && (
+          <button
+            ref={primaryButtonRef}
+            type="button"
+            onClick={onNextStep}
+            disabled={isIssuing || isDetailsLoading || isDetailsError}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            Review & Confirm
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </>
   );
 
-  /* ─── Step 2: Confirm & Convert ─────────────────────── */
   const renderStep2 = () => (
     <>
       <div className="space-y-6">
         <InfoBanner type="warning">
-          Once confirmed, a <strong>Vendor Bill</strong> will be created for{" "}
-          <strong>
-            <TruncateWithTooltip text={vendorName} maxLength={28} />
-          </strong>
-          . The Committed Amount of{" "}
-          <strong>{formatCurrency(contractValue)}</strong> remains locked
-          against{" "}
+          Once confirmed, a <strong>Vendor Bill</strong> will be created
+          {isMilestoneType && selectedMilestone ? (
+            <>
+              {" "}
+              for milestone{" "}
+              <strong>
+                {selectedMilestone.name || `#${selectedMilestone.id}`}
+              </strong>{" "}
+              (<strong>{formatCurrency(billAmount)}</strong>)
+            </>
+          ) : (
+            <>
+              . The Committed Amount of{" "}
+              <strong>{formatCurrency(contractValue)}</strong>
+            </>
+          )}{" "}
+          remains locked against{" "}
           <strong>
             <TruncateWithTooltip text={wbsLabel} maxLength={36} />
           </strong>{" "}
           until payment is confirmed or the bill is cancelled.
         </InfoBanner>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <InfoCard label="Scope of Work" value={scopeOfWork} />
           <InfoCard
-            label="Contract Value"
-            value={formatCurrency(contractValue)}
+            label={isMilestoneType ? "Milestone Amount" : "Contract Value"}
+            value={formatCurrency(billAmount)}
           />
           <InfoCard label="Project Name" value={projectName} />
           <InfoCard label="Payment Type" value={paymentType} />
           <InfoCard label="WBS Element" value={wbsLabel} />
-          <InfoCard label="Payment Terms" value={paymentTermsText} />
           <InfoCard label="Start Date" value={startDate} />
           <InfoCard label="End Date" value={endDate} />
         </div>
 
         <div>
-          <h3 className="text-sm font-medium text-gray-700 mb-3">Milestones</h3>
-          {isMilestoneType ? (
-            renderMilestonesStep2()
-          ) : (
-            <div className="border border-gray-200 rounded-lg px-4 py-6 text-center text-sm text-gray-500">
-              No milestones defined (Lump Sum contract)
-            </div>
-          )}
+          <h3 className="mb-3 text-sm font-medium text-gray-700">
+            {isMilestoneType ? "Milestone to bill" : "Milestones"}
+          </h3>
+          {renderMilestonesStep2()}
         </div>
 
-        {/* File Upload */}
         {renderFileUpload()}
 
-        {/* Vendor */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">
+          <h3 className="mb-1 text-sm font-semibold text-gray-700">
             Subcontractor Vendor
           </h3>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="mb-3 text-xs text-gray-500">
             Select the subcontractor this vendor bill will be issued to.
           </p>
           {isVendorsLoading ? (
             <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Loading vendors…
             </div>
           ) : subcontractorVendors.length === 0 ? (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <div className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 sm:flex-row sm:items-center">
               <span>
                 No subcontractor vendors found. Create a Subcontractor vendor
                 first.
@@ -911,7 +943,7 @@ export default function ConvertToPOSubcontractorModal({
                 onClick={() =>
                   router.push("/invoice/vendor/new?vendor_type=subcontractor")
                 }
-                className="text-blue-600 hover:text-blue-700 font-medium text-xs sm:text-sm underline"
+                className="text-xs font-medium text-blue-600 underline hover:text-blue-700 sm:text-sm"
               >
                 Create Subcontractor vendor
               </button>
@@ -933,7 +965,7 @@ export default function ConvertToPOSubcontractorModal({
                   }
                 }}
                 disabled={isSubmitting}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
               >
                 <option value="">Select vendor</option>
                 {subcontractorVendors.map((v: any) => (
@@ -943,7 +975,7 @@ export default function ConvertToPOSubcontractorModal({
                 ))}
               </select>
               {vendorStale && (
-                <p className="text-red-500 text-xs mt-1.5">
+                <p className="mt-1.5 text-xs text-red-500">
                   The previously selected vendor is no longer a subcontractor
                   vendor. Please select a subcontractor vendor.
                 </p>
@@ -952,21 +984,20 @@ export default function ConvertToPOSubcontractorModal({
           )}
         </div>
 
-        {/* Accounts Payable Account */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">
+          <h3 className="mb-1 text-sm font-semibold text-gray-700">
             Accounts Payable Account
           </h3>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="mb-3 text-xs text-gray-500">
             The liability account to record this vendor bill against.
           </p>
           {isAccountsPayableLoading ? (
             <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Loading accounts…
             </div>
           ) : accountsPayableAccounts.length === 0 ? (
-            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
               No accounts payable accounts found. Configure accounts under Chart
               of Accounts before submitting.
             </div>
@@ -975,7 +1006,7 @@ export default function ConvertToPOSubcontractorModal({
               value={accountsPayableAccountId}
               onChange={(e) => setAccountsPayableAccountId(e.target.value)}
               disabled={isSubmitting}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             >
               <option value="">Select accounts payable account</option>
               {accountsPayableAccounts.map((a: any) => (
@@ -987,23 +1018,22 @@ export default function ConvertToPOSubcontractorModal({
           )}
         </div>
 
-        {/* Payment Term */}
         <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-1">
+          <h3 className="mb-1 text-sm font-semibold text-gray-700">
             Payment Term
           </h3>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="mb-3 text-xs text-gray-500">
             {effectivePaymentTermId
               ? `Selected: ${selectedPaymentTermName || `Term #${effectivePaymentTermId}`}`
               : "Choose the due-date terms for this vendor bill."}
           </p>
           {isPaymentTermsLoading ? (
             <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Loading terms…
             </div>
           ) : paymentTerms.length === 0 ? (
-            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
               No active payment terms found. Configure payment terms under
               Invoice settings before submitting.
             </div>
@@ -1012,7 +1042,7 @@ export default function ConvertToPOSubcontractorModal({
               value={effectivePaymentTermId}
               onChange={(e) => setPaymentTermId(e.target.value)}
               disabled={isSubmitting}
-              className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+              className="w-full rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
             >
               <option value="">Select payment term</option>
               {paymentTerms.map((t: any) => (
@@ -1028,15 +1058,15 @@ export default function ConvertToPOSubcontractorModal({
         </div>
       </div>
 
-      <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-6 border-t border-gray-200 my-6">
+      <div className="my-6 flex flex-col-reverse items-center justify-between gap-3 border-t border-gray-200 pt-6 sm:flex-row">
         <button
           type="button"
-          onClick={onBackStep}
+          onClick={handleBack}
           disabled={isSubmitting}
-          className="w-full sm:w-auto px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium disabled:opacity-50"
+          className="w-full rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 sm:w-auto"
         >
           <span className="flex items-center gap-1">
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="h-4 w-4" />
             Back
           </span>
         </button>
@@ -1046,11 +1076,11 @@ export default function ConvertToPOSubcontractorModal({
           type="button"
           onClick={handleSubmit}
           disabled={!canSubmit}
-          className="w-full sm:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
         >
           {isSubmitting ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Creating Vendor Bill…
             </>
           ) : (
@@ -1061,11 +1091,10 @@ export default function ConvertToPOSubcontractorModal({
     </>
   );
 
-  /* ─── Render ──────────────────────────────────────── */
   return (
     <>
       <div
-        className={`fixed inset-0 bg-black/50 transition-opacity duration-300 z-50 ${
+        className={`fixed inset-0 z-50 bg-black/50 transition-opacity duration-300 ${
           isOpen ? "opacity-100" : "opacity-0"
         }`}
         onClick={isSubmitting ? undefined : onClose}
@@ -1077,12 +1106,11 @@ export default function ConvertToPOSubcontractorModal({
         aria-modal="true"
         aria-labelledby="convert-sub-po-title"
         className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-300 ${
-          isOpen ? "opacity-100 scale-100" : "opacity-0 scale-95"
+          isOpen ? "scale-100 opacity-100" : "scale-95 opacity-0"
         }`}
       >
-        <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
-          {/* ─── Header ─── */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 shrink-0">
+        <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4">
             <div>
               <h2
                 id="convert-sub-po-title"
@@ -1090,7 +1118,7 @@ export default function ConvertToPOSubcontractorModal({
               >
                 Convert to Vendor Bill
               </h2>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <p className="mt-0.5 text-sm text-gray-500">
                 Originating Request:{" "}
                 <TruncateWithTooltip text={referenceId} maxLength={30} />
               </p>
@@ -1100,13 +1128,12 @@ export default function ConvertToPOSubcontractorModal({
               aria-label="Close modal"
               onClick={onClose}
               disabled={isSubmitting}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-600 disabled:opacity-50"
+              className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
             >
-              <X className="w-5 h-5" />
+              <X className="h-5 w-5" />
             </button>
           </div>
 
-          {/* ─── Body ─── */}
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {renderStepIndicator()}
             {currentStep === 1 ? renderStep1() : renderStep2()}

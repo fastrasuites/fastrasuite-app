@@ -57,6 +57,20 @@ const formatToSentenceCase = (text: string) =>
     .join(" ")
     .replace(/^./, (char) => char.toUpperCase());
 
+/** UI-only labels for source_request_type (API values unchanged) */
+function formatRequestTypeLabel(type?: string | null): string {
+  if (!type) return "—";
+  const key = type.toLowerCase().trim();
+
+  const labels: Record<string, string> = {
+    project_purchase_request: "Purchase Request",
+  };
+
+  if (labels[key]) return labels[key];
+
+  return formatToSentenceCase(type);
+}
+
 const statusBadgeClass = (status?: string) => {
   const s = (status || "").toLowerCase();
   if (s === "draft") return "bg-gray-100 text-gray-700";
@@ -256,7 +270,7 @@ export default function PurchaseOrderDetailPage() {
             </span>
             {poDetail.source_request_type && (
               <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                {formatToSentenceCase(poDetail.source_request_type)}
+                {formatRequestTypeLabel(poDetail.source_request_type)}
               </span>
             )}
           </div>
@@ -299,7 +313,7 @@ export default function PurchaseOrderDetailPage() {
 
           {equipmentHire &&
             equipmentHire.status !== "returned" &&
-            status === "issued" && (
+            status !== "draft" && (
               <PermissionGuard module="invoice" entitlement="edit_invoices">
                 <button
                   type="button"
@@ -636,7 +650,7 @@ export default function PurchaseOrderDetailPage() {
           item_name: line.item_name,
         }))}
         formatCurrency={formatCurrency}
-        subtitle={`PO ${poDetail.po_number}`}
+        subtitle={poDetail.po_number}
         onCreated={() => {
           refetch();
         }}
