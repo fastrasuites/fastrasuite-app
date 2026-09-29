@@ -18,6 +18,7 @@ import {
   useUpdatePhaseBundleMutation,
   useCreateAddPhaseActivityMutation,
   useDeletePhaseMutation,
+  useDeleteProjectCostingProjectMutation,
 } from "@/api/projectCostingApi";
 import type {
   PhaseBundlePhaseUpdate,
@@ -25,6 +26,7 @@ import type {
 } from "@/types/projectCosting";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { extractErrorMessage } from "@/lib/utils";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -75,8 +77,41 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
   const [updatePhaseBundle, { isLoading: isUpdatingPhaseBundle }] = useUpdatePhaseBundleMutation();
   const [createAddPhaseActivity] = useCreateAddPhaseActivityMutation();
   const [deletePhase] = useDeletePhaseMutation();
+  const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectCostingProjectMutation();
   const [addProjectDocument] = useAddProjectDocumentMutation();
   const statusModal = useStatusModal();
+
+  const handleDeleteProject = () => {
+    if (!projectId) return;
+    statusModal.showConfirm(
+      "Delete Draft Project",
+      `Are you sure you want to delete "${project?.name || name || "this project"}"? This action cannot be undone.`,
+      async () => {
+        try {
+          await deleteProject(projectId).unwrap();
+          statusModal.close();
+          try {
+            sessionStorage.setItem(
+              "pc_deleted_msg",
+              `Project "${project?.name || name || "Draft project"}" has been deleted.`
+            );
+          } catch (e) {}
+          router.push("/project-costing");
+        } catch (err: any) {
+          statusModal.showError(
+            "Deletion Failed",
+            extractErrorMessage(
+              err,
+              "Failed to delete the draft project. Please try again."
+            )
+          );
+        }
+      },
+      "Delete Project",
+      "Cancel",
+      "destructive"
+    );
+  };
 
   const [toast, setToast] = useState<{
     show: boolean;
@@ -647,6 +682,10 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
   };
 
   const handleModalAction = () => {
+    if (statusModal.onAction) {
+      statusModal.onAction();
+      return;
+    }
     const isSuccess =
       statusModal.title === "Project Submitted for Approval" ||
       statusModal.title === "Changes Saved";
@@ -797,52 +836,71 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
         </div>
 
         {/* Footer Navigation */}
-        <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-8 py-3.5 flex justify-end items-center gap-3 z-30 shadow-md">
-          <Link href={`/project-costing/${projectId}`}>
-            <Button
-              variant="outline"
-              type="button"
-              disabled={isProcessing}
-              className="text-gray-600 border-gray-200 hover:bg-gray-50 text-xs h-9 px-5"
-            >
-              Cancel
-            </Button>
-          </Link>
-
-          <Button
-            type="button"
-            onClick={() => handleSubmit(false)}
-            disabled={isProcessing}
-            variant="outline"
-            className="border-[#3B7CED] text-[#3B7CED] hover:bg-blue-50 text-xs h-9 px-5 font-medium"
-          >
-            {isProcessing && !isSubmittingPending ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                Saving...
-              </>
-            ) : (
-              "Save Changes"
+        <div className="fixed bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-8 py-3.5 flex justify-between items-center z-30 shadow-md">
+          <div>
+            {(!project?.status || project.status.toUpperCase() === "DRAFT") && (
+              <PermissionGuard module="project_costing" action="delete" entitlement="delete_project">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDeleteProject}
+                  disabled={isDeletingProject || isProcessing}
+                  className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 text-xs h-9 px-4 flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  <span>{isDeletingProject ? "Deleting..." : "Delete Draft Project"}</span>
+                </Button>
+              </PermissionGuard>
             )}
-          </Button>
+          </div>
 
-          {(!project.status || project.status === "DRAFT") && (
+          <div className="flex items-center gap-3">
+            <Link href={`/project-costing/${projectId}`}>
+              <Button
+                variant="outline"
+                type="button"
+                disabled={isProcessing || isDeletingProject}
+                className="text-gray-600 border-gray-200 hover:bg-gray-50 text-xs h-9 px-5"
+              >
+                Cancel
+              </Button>
+            </Link>
+
             <Button
               type="button"
-              onClick={() => handleSubmit(true)}
-              disabled={isProcessing}
-              className="bg-[#3B7CED] hover:bg-[#3065c3] text-white text-xs h-9 px-5 font-medium"
+              onClick={() => handleSubmit(false)}
+              disabled={isProcessing || isDeletingProject}
+              variant="outline"
+              className="border-[#3B7CED] text-[#3B7CED] hover:bg-blue-50 text-xs h-9 px-5 font-medium"
             >
-              {isSubmittingPending ? (
+              {isProcessing && !isSubmittingPending ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
-                  Submitting...
+                  Saving...
                 </>
               ) : (
-                "Submit Request"
+                "Save Changes"
               )}
             </Button>
-          )}
+
+            {(!project.status || project.status === "DRAFT") && (
+              <Button
+                type="button"
+                onClick={() => handleSubmit(true)}
+                disabled={isProcessing || isDeletingProject}
+                className="bg-[#3B7CED] hover:bg-[#3065c3] text-white text-xs h-9 px-5 font-medium"
+              >
+                {isSubmittingPending ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit Request"
+                )}
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* External Documents Side Panel */}
@@ -972,12 +1030,15 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
 
         <StatusModal
           isOpen={statusModal.isOpen}
-          onClose={handleModalAction}
+          onClose={statusModal.close}
           title={statusModal.title}
           message={statusModal.message}
           type={statusModal.type}
           actionText={statusModal.actionText}
           onAction={handleModalAction}
+          secondaryText={statusModal.secondaryText}
+          onSecondary={statusModal.onSecondary || statusModal.close}
+          actionVariant={statusModal.actionVariant}
         />
 
         {toast.show && (

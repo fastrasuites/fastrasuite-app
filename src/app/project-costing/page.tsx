@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,10 +11,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, LayoutGrid, Menu, Lock } from "lucide-react";
+import { Search, LayoutGrid, Menu, Lock, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useGetProjectCostingProjectsQuery } from "@/api/projectCostingApi";
+import {
+  useGetProjectCostingProjectsQuery,
+  useDeleteProjectCostingProjectMutation,
+} from "@/api/projectCostingApi";
+import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { CustomMessage } from "@/components/shared/CustomMessage";
 import { format } from "date-fns";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
@@ -24,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ModuleWizard, WizardGuideButton } from "@/components/shared/wizard/ModuleWizard";
 import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
 import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
+import { ToastNotification } from "@/components/shared/ToastNotification";
 
 const STATUS_TABS = [
   { label: "All", value: "all" },
@@ -110,6 +115,47 @@ export default function ProjectCostingListPage() {
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [isLimitModalOpen, setIsLimitModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const statusModal = useStatusModal();
+
+  useEffect(() => {
+    try {
+      const msg = sessionStorage.getItem("pc_deleted_msg");
+      if (msg) {
+        sessionStorage.removeItem("pc_deleted_msg");
+        setToastMessage(msg);
+      }
+    } catch (e) {}
+  }, []);
+
+  const [deleteProject, { isLoading: isDeletingProject }] =
+    useDeleteProjectCostingProjectMutation();
+
+  const handleDeleteProject = (projectToDelete: any) => {
+    if (!projectToDelete?.id) return;
+    statusModal.showConfirm(
+      "Delete Draft Project",
+      `Are you sure you want to delete "${projectToDelete.name || "this project"}"? This action cannot be undone.`,
+      async () => {
+        try {
+          await deleteProject(Number(projectToDelete.id)).unwrap();
+          statusModal.close();
+          setToastMessage(
+            `Project "${projectToDelete.name || "Draft project"}" has been deleted.`
+          );
+          refetch();
+        } catch (err: any) {
+          statusModal.showError(
+            "Deletion Failed",
+            err?.data?.message || err?.data?.detail || "Failed to delete the draft project. Please try again."
+          );
+        }
+      },
+      "Delete Project",
+      "Cancel",
+      "destructive"
+    );
+  };
 
   const { canCreateProject, currentProjects, maxProjects, planName, isProjectAccessible } =
     useSubscriptionLimits();
@@ -317,6 +363,9 @@ export default function ProjectCostingListPage() {
                       <TableHead className="font-semibold text-[#8898AA] text-[11.5px] py-3.5 px-6 whitespace-nowrap">
                         Status
                       </TableHead>
+                      <TableHead className="font-semibold text-[#8898AA] text-[11.5px] py-3.5 px-6 whitespace-nowrap text-right">
+                        Actions
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -331,11 +380,12 @@ export default function ProjectCostingListPage() {
                           <TableCell className="py-3.5 px-6"><Skeleton className="h-4 w-20 bg-gray-100" /></TableCell>
                           <TableCell className="py-3.5 px-6"><Skeleton className="h-4 w-24 bg-gray-100" /></TableCell>
                           <TableCell className="py-3.5 px-6"><Skeleton className="h-6 w-20 bg-gray-100 rounded-full" /></TableCell>
+                          <TableCell className="py-3.5 px-6"><Skeleton className="h-6 w-8 ml-auto bg-gray-100 rounded-md" /></TableCell>
                         </TableRow>
                       ))
                     ) : isError ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-8">
+                        <TableCell colSpan={9} className="py-8">
                           <CustomMessage
                             variant="error"
                             title="We couldn't load your projects right now"
@@ -348,7 +398,7 @@ export default function ProjectCostingListPage() {
                       </TableRow>
                     ) : filteredProjects.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-8">
+                        <TableCell colSpan={9} className="py-8">
                           <CustomMessage
                             variant="empty"
                             title={
@@ -405,6 +455,25 @@ export default function ProjectCostingListPage() {
                             </TableCell>
                             <TableCell className="py-3.5 px-6 whitespace-nowrap">
                               {renderStatusBadge(project.status)}
+                            </TableCell>
+                            <TableCell className="py-3.5 px-6 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                              {(!project.status || project.status.toUpperCase() === "DRAFT") && (
+                                <PermissionGuard module="project_costing" action="delete" entitlement="delete_project">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={isDeletingProject}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteProject(project);
+                                    }}
+                                    className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                    title="Delete Draft Project"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </PermissionGuard>
+                              )}
                             </TableCell>
                           </TableRow>
                         );
@@ -496,6 +565,22 @@ export default function ProjectCostingListPage() {
                                 </span>
                               )}
                               {renderStatusBadge(project.status)}
+                              {(!project.status || project.status.toUpperCase() === "DRAFT") && (
+                                <PermissionGuard module="project_costing" action="delete" entitlement="delete_project">
+                                  <button
+                                    type="button"
+                                    disabled={isDeletingProject}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteProject(project);
+                                    }}
+                                    className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                                    title="Delete Draft Project"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </PermissionGuard>
+                              )}
                             </div>
                           </div>
                           <h3 className="text-base font-bold text-gray-900 group-hover:text-[#3B7CED] transition-colors line-clamp-1 mb-1">
@@ -550,6 +635,26 @@ export default function ProjectCostingListPage() {
         maxCount={maxProjects}
         currentTier={planName}
       />
+      <StatusModal
+        isOpen={statusModal.isOpen}
+        onClose={statusModal.close}
+        type={statusModal.type}
+        title={statusModal.title}
+        message={statusModal.message}
+        actionText={statusModal.actionText || (statusModal.type === "success" ? "Done" : "Try again")}
+        onAction={statusModal.onAction}
+        secondaryText={statusModal.secondaryText}
+        onSecondary={statusModal.onSecondary || statusModal.close}
+        actionVariant={statusModal.actionVariant}
+      />
+      {toastMessage && (
+        <ToastNotification
+          show={!!toastMessage}
+          message={toastMessage}
+          type="success"
+          onClose={() => setToastMessage(null)}
+        />
+      )}
     </div>
     </PageGuard>
   );

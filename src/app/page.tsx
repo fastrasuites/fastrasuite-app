@@ -34,6 +34,7 @@ import { useGetProjectCostingProjectsQuery } from "@/api/projectCostingApi";
 import { usePermission } from "@/hooks/usePermission";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { ModuleLauncherGrid } from "@/components/dashboard/ModuleLauncherGrid";
+import { NavBar } from "@/components/shared/TopBar/reusableTopBar";
 
 function formatAxisNaira(val: number): string {
   if (val === 0) return "₦0";
@@ -518,33 +519,38 @@ export default function HomePage() {
   // show the module launcher grid of all their available module cards instead of an access denied page
   if (!hasProjectCostingAccess) {
     return (
-      <div className="min-h-screen bg-[#FAFAFC] text-gray-900 font-sans p-6 sm:p-8 space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-[28px] font-bold text-gray-900 tracking-tight">
-              Dashboard
-            </h1>
-            <p className="text-xs sm:text-sm text-gray-500 mt-1 font-normal">
-              Select an available module to get started
-            </p>
+      <div className="min-h-screen bg-[#FAFAFC] flex flex-col">
+        <NavBar title="Dashboard" items={[]} />
+        <div className="flex-1 p-6 sm:p-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
+                Available Modules
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1 font-normal">
+                Select an available module to get started
+              </p>
+            </div>
           </div>
-        </div>
 
-        <ModuleLauncherGrid />
+          <ModuleLauncherGrid />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFC] text-gray-900 font-sans p-6 sm:p-8 space-y-6">
+    <div className="min-h-screen bg-[#FAFAFC] flex flex-col">
+      <NavBar title="Dashboard" items={[]} />
+      <div className="flex-1 text-gray-900 font-sans p-6 sm:p-8 space-y-6">
         {/* ================================================================= */}
-        {/* HEADER: Title, Subtitle, and New Project Action Button */}
+        {/* HEADER: Subtitle, and New Project Action Button */}
         {/* ================================================================= */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-[28px] font-bold text-gray-900 tracking-tight">
-              Dashboard
-            </h1>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
+              Project Analytics
+            </h2>
             <p className="text-xs sm:text-sm text-gray-500 mt-1 font-normal">
               Overview of all projects and financial activity
             </p>
@@ -1214,6 +1220,7 @@ export default function HomePage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

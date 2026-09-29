@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AddBudgetAdjustmentModal } from "@/components/project-costing/modals/AddBudgetAdjustmentModal";
 import { AddDocumentModal } from "@/components/project-costing/modals/AddDocumentModal";
-import { ProjectCostingExportTemplate } from "@/components/project-costing/export/ProjectCostingExportTemplate";
+import { ProjectCostingExportTemplate, ExportDocType, categorizeTransactions } from "@/components/project-costing/export/ProjectCostingExportTemplate";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { ModuleWizard, WizardGuideButton } from "@/components/shared/wizard/ModuleWizard";
@@ -19,6 +19,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -36,9 +38,28 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowLeft, RefreshCw, Plus, ChevronDown, CheckCircle2, FileText, Image as ImageIcon, Download, Loader2, FileSpreadsheet, Edit, Lock } from "lucide-react";
+import { 
+  ArrowLeft, 
+  RefreshCw, 
+  Plus, 
+  ChevronDown, 
+  CheckCircle2, 
+  FileText, 
+  Image as ImageIcon, 
+  Download, 
+  Loader2, 
+  FileSpreadsheet, 
+  Edit, 
+  Lock,
+  ShoppingBag,
+  Receipt,
+  CreditCard,
+  BookOpen,
+  Layers,
+  Trash2
+} from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
 import { toPng, toJpeg } from "html-to-image";
 import { jsPDF } from "jspdf";
@@ -47,6 +68,7 @@ import {
   useApproveProjectMutation,
   useRejectProjectMutation,
   useSubmitProjectMutation,
+  useDeleteProjectCostingProjectMutation,
   useGetBudgetAdjustmentsQuery,
   useApproveBudgetAdjustmentMutation,
   useGetProjectTransactionsQuery,
@@ -110,6 +132,7 @@ const parseNumber = (val: any): number => {
 };
 
 export default function ProjectDashboardPage() {
+  const router = useRouter();
   const params = useParams();
   const id = params?.id;
   const [showActual, setShowActual] = useState(true);
@@ -205,75 +228,171 @@ export default function ProjectDashboardPage() {
   const [rejectProject, { isLoading: isRejecting }] = useRejectProjectMutation();
   const [submitProject, { isLoading: isSubmitting }] = useSubmitProjectMutation();
   const [approveBudgetAdjustment, { isLoading: isApprovingBudget }] = useApproveBudgetAdjustmentMutation();
+  const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectCostingProjectMutation();
+
+  const handleDeleteProject = () => {
+    if (!project?.id) return;
+    statusModal.showConfirm(
+      "Delete Draft Project",
+      `Are you sure you want to delete "${project.name || "this project"}"? This action cannot be undone.`,
+      async () => {
+        try {
+          await deleteProject(Number(project.id)).unwrap();
+          statusModal.close();
+          try {
+            sessionStorage.setItem(
+              "pc_deleted_msg",
+              `Project "${project.name || "Draft project"}" has been deleted.`
+            );
+          } catch (e) {}
+          router.push("/project-costing");
+        } catch (err: any) {
+          statusModal.showError(
+            "Deletion Failed",
+            err?.data?.message || err?.data?.detail || "Failed to delete the draft project. Please try again."
+          );
+        }
+      },
+      "Delete Project",
+      "Cancel",
+      "destructive"
+    );
+  };
 
   const exportRef = React.useRef<HTMLDivElement>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [isAddDocumentModalOpen, setIsAddDocumentModalOpen] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
+  const [exportDocType, setExportDocType] = useState<ExportDocType>("all");
 
-  const handleExportPdf = async () => {
-    if (!exportRef.current) return;
+  const docNameMap: Record<ExportDocType, string> = {
+    all: "Complete_Project_Costing_Report",
+    costing: "Project_Costing_Summary",
+    wbs: "Work_Breakdown_Structure",
+    po: "Purchase_Orders",
+    bills: "Vendor_Bills_and_Invoices",
+    disbursements: "Disbursements_Schedule",
+    ledger: "Project_Account_Ledger",
+  };
+
+  const handleExportPdf = async (targetDocType: ExportDocType = "all") => {
     setIsExportingPdf(true);
+    setExportDocType(targetDocType);
     try {
+      // Allow DOM to re-render with the selected docType
+      await new Promise((resolve) => setTimeout(resolve, 400));
+
+      if (!exportRef.current) return;
       const element = exportRef.current;
-      const canvasWidth = element.clientWidth;
-      const canvasHeight = element.clientHeight;
-      
-      const imgData = await toJpeg(element, {
-        cacheBust: true,
-        pixelRatio: 1.5,
-        quality: 0.8,
-        backgroundColor: '#ffffff'
-      });
       
       const pdf = new jsPDF("l", "mm", "a4");
       const margin = 10; // 10mm margin
-      const imgWidth = 297 - (margin * 2); // A4 width in mm (landscape)
-      const pageHeight = 210; // A4 height in mm (landscape)
-      const usableHeight = pageHeight - (margin * 2);
-      
-      const imgHeight = (canvasHeight * imgWidth) / canvasWidth;
-      let heightLeft = imgHeight;
-      let position = 0;
+      const usableWidth = 297 - (margin * 2); // 277mm A4 width (landscape)
+      const pageHeight = 210; // 210mm A4 height (landscape)
+      const usableHeight = pageHeight - (margin * 2); // 190mm
 
-      // Add first page
-      pdf.addImage(imgData, "JPEG", margin, margin, imgWidth, imgHeight, undefined, "FAST");
-      heightLeft -= usableHeight;
+      const sectionElements = Array.from(element.querySelectorAll<HTMLElement>("[data-export-section='true']"));
 
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight; // This shifts the image up relative to the page
-        pdf.addPage();
-        pdf.addImage(imgData, "JPEG", margin, position + margin, imgWidth, imgHeight, undefined, "FAST");
+      if (targetDocType === "all" && sectionElements.length > 0) {
+        // Multi-page export section by section: Each major report section gets its own clean page!
+        let isFirst = true;
+        for (const sec of sectionElements) {
+          const secCanvasWidth = sec.clientWidth || 1400;
+          const secCanvasHeight = sec.clientHeight;
+          const secImgData = await toJpeg(sec, {
+            cacheBust: true,
+            pixelRatio: 1.5,
+            quality: 0.9,
+            backgroundColor: '#ffffff'
+          });
+
+          const secImgHeight = (secCanvasHeight * usableWidth) / secCanvasWidth;
+
+          if (!isFirst) {
+            pdf.addPage();
+          }
+          isFirst = false;
+
+          if (secImgHeight <= usableHeight) {
+            pdf.addImage(secImgData, "JPEG", margin, margin, usableWidth, secImgHeight, undefined, "FAST");
+          } else {
+            // If section is taller than 1 page, paginate cleanly
+            let heightLeft = secImgHeight;
+            let position = 0;
+            pdf.addImage(secImgData, "JPEG", margin, margin, usableWidth, secImgHeight, undefined, "FAST");
+            heightLeft -= usableHeight;
+
+            while (heightLeft > 0) {
+              position = heightLeft - secImgHeight;
+              pdf.addPage();
+              pdf.addImage(secImgData, "JPEG", margin, position + margin, usableWidth, secImgHeight, undefined, "FAST");
+              heightLeft -= usableHeight;
+            }
+          }
+        }
+      } else {
+        // Single document export
+        const canvasWidth = element.clientWidth || 1400;
+        const canvasHeight = element.clientHeight;
+        const imgData = await toJpeg(element, {
+          cacheBust: true,
+          pixelRatio: 1.5,
+          quality: 0.9,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgHeight = (canvasHeight * usableWidth) / canvasWidth;
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, "JPEG", margin, margin, usableWidth, imgHeight, undefined, "FAST");
         heightLeft -= usableHeight;
+
+        while (heightLeft > 0) {
+          position = heightLeft - imgHeight;
+          pdf.addPage();
+          pdf.addImage(imgData, "JPEG", margin, position + margin, usableWidth, imgHeight, undefined, "FAST");
+          heightLeft -= usableHeight;
+        }
       }
 
-      pdf.save(`${project?.name || "Project"}_Costing_Details.pdf`);
-      statusModal.showSuccess("Export Successful", "PDF document has been generated.");
+      const cleanProjectName = (project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_");
+      pdf.save(`${cleanProjectName}_${docNameMap[targetDocType]}.pdf`);
+      statusModal.showSuccess("Export Successful", `${docNameMap[targetDocType].replace(/_/g, " ")} PDF has been downloaded.`);
     } catch (err: any) {
       console.error("PDF export error", err);
       statusModal.showError("Export Failed", `Failed to generate PDF document: ${err.message || String(err)}`);
     } finally {
       setIsExportingPdf(false);
+      setExportDocType("all");
     }
   };
 
-  const handleExportImage = async () => {
-    if (!exportRef.current) return;
+  const handleExportImage = async (targetDocType: ExportDocType = "all") => {
     setIsExportingImage(true);
+    setExportDocType(targetDocType);
     try {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      if (!exportRef.current) return;
       const element = exportRef.current;
       const image = await toPng(element, {
         cacheBust: true,
         pixelRatio: 2,
         backgroundColor: '#ffffff'
       });
+      const cleanProjectName = (project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_");
       const link = document.createElement("a");
       link.href = image;
-      link.download = `${project?.name || "Project"}_Costing_Details.png`;
+      link.download = `${cleanProjectName}_${docNameMap[targetDocType]}.png`;
       link.click();
-      statusModal.showSuccess("Export Successful", "Full detail image has been downloaded.");
+      statusModal.showSuccess("Export Successful", "Visual image has been downloaded.");
+    } catch (err: any) {
+      console.error("Image export error", err);
+      statusModal.showError("Export Failed", `Failed to export image: ${err.message || String(err)}`);
     } finally {
       setIsExportingImage(false);
+      setExportDocType("all");
     }
   };
 
@@ -291,12 +410,14 @@ export default function ProjectDashboardPage() {
       }
       csvContent += headers.join(",") + "\n";
 
+      let grandTotal = 0;
       if (parsedPhases && Array.isArray(parsedPhases)) {
         parsedPhases.forEach((phase: any, pIndex: number) => {
           const phaseSn = `${pIndex + 1}`;
           const phaseName = `"${(phase.name || `Phase ${pIndex + 1}`).replace(/"/g, '""')}"`;
-          const phaseTotal = phase.activities?.reduce((sum: number, act: any) => sum + Number(act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || 0), 0) || 0;
-          
+          const phaseTotal = phase.activities?.reduce((sum: number, act: any) => sum + Number(act.current_budget || act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || 0), 0) || 0;
+          grandTotal += phaseTotal;
+
           const phaseRow = [phaseSn, phaseName, "PHASE", "", "", phaseTotal];
           if (customColumns && customColumns.length > 0) {
             customColumns.forEach(() => phaseRow.push(""));
@@ -309,7 +430,7 @@ export default function ProjectDashboardPage() {
               const actName = `"${(act.name || "").replace(/"/g, '""')}"`;
               const qty = act.quantity || 1;
               const rate = act.rate || (Number(act.amount || 0) / Number(qty));
-              const amount = act.amount || (Number(qty) * Number(rate)) || 0;
+              const amount = act.current_budget || act.amount || (Number(qty) * Number(rate)) || 0;
 
               const actRow = [actSn, actName, "ACTIVITY", qty, rate, amount];
               if (customColumns && customColumns.length > 0) {
@@ -324,6 +445,13 @@ export default function ProjectDashboardPage() {
         });
       }
 
+      // Grand Total Row
+      const totalRow = ["", '"TOTAL WBS BUDGET"', "", "", "", grandTotal];
+      if (customColumns && customColumns.length > 0) {
+        customColumns.forEach(() => totalRow.push(""));
+      }
+      csvContent += totalRow.join(",") + "\n";
+
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -337,6 +465,154 @@ export default function ProjectDashboardPage() {
     } catch (err: any) {
       console.error("WBS CSV export error", err);
       statusModal.showError("Export Failed", `Failed to generate WBS CSV file: ${err.message || String(err)}`);
+    }
+  };
+
+  const handleExportPoCsv = () => {
+    try {
+      const { poList } = categorizeTransactions(transactions, budgetNum);
+      let csvContent = "\uFEFF";
+      csvContent += `Project Costing - Purchase Orders Schedule\n`;
+      csvContent += `Project Name: "${(project?.name || "Project").replace(/"/g, '""')}"\n`;
+      csvContent += `Project Code: "${(project?.project_code || "N/A").replace(/"/g, '""')}"\n`;
+      csvContent += `Export Date: "${new Date().toLocaleDateString("en-US")}"\n\n`;
+
+      csvContent += `"S/N","Date","PO Ref ID","Vendor / Location","Description","Amount (NGN)","Status"\n`;
+      
+      let totalAmount = 0;
+      poList.forEach((po, idx) => {
+        totalAmount += Number(po.amount || 0);
+        csvContent += `${idx + 1},"${po.date}","${po.ref}","${(po.vendor || "").replace(/"/g, '""')}","${(po.description || "").replace(/"/g, '""')}",${po.amount},"${po.status}"\n`;
+      });
+
+      csvContent += `,"","","TOTAL PURCHASE ORDERS",,${totalAmount},""\n`;
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${(project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_")}_Purchase_Orders.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      statusModal.showSuccess("Export Successful", "Purchase Orders CSV file has been downloaded.");
+    } catch (err: any) {
+      console.error("PO CSV export error", err);
+      statusModal.showError("Export Failed", `Failed to generate Purchase Orders CSV: ${err.message || String(err)}`);
+    }
+  };
+
+  const handleExportBillsCsv = () => {
+    try {
+      const { billList } = categorizeTransactions(transactions, budgetNum);
+      let csvContent = "\uFEFF";
+      csvContent += `Project Costing - Vendor Bills & Invoices Schedule\n`;
+      csvContent += `Project Name: "${(project?.name || "Project").replace(/"/g, '""')}"\n`;
+      csvContent += `Project Code: "${(project?.project_code || "N/A").replace(/"/g, '""')}"\n`;
+      csvContent += `Export Date: "${new Date().toLocaleDateString("en-US")}"\n\n`;
+
+      csvContent += `"S/N","Date","Vendor Ref ID","Vendor / Contractor","Terms / Due Dates","Total Contract Value (NGN)","Settled Amount (NGN)","Outstanding Balance (NGN)","Bill Status"\n`;
+      
+      let totalContract = 0;
+      let totalSettled = 0;
+      billList.forEach((b, idx) => {
+        totalContract += Number(b.totalAmount || 0);
+        totalSettled += Number(b.paidAmount || 0);
+        const outstanding = Math.max(0, Number(b.totalAmount || 0) - Number(b.paidAmount || 0));
+        csvContent += `${idx + 1},"${b.date}","${b.billNo}","${(b.vendor || "").replace(/"/g, '""')}","${(b.dueDate || "").replace(/"/g, '""')}",${b.totalAmount},${b.paidAmount},${outstanding},"${b.status}"\n`;
+      });
+
+      const totalOutstanding = Math.max(0, totalContract - totalSettled);
+      csvContent += `,"","","TOTAL CONTRACT VALUE & SETTLED",,${totalContract},${totalSettled},${totalOutstanding},""\n`;
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${(project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_")}_Vendor_Bills_Invoices.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      statusModal.showSuccess("Export Successful", "Vendor Bills CSV file has been downloaded.");
+    } catch (err: any) {
+      console.error("Bills CSV export error", err);
+      statusModal.showError("Export Failed", `Failed to generate Vendor Bills CSV: ${err.message || String(err)}`);
+    }
+  };
+
+  const handleExportDisbursementsCsv = () => {
+    try {
+      const { disburseList } = categorizeTransactions(transactions, budgetNum);
+      let csvContent = "\uFEFF";
+      csvContent += `Project Costing - Disbursements Schedule & Audit\n`;
+      csvContent += `Project Name: "${(project?.name || "Project").replace(/"/g, '""')}"\n`;
+      csvContent += `Project Code: "${(project?.project_code || "N/A").replace(/"/g, '""')}"\n`;
+      csvContent += `Export Date: "${new Date().toLocaleDateString("en-US")}"\n\n`;
+
+      csvContent += `"S/N","Date","Disbursement Ref ID","Payee / Recipient","Channel / Mode","Disbursed Amount (NGN)","Status"\n`;
+      
+      let totalDisbursed = 0;
+      disburseList.forEach((d, idx) => {
+        totalDisbursed += Number(d.amount || 0);
+        csvContent += `${idx + 1},"${d.date}","${d.voucherNo}","${(d.payee || "").replace(/"/g, '""')}","${(d.channel || "").replace(/"/g, '""')}",${d.amount},"${d.status}"\n`;
+      });
+
+      csvContent += `,"","","TOTAL DISBURSED",,${totalDisbursed},""\n`;
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${(project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_")}_Disbursements_Schedule.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      statusModal.showSuccess("Export Successful", "Disbursements CSV file has been downloaded.");
+    } catch (err: any) {
+      console.error("Disbursements CSV export error", err);
+      statusModal.showError("Export Failed", `Failed to generate Disbursements CSV: ${err.message || String(err)}`);
+    }
+  };
+
+  const handleExportLedgerCsv = () => {
+    try {
+      const { ledgerList } = categorizeTransactions(transactions, budgetNum);
+      let csvContent = "\uFEFF";
+      csvContent += `Project Costing - Project Account General Ledger\n`;
+      csvContent += `Project Name: "${(project?.name || "Project").replace(/"/g, '""')}"\n`;
+      csvContent += `Project Code: "${(project?.project_code || "N/A").replace(/"/g, '""')}"\n`;
+      csvContent += `Export Date: "${new Date().toLocaleDateString("en-US")}"\n\n`;
+
+      csvContent += `"S/N","Date","Record Ref ID","Particulars / Activity","Category","Debit (NGN)","Credit (NGN)","Running Balance (NGN)","Status"\n`;
+      
+      let totalDebit = 0;
+      let totalCredit = 0;
+      let finalBalance = budgetNum;
+      ledgerList.forEach((l, idx) => {
+        totalDebit += Number(l.debit || 0);
+        totalCredit += Number(l.credit || 0);
+        finalBalance = l.runningBalance;
+        csvContent += `${idx + 1},"${l.date}","${l.ref}","${(l.particulars || "").replace(/"/g, '""')}","${(l.category || "").replace(/"/g, '""')}",${l.debit},${l.credit},${l.runningBalance},"${l.status}"\n`;
+      });
+
+      csvContent += `,"","","TOTAL DEBIT / CREDIT",,${totalDebit},${totalCredit},${finalBalance},""\n`;
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `${(project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_")}_Account_General_Ledger.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      statusModal.showSuccess("Export Successful", "Account Ledger CSV file has been downloaded.");
+    } catch (err: any) {
+      console.error("Ledger CSV export error", err);
+      statusModal.showError("Export Failed", `Failed to generate Account Ledger CSV: ${err.message || String(err)}`);
     }
   };
 
@@ -1094,7 +1370,7 @@ export default function ProjectDashboardPage() {
 
   return (
     <PageGuard module="project_costing" entitlement="view_project">
-    <div className="flex flex-col h-full bg-gray-50 relative pb-20">
+    <div className="flex flex-col min-h-screen bg-gray-50 relative pb-10">
       {/* Top Navigation Row */}
       <div className="flex items-center px-6 py-4">
         <Link href="/project-costing" className="flex items-center text-sm text-gray-500 hover:text-gray-900 font-medium">
@@ -1103,7 +1379,7 @@ export default function ProjectDashboardPage() {
         </Link>
       </div>
 
-      <div className="px-6 max-w-[1400px] mx-auto w-full flex flex-col gap-6 overflow-y-auto">
+      <div className="px-6 max-w-[1400px] mx-auto w-full flex flex-col gap-6">
         
         {/* Project Header Info */}
         <div className="flex justify-between items-start">
@@ -1137,29 +1413,129 @@ export default function ProjectDashboardPage() {
                     <ChevronDown className="w-4 h-4 opacity-70 ml-1" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52 rounded-xl shadow-lg border-gray-100 p-1">
+                <DropdownMenuContent align="end" className="w-80 rounded-xl shadow-xl border-gray-200 p-2 max-h-[85vh] overflow-y-auto">
+                  {/* Master Reports */}
+                  <DropdownMenuLabel className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
+                    Complete Master Report
+                  </DropdownMenuLabel>
                   <DropdownMenuItem 
-                    onClick={handleExportPdf} 
-                    disabled={isExportingPdf} 
-                    className="flex items-center gap-3 cursor-pointer p-2.5 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                    onClick={() => handleExportPdf("all")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-blue-50 focus:bg-blue-50"
                   >
-                    <FileText className="w-4 h-4 text-red-500" />
-                    <span className="font-medium text-gray-700">Download as PDF</span>
+                    <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <span className="font-semibold text-xs text-gray-900">Complete Costing Report (PDF)</span>
+                      <span className="text-[10px] text-gray-500">All sections, charts, tables & sign-offs</span>
+                    </div>
                   </DropdownMenuItem>
                   <DropdownMenuItem 
-                    onClick={handleExportImage} 
-                    disabled={isExportingImage} 
-                    className="flex items-center gap-3 cursor-pointer p-2.5 rounded-lg hover:bg-gray-50 focus:bg-gray-50 mt-1"
+                    onClick={() => handleExportImage("all")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-blue-50 focus:bg-blue-50"
                   >
-                    <ImageIcon className="w-4 h-4 text-blue-500" />
-                    <span className="font-medium text-gray-700">Download as Image</span>
+                    <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <span className="font-semibold text-xs text-gray-900">Complete Report (Image / PNG)</span>
+                      <span className="text-[10px] text-gray-500">High-resolution visual capture</span>
+                    </div>
                   </DropdownMenuItem>
+
+                  <DropdownMenuSeparator className="my-1.5" />
+
+                  {/* Individual Document Visuals (PDF) */}
+                  <DropdownMenuLabel className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
+                    Visual Documents (PDF)
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem 
+                    onClick={() => handleExportPdf("costing")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <FileText className="w-4 h-4 text-[#3B7CED] shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Project Costing Summary</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleExportPdf("po")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <ShoppingBag className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Purchase Orders</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleExportPdf("bills")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <Receipt className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Vendor Bills & Invoices</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleExportPdf("disbursements")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <CreditCard className="w-4 h-4 text-purple-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Disbursements Schedule</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleExportPdf("ledger")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <BookOpen className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Project Account Ledger</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleExportPdf("wbs")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Work Breakdown Structure (WBS)</span>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator className="my-1.5" />
+
+                  {/* Data Spreadsheets (CSV) */}
+                  <DropdownMenuLabel className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
+                    Data Spreadsheets (CSV)
+                  </DropdownMenuLabel>
                   <DropdownMenuItem 
                     onClick={handleExportWbsCsv} 
-                    className="flex items-center gap-3 cursor-pointer p-2.5 rounded-lg hover:bg-gray-50 focus:bg-gray-50 mt-1"
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
                   >
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    <span className="font-medium text-gray-700">Download WBS (CSV)</span>
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">WBS - CSV file</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={handleExportPoCsv} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Purchase Orders - CSV file</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={handleExportBillsCsv} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Vendor Bills - CSV file</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={handleExportDisbursementsCsv} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-purple-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Disbursements - CSV file</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={handleExportLedgerCsv} 
+                    className="flex items-center gap-2.5 cursor-pointer p-2 rounded-lg hover:bg-gray-50 focus:bg-gray-50"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="text-xs font-medium text-gray-700">Account Ledger - CSV file</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1174,6 +1550,20 @@ export default function ProjectDashboardPage() {
                   <span>Edit Project</span>
                 </Button>
               </Link>
+            )}
+
+            {(!project.status || project.status.toUpperCase() === "DRAFT") && (
+              <PermissionGuard module="project_costing" action="delete" entitlement="delete_project">
+                <Button 
+                  onClick={handleDeleteProject}
+                  disabled={isDeletingProject}
+                  variant="outline"
+                  className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 h-9 flex items-center gap-1.5 px-3.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  <span>{isDeletingProject ? "Deleting..." : "Delete Project"}</span>
+                </Button>
+              </PermissionGuard>
             )}
 
             {(!project.status || project.status === "DRAFT") && (
@@ -1536,62 +1926,64 @@ export default function ProjectDashboardPage() {
                 <h3 className="text-lg font-medium text-[#3B7CED]">Spend by Category</h3>
                 <span className="text-xs text-gray-400 font-medium">Breakdown</span>
               </div>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 relative">
-                {/* Fixed Square 1:1 Aspect Ratio Container Guaranteed to be a Perfect Circle */}
-                <div className="w-[180px] h-[180px] shrink-0 relative flex items-center justify-center">
-                  <PieChart width={180} height={180}>
-                    <Pie
-                      data={pieChartData.length > 0 ? pieChartData : [{ name: "No Data", value: 1, color: "#E5E7EB" }]}
-                      cx={90}
-                      cy={90}
-                      innerRadius={52}
-                      outerRadius={78}
-                      paddingAngle={pieChartData.length > 1 ? 3 : 0}
-                      dataKey="value"
-                      stroke="#ffffff"
-                      strokeWidth={2}
-                    >
-                      {(pieChartData.length > 0 ? pieChartData : [{ name: "No Data", value: 1, color: "#E5E7EB" }]).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(val: any, name: any) => [
-                        `${Math.round(Number(val))}%`,
-                        name
-                      ]}
-                      contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}
-                    />
-                  </PieChart>
-                  {/* Center Stat inside the Donut Hole */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Share</span>
-                    <span className="text-sm font-bold text-gray-800">
-                      {categoryTotal > 0 ? `${Math.round(categoryTotal)}%` : "0%"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Legend */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 relative min-h-[180px]">
                 {pieChartData.length > 0 ? (
-                  <div className="flex flex-col gap-2.5 flex-1 min-w-0 w-full sm:w-auto">
-                    {pieChartData.map((entry, index) => {
-                      const pct = Math.round(Number(entry.percentage || entry.value || 0));
-                      return (
-                        <div key={index} className="flex items-center justify-between gap-3 text-xs">
-                          <div className="flex items-center gap-2 truncate">
-                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }}></div>
-                            <span className="text-gray-700 font-medium capitalize truncate">{entry.name}</span>
+                  <>
+                    {/* Fixed Square 1:1 Aspect Ratio Container Guaranteed to be a Perfect Circle */}
+                    <div className="w-[180px] h-[180px] shrink-0 relative flex items-center justify-center">
+                      <PieChart width={180} height={180}>
+                        <Pie
+                          data={pieChartData}
+                          cx={90}
+                          cy={90}
+                          innerRadius={52}
+                          outerRadius={78}
+                          paddingAngle={pieChartData.length > 1 ? 3 : 0}
+                          dataKey="value"
+                          stroke="#ffffff"
+                          strokeWidth={2}
+                        >
+                          {pieChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          formatter={(val: any, name: any) => [
+                            `${Math.round(Number(val))}%`,
+                            name
+                          ]}
+                          contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}
+                        />
+                      </PieChart>
+                      {/* Center Stat inside the Donut Hole */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Share</span>
+                        <span className="text-sm font-bold text-gray-800">
+                          {categoryTotal > 0 ? `${Math.round(categoryTotal)}%` : "0%"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Legend */}
+                    <div className="flex flex-col gap-2.5 flex-1 min-w-0 w-full sm:w-auto">
+                      {pieChartData.map((entry, index) => {
+                        const pct = Math.round(Number(entry.percentage || entry.value || 0));
+                        return (
+                          <div key={index} className="flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2 truncate">
+                              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }}></div>
+                              <span className="text-gray-700 font-medium capitalize truncate">{entry.name}</span>
+                            </div>
+                            <div className="flex items-center shrink-0">
+                              <span className="text-gray-900 font-semibold text-xs min-w-[42px] text-right">{pct}%</span>
+                            </div>
                           </div>
-                          <div className="flex items-center shrink-0">
-                            <span className="text-gray-900 font-semibold text-xs min-w-[42px] text-right">{pct}%</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  </>
                 ) : (
-                  <div className="text-center text-xs text-gray-400 py-4 flex-1">
+                  <div className="text-center text-xs text-gray-400 py-10 w-full">
                     No category spend data available
                   </div>
                 )}
@@ -2287,7 +2679,11 @@ export default function ProjectDashboardPage() {
         type={statusModal.type}
         title={statusModal.title}
         message={statusModal.message}
-        actionText={statusModal.type === "success" ? "Done" : "Try again"}
+        actionText={statusModal.actionText || (statusModal.type === "success" ? "Done" : "Try again")}
+        onAction={statusModal.onAction}
+        secondaryText={statusModal.secondaryText}
+        onSecondary={statusModal.onSecondary || statusModal.close}
+        actionVariant={statusModal.actionVariant}
       />
 
       <TransactionDetailsModal
@@ -2296,22 +2692,38 @@ export default function ProjectDashboardPage() {
         transaction={selectedTransaction}
       />
 
-      {/* Hidden Export Template */}
-      <div className="absolute -left-[9999px] top-0 pointer-events-none">
-        <div ref={exportRef}>
-          <ProjectCostingExportTemplate 
-            project={project} 
-            transactions={transactions}
-            parsedPhases={parsedPhases}
-            customColumns={customColumns}
-            budgetNum={budgetNum}
-            actualSpend={actualSpend}
-            committedSpend={committed}
-            lineChartData={dynamicLineChartData}
-            pieChartData={pieChartData}
-          />
+      {/* Hidden Export Template - Mounted strictly during export in an isolated fixed 0x0 container so it never creates blank page scrolling */}
+      {(isExportingPdf || isExportingImage) && (
+        <div 
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "1px",
+            height: "1px",
+            overflow: "hidden",
+            pointerEvents: "none",
+            opacity: 0,
+            zIndex: -9999,
+          }}
+        >
+          <div ref={exportRef} style={{ width: "1400px" }}>
+            <ProjectCostingExportTemplate 
+              project={project} 
+              transactions={transactions}
+              parsedPhases={parsedPhases}
+              customColumns={customColumns}
+              budgetNum={budgetNum}
+              actualSpend={actualSpend}
+              committedSpend={committed}
+              lineChartData={dynamicLineChartData}
+              pieChartData={pieChartData}
+              docType={exportDocType}
+            />
+          </div>
         </div>
-      </div>
+      )}
       <ModuleWizard moduleId="project-costing" />
     </div>
     </PageGuard>
