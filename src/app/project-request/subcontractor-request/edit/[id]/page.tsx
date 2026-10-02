@@ -347,6 +347,7 @@ export default function EditSubcontractorRequestPage() {
     requestId: requestId,
     requesterName: requesterName,
     date: requestDate,
+    hideCostCode: true,
     renderHeader: () => (
       <div className="bg-white px-4 py-6">
         <h2 className="text-sm font-medium text-[#3B7CED] mb-4">Request Details</h2>
@@ -441,6 +442,7 @@ export default function EditSubcontractorRequestPage() {
       },
       {
         title: "WBS",
+        hideCostCode: true,
         fields: [
           {
             name: "phase",
@@ -558,7 +560,6 @@ export default function EditSubcontractorRequestPage() {
     budgetConfig: {
       projectField: "project",
       wbsField: "task",
-      costCode: "SUB-001",
     },
     defaultBudget: defaultAvailableBudget,
     onSubmit: async (data) => {

@@ -24,6 +24,7 @@ export interface RequestDashboardConfig<T> {
 export type FormFieldType =
   | "text"
   | "number"
+  | "currency"
   | "select"
   | "textarea"
   | "date"
@@ -54,6 +55,9 @@ export interface RequestFormField {
   visibleIf?: { field: string; value: any }; // New: only show if field equals value
   getDynamicLabel?: (values: any) => string;
   getDynamicPlaceholder?: (values: any) => string;
+  prefix?: string;
+  isCurrency?: boolean;
+  formatNumber?: boolean;
 }
 
 export interface RequestFormConfig<T extends Record<string, any>> {
@@ -65,12 +69,14 @@ export interface RequestFormConfig<T extends Record<string, any>> {
     title?: string;
     fields: RequestFormField[];
     hideCostSummary?: boolean;
+    hideCostCode?: boolean;
     renderTop?: (data: T, extra?: any) => React.ReactNode;
     renderBottom?: (data: T, extra?: any) => React.ReactNode;
   }[];
   schema: z.ZodSchema<T>;
   defaultValues: T;
   costCode?: string;
+  hideCostCode?: boolean;
   onSubmit: (data: T) => Promise<void>;
   successMessage: {
     title: string;

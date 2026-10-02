@@ -495,8 +495,7 @@ export default function RequestDetailsPage() {
 
               {isPettyCash && (
                 <>
-                  <DataField label="Purpose / Expense Category" value={detail.purpose || detail.category || "N/A"} />
-                  <DataField label="Description" value={detail.description || "N/A"} fullWidth />
+                  <DataField label="Purpose" value={detail.purpose || detail.category || "N/A"} />
                 </>
               )}
 
@@ -627,7 +626,7 @@ export default function RequestDetailsPage() {
                     )}
                     fullWidth
                   />
-                  <DataField label="Note" value={detail.notes || detail.justification_notes || "N/A"} fullWidth />
+                  <DataField label="Note" value={detail.notes || detail.description || detail.justification_notes || "N/A"} fullWidth />
                 </div>
               </>
             )}

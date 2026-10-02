@@ -38,6 +38,127 @@ interface RequestFormProps<T extends Record<string, any>> {
   config: RequestFormConfig<T>;
 }
 
+interface FormattedNumberInputProps {
+  id?: string;
+  value: any;
+  onChange: (val: any) => void;
+  onBlur?: () => void;
+  placeholder?: string;
+  disabled?: boolean;
+  prefix?: string;
+  className?: string;
+  error?: boolean;
+}
+
+function FormattedNumberInput({
+  id,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  disabled,
+  prefix = "₦",
+  className,
+  error,
+}: FormattedNumberInputProps) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  const formatValue = (raw: string | number | undefined | null): string => {
+    if (raw === undefined || raw === null || raw === "") return "";
+    const cleanStr = String(raw).replace(/,/g, "").replace(/[₦Nn\s]/g, "");
+    if (!cleanStr) return "";
+    const parts = cleanStr.split(".");
+    const intPart = parts[0].replace(/\D/g, "");
+    const formattedInt = intPart ? Number(intPart).toLocaleString("en-US") : "";
+    if (parts.length > 1) {
+      return `${formattedInt}.${parts[1].slice(0, 2)}`;
+    }
+    return formattedInt;
+  };
+
+  const [displayValue, setDisplayValue] = React.useState<string>(() => formatValue(value));
+
+  React.useEffect(() => {
+    const formatted = formatValue(value);
+    const currentClean = displayValue.replace(/,/g, "");
+    const externalClean = String(value ?? "").replace(/,/g, "");
+    if (currentClean !== externalClean && Number(currentClean) !== Number(externalClean)) {
+      setDisplayValue(formatted);
+    }
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const rawVal = input.value;
+    const selStart = input.selectionStart || 0;
+
+    const cleanChars = rawVal.replace(/[₦Nn\s]/g, "");
+    const rawBeforeCursor = rawVal.slice(0, selStart).replace(/[₦Nn\s,]/g, "");
+
+    const parts = cleanChars.split(".");
+    const cleanInt = parts[0].replace(/\D/g, "");
+    const formattedInt = cleanInt ? Number(cleanInt).toLocaleString("en-US") : "";
+
+    let newDisplay = formattedInt;
+    if (parts.length > 1) {
+      const cleanDec = parts[1].replace(/\D/g, "").slice(0, 2);
+      newDisplay = `${formattedInt}.${cleanDec}`;
+    } else if (cleanChars.endsWith(".")) {
+      newDisplay = `${formattedInt}.`;
+    }
+
+    setDisplayValue(newDisplay);
+
+    const cleanNumericString = newDisplay.replace(/,/g, "");
+    const numericValue = cleanNumericString === "" ? "" : parseFloat(cleanNumericString);
+    onChange(numericValue);
+
+    requestAnimationFrame(() => {
+      if (!inputRef.current) return;
+      let targetPos = 0;
+      let charsFound = 0;
+      for (let i = 0; i < newDisplay.length; i++) {
+        if (charsFound === rawBeforeCursor.length) {
+          targetPos = i;
+          break;
+        }
+        if (newDisplay[i] !== ",") {
+          charsFound++;
+        }
+        targetPos = i + 1;
+      }
+      inputRef.current.setSelectionRange(targetPos, targetPos);
+    });
+  };
+
+  return (
+    <div className="relative flex items-center w-full">
+      {prefix && (
+        <span className="absolute left-3 text-sm font-semibold text-gray-500 pointer-events-none select-none">
+          {prefix}
+        </span>
+      )}
+      <Input
+        ref={inputRef}
+        id={id}
+        type="text"
+        inputMode="decimal"
+        value={displayValue}
+        onChange={handleChange}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        disabled={disabled}
+        aria-invalid={error}
+        className={cn(
+          prefix ? "pl-8" : "",
+          error ? "border-red-500 focus-visible:ring-red-500/40" : "",
+          className
+        )}
+      />
+    </div>
+  );
+}
+
 function MilestonesField({
   control,
   name,
@@ -703,6 +824,40 @@ export function RequestForm<T extends Record<string, any>>({
                               </div>
                             );
                           }
+                          const isNumberOrCurrency =
+                            field.type === "number" ||
+                            field.type === "currency" ||
+                            Boolean(field.isCurrency) ||
+                            Boolean(field.formatNumber);
+
+                          if (isNumberOrCurrency) {
+                            const fieldPrefix =
+                              field.prefix !== undefined
+                                ? field.prefix
+                                : field.isCurrency ||
+                                  field.type === "currency" ||
+                                  field.name.toLowerCase().includes("amount") ||
+                                  field.name.toLowerCase().includes("rate") ||
+                                  field.name.toLowerCase().includes("cost") ||
+                                  field.name.toLowerCase().includes("price")
+                                ? "₦"
+                                : "";
+
+                            return (
+                              <FormattedNumberInput
+                                id={field.name}
+                                value={controllerField.value}
+                                onChange={controllerField.onChange}
+                                onBlur={controllerField.onBlur}
+                                placeholder={dynamicPlaceholder || "0.00"}
+                                disabled={field.disabled}
+                                prefix={fieldPrefix}
+                                error={!!errors[field.name]}
+                                className={field.className}
+                              />
+                            );
+                          }
+
                           return (
                             <Input
                               id={field.name}
@@ -763,14 +918,19 @@ export function RequestForm<T extends Record<string, any>>({
                     (f) => f.name === "task" || f.name === "wbsElement",
                   )) && (
                   <div className="pt-4 mt-4 border-t border-gray-200 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-semibold text-gray-900">
-                        Cost Code
-                      </span>
-                      <span className="text-sm text-gray-600 font-medium">
-                        {selectedCostCode}
-                      </span>
-                    </div>
+                    {!section.hideCostCode &&
+                      !config.hideCostCode &&
+                      !config.title?.toLowerCase().includes("petty cash") &&
+                      !config.title?.toLowerCase().includes("subcontractor") && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-900">
+                            Cost Code
+                          </span>
+                          <span className="text-sm text-gray-600 font-medium">
+                            {selectedCostCode}
+                          </span>
+                        </div>
+                      )}
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-semibold text-gray-900">
                         Available Budget

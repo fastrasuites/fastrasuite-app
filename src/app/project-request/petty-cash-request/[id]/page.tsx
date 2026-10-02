@@ -345,7 +345,7 @@ export default function PettyCashRequestDetailPage() {
       date: dateFormatted,
       phase: resolvedPhase,
       task: resolvedActivity,
-      notes: rawRequest.notes || detail.notes || detail.justification_notes || "-",
+      notes: rawRequest.notes || detail.notes || detail.justification_notes || (rawRequest.description && rawRequest.description !== "-" ? rawRequest.description : "") || (detail.description && detail.description !== "-" ? detail.description : "") || "-",
     };
   }, [rawRequest, apiProjectRequest, detail, projectId, phaseId, activityId, phaseOptions, activityOptions, projectCosting, projects, id, numericId, localStatus]);
 
@@ -621,7 +621,7 @@ export default function PettyCashRequestDetailPage() {
                 </div>
                 <div>
                   <span className="block text-[13px] text-[#8C9BAE] font-normal mb-0.5">
-                    Purpose / Expense Category
+                    Purpose
                   </span>
                   <span className="block text-[14px] font-semibold text-black/80">{request.purpose}</span>
                 </div>
@@ -629,14 +629,6 @@ export default function PettyCashRequestDetailPage() {
                   <span className="block text-[13px] text-[#8C9BAE] font-normal mb-0.5">Date</span>
                   <span className="block text-[14px] font-semibold text-black/80">{request.date}</span>
                 </div>
-              </div>
-
-              {/* Description */}
-              <div className="mt-4">
-                <span className="block text-[13px] text-[#8C9BAE] font-normal mb-0.5">
-                  Description
-                </span>
-                <span className="block text-[14px] font-semibold text-black/80">{request.description}</span>
               </div>
             </section>
 

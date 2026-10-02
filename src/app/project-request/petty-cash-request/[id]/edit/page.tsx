@@ -21,13 +21,21 @@ const formSchema = z.object({
   project: z.string().min(1, "Please select a project"),
   phase: z.string().min(1, "Please select a phase"),
   task: z.string().min(1, "Please select an activity"),
-  amountRequested: z.coerce
-    .number()
-    .positive("Enter a valid amount")
-    .max(50000, "Maximum Limit is ₦50,000"),
+  amountRequested: z.preprocess(
+    (val) => {
+      if (typeof val === "string") {
+        const cleaned = val.replace(/,/g, "").replace(/[₦Nn\s]/g, "");
+        return cleaned === "" ? 0 : parseFloat(cleaned);
+      }
+      return val;
+    },
+    z.coerce
+      .number()
+      .positive("Enter a valid amount")
+      .max(50000, "Maximum Limit is ₦50,000")
+  ),
   purpose: z.string().min(2, "Purpose is required"),
-  description: z.string().min(2, "Description is required"),
-  notes: z.string().optional(),
+  description: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -308,6 +316,7 @@ export default function EditPettyCashRequestPage() {
     requestId,
     requesterName,
     date: requestDate,
+    hideCostCode: true,
     renderHeader: () => (
       <div className="bg-white px-4 py-6">
         <h2 className="text-sm font-medium text-[#3B7CED] mb-4">Request Details</h2>
@@ -340,21 +349,15 @@ export default function EditPettyCashRequestPage() {
           },
           {
             name: "purpose",
-            label: "Purpose / Expense Category",
+            label: "Purpose",
             type: "text",
             placeholder: "Enter purpose",
-          },
-          {
-            name: "description",
-            label: "Description",
-            type: "text",
-            placeholder: "Enter description",
           },
         ],
       },
       {
         title: "WBS",
-        hideCostSummary: true,
+        hideCostCode: true,
         fields: [
           {
             name: "phase",
@@ -381,7 +384,9 @@ export default function EditPettyCashRequestPage() {
             name: "amountRequested",
             label: "Amount Requested",
             type: "number",
-            placeholder: "Enter amount",
+            isCurrency: true,
+            prefix: "₦",
+            placeholder: "0.00",
             hintText: "Maximum Limit: ₦50,000",
           },
         ],
@@ -389,7 +394,7 @@ export default function EditPettyCashRequestPage() {
       {
         fields: [
           {
-            name: "notes",
+            name: "description",
             label: "Note",
             type: "text",
             placeholder: "Enter note",
@@ -419,7 +424,7 @@ export default function EditPettyCashRequestPage() {
               <div className="flex justify-between items-center">
                 <span className="text-sm font-semibold text-gray-900">Total Cost</span>
                 <span className="text-sm font-semibold text-[#3B7CED]">
-                  ₦{(data.amountRequested || 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ₦{(Number(data.amountRequested) || 0).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -434,8 +439,7 @@ export default function EditPettyCashRequestPage() {
       task: taskIdStr,
       amountRequested: amountRequestedVal,
       purpose: purposeVal,
-      description: descriptionVal,
-      notes: notesVal,
+      description: descriptionVal || notesVal || "",
     },
     calculateProjectedCost: (data: FormValues) => Number(data.amountRequested || 0),
     defaultBudget: defaultAvailableBudget,
@@ -452,20 +456,25 @@ export default function EditPettyCashRequestPage() {
         return "00000000-0000-0000-0000-000000000000";
       };
 
+      const cleanDetail = { ...detail };
+      delete cleanDetail.cost_code;
+      delete cleanDetail.costCode;
+      delete cleanDetail.cost_code_details;
+
       const payload = {
         project: Number(data.project),
         detail: {
-          ...detail,
+          ...cleanDetail,
           project: Number(data.project),
           phase: data.phase,
           task: data.task,
           wbs_element: ensureValidUUID(data.task),
           activity: ensureValidUUID(data.task),
-          amount_requested: data.amountRequested.toFixed(2),
+          amount_requested: Number(data.amountRequested).toFixed(2),
           purpose: data.purpose,
-          description: data.description,
-          notes: data.notes || "",
-          justification_notes: data.notes || "",
+          description: data.description || "",
+          notes: data.description || "",
+          justification_notes: data.description || "",
         },
       };
 
