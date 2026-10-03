@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CreateProductModal } from "@/components/shared/CreateProductModal";
+import { FormActionFooter } from "@/components/shared/FormActionFooter";
 import {
   useGetAvailableBudgetQuery,
 } from "@/api/projectApi";
@@ -431,7 +432,8 @@ export default function NewPurchaseRequestPage() {
       };
     });
 
-    const purposeStr = `Project: ${projectName} | Phase: ${phaseName} | Activity: ${taskName} | Notes: ${notes}`;
+    const cleanNotes = notes?.trim() || "";
+    const purposeStr = `Project: ${projectName} | Phase: ${phaseName} | Activity: ${taskName}${cleanNotes ? ` | Notes: ${cleanNotes}` : ""}`;
 
     const payload: any = {
       project: Number(selectedProjectId) || 1,
@@ -439,7 +441,7 @@ export default function NewPurchaseRequestPage() {
       wbs_element: selectedTaskId,
       site_location: locationName,
       required_by_date: requiredDate,
-      notes: purposeStr,
+      notes: cleanNotes,
       lines: linesPayload,
 
       status: "pending" as const,
@@ -923,17 +925,15 @@ export default function NewPurchaseRequestPage() {
       </main>
 
       {/* Floating Action Submit Button */}
-      <div className="fixed bottom-0 left-16 right-0 bg-white border-t border-gray-100 p-4 z-20">
-        <div className="max-w-2xl mx-auto">
-          <Button
-            data-wizard="pr-items-submit"
-            onClick={handleSubmit}
-            className="w-full h-12 text-sm font-bold flex items-center justify-center bg-[#3B7CED] hover:bg-[#2d63c7] text-white rounded-lg shadow-sm"
-          >
-            Submit request
-          </Button>
-        </div>
-      </div>
+      <FormActionFooter>
+        <Button
+          data-wizard="pr-items-submit"
+          onClick={handleSubmit}
+          className="w-full h-12 text-sm font-bold flex items-center justify-center bg-[#3B7CED] hover:bg-[#2d63c7] text-white rounded-lg shadow-sm"
+        >
+          Submit request
+        </Button>
+      </FormActionFooter>
 
       {/* Status Modal */}
       <StatusModal

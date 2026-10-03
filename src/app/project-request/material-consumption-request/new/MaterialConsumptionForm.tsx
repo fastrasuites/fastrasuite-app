@@ -17,6 +17,7 @@ import {
   Trash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormActionFooter } from "@/components/shared/FormActionFooter";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -1142,24 +1143,22 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
             </div>
           </div>
         </div>
-      <div className="fixed bottom-0 left-16 right-0 bg-white border-t border-gray-100 p-4 z-20">
-        <div className="max-w-2xl mx-auto">
-          <Button
-            onClick={form.handleSubmit(onSubmit)}
-            disabled={isSubmitting}
-            className="w-full h-12 text-sm font-bold flex items-center justify-center bg-[#3B7CED] hover:bg-[#2d63c7] text-white rounded-lg shadow-sm"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {requestId ? "Updating..." : "Submitting..."}
-              </>
-            ) : (
-              requestId ? "Save Changes" : "Submit Requisition"
-            )}
-          </Button>
-        </div>
-      </div>
+      <FormActionFooter>
+        <Button
+          onClick={form.handleSubmit(onSubmit)}
+          disabled={isSubmitting}
+          className="w-full h-12 text-sm font-bold flex items-center justify-center bg-[#3B7CED] hover:bg-[#2d63c7] text-white rounded-lg shadow-sm"
+        >
+          {isSubmitting ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {requestId ? "Updating..." : "Submitting..."}
+            </>
+          ) : (
+            requestId ? "Save Changes" : "Submit Requisition"
+          )}
+        </Button>
+      </FormActionFooter>
 
         <StatusModal
           isOpen={statusModal.isOpen}

@@ -146,6 +146,21 @@ export const subcontractorRequestApi = createApi({
         "SubcontractorRequest",
       ],
     }),
+    patchSubcontractorRequest: builder.mutation<
+      SubcontractorRequest,
+      { id: number | string; body: Partial<SubcontractorRequest> }
+    >({
+      query: ({ id, body }) => ({
+        url: `/project-requests/subcontractor-requests/${id}/`,
+        method: "PATCH",
+        body,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "SubcontractorRequest", id },
+        { type: "SubcontractorRequest", id: "LIST" },
+        "SubcontractorRequest",
+      ],
+    }),
     deleteSubcontractorRequest: builder.mutation<void, number | string>({
       query: (id) => ({
         url: `/project-requests/project-requests/${id}/`,
@@ -230,6 +245,7 @@ export const {
   useGetSubcontractorRequestQuery,
   useCreateSubcontractorRequestMutation,
   useUpdateSubcontractorRequestMutation,
+  usePatchSubcontractorRequestMutation,
   useDeleteSubcontractorRequestMutation,
   useSubmitSubcontractorRequestMutation,
   useGetSubcontractorMilestonesQuery,

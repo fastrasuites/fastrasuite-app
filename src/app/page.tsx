@@ -10,6 +10,7 @@ import {
   CheckSquare,
   TrendingUp,
   X,
+  Briefcase,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -237,26 +238,23 @@ export default function HomePage() {
     { skip: !hasProjectCostingAccess, refetchOnMountOrArgChange: false }
   );
 
-  // New Project modal state
-  const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
-  const [newProjectForm, setNewProjectForm] = useState({
-    name: "",
-    code: "",
-    manager: "",
-    budget: "",
-    contractType: "Fixed Price",
-  });
-
   // KPI Calculations
   const activeProjectsCount = useMemo(() => {
     if (countsData?.project_costing?.active != null) {
       return countsData.project_costing.active;
     }
+    if (financialData?.project_costing?.active_projects != null) {
+      return financialData.project_costing.active_projects;
+    }
     if (Array.isArray(projectCostingProjects)) {
       return projectCostingProjects.filter((p: any) => (p.status || "").toUpperCase() === "ACTIVE").length;
     }
     return 0;
-  }, [countsData, projectCostingProjects]);
+  }, [countsData, financialData, projectCostingProjects]);
+
+  const projectOwnersCount = useMemo(() => {
+    return financialData?.project_costing?.project_owners_count ?? 1;
+  }, [financialData]);
 
   const budgetDisplay = useMemo(() => {
     if (financialData?.project_costing?.total_budget != null) {
@@ -286,13 +284,40 @@ export default function HomePage() {
     return "0.0%";
   }, [financialData]);
 
-  const totalCommittedDisplay = useMemo(() => {
-    if ((financialData?.project_costing as any)?.committed != null) {
-      const val = Number((financialData?.project_costing as any).committed);
-      return formatAxisNaira(val);
-    }
-    return "₦0";
+  const committedAmount = useMemo(() => {
+    const pc = financialData?.project_costing;
+    return Number(pc?.total_committed ?? pc?.committed ?? 0);
   }, [financialData]);
+
+  const totalCommittedDisplay = useMemo(() => {
+    return formatAxisNaira(committedAmount);
+  }, [committedAmount]);
+
+  const committedPercentageDisplay = useMemo(() => {
+    const pc = financialData?.project_costing;
+    if (pc?.committed_percentage != null) {
+      return `${Number(pc.committed_percentage).toFixed(1)}%`;
+    }
+    const b = Number(pc?.total_budget || 0);
+    if (b > 0 && committedAmount > 0) {
+      return `${((committedAmount / b) * 100).toFixed(1)}%`;
+    }
+    return "0.0%";
+  }, [financialData, committedAmount]);
+
+  // Monthly Spending Metrics
+  const monthlySpendingMonth = useMemo(() => {
+    return financialData?.monthly_spending?.month || "October 2026";
+  }, [financialData]);
+
+  const monthlySpendingTotalValue = useMemo(() => {
+    const val = Number(financialData?.monthly_spending?.total_value || 0);
+    return formatAxisNaira(val);
+  }, [financialData]);
+
+  const monthlyTotalRequests = financialData?.monthly_spending?.total_requests ?? 0;
+  const monthlyApprovedRequests = financialData?.monthly_spending?.approved ?? 0;
+  const monthlyRejectedRequests = financialData?.monthly_spending?.rejected ?? 0;
 
   // Project Chart data
   const barChartData = useMemo(() => {
@@ -333,24 +358,42 @@ export default function HomePage() {
 
   // Dynamic Category Spend Data
   const categoryData = useMemo(() => {
-    const breakdown = (financialData as any)?.category_breakdown || (financialData?.project_costing as any)?.category_breakdown;
+    const breakdown = financialData?.category_breakdown;
     if (Array.isArray(breakdown) && breakdown.length > 0) {
-      const colors = ["#2563EB", "#16A34A", "#F59E0B", "#EF4444", "#1E293B", "#8B5CF6"];
-      return breakdown.map((item: any, idx: number) => {
-        let val = Number(item.percentage || item.value || 0);
-        if (val > 0 && val <= 1) {
-          val = Math.round(val * 100);
-        } else {
-          val = Math.round(val);
-        }
-        return {
-          name: item.name || item.request_type || "Category",
-          value: val,
-          amount: Number(item.amount || 0),
-          color: colors[idx % colors.length],
-        };
-      });
+      const colors: Record<string, string> = {
+        purchase: "#F59E0B",
+        labor: "#2563EB",
+        labour: "#2563EB",
+        petty_cash: "#16A34A",
+        subcontractor: "#EF4444",
+        material: "#1E293B",
+        plant_equipment: "#8B5CF6",
+      };
+      const defaultColors = ["#2563EB", "#16A34A", "#F59E0B", "#EF4444", "#1E293B", "#8B5CF6"];
+
+      const hasAnySpend = breakdown.some((b) => Number(b.amount || b.percentage || 0) > 0);
+      if (hasAnySpend) {
+        return breakdown
+          .filter((item) => Number(item.amount || item.percentage || 0) > 0)
+          .map((item: any, idx: number) => {
+            const normKey = String(item.name || "").toLowerCase().replace(/[\s-]+/g, "_");
+            let val = Number(item.percentage || 0);
+            if (val > 0 && val <= 1) {
+              val = Math.round(val * 100);
+            } else {
+              val = Math.round(val);
+            }
+            return {
+              name: item.name || "Category",
+              value: val,
+              amount: Number(item.amount || 0),
+              color: colors[normKey] || defaultColors[idx % defaultColors.length],
+            };
+          });
+      }
     }
+
+    // Fallback: Calculate from project requests if available
     const requests = Array.isArray(projectRequestsData)
       ? projectRequestsData
       : (projectRequestsData as any)?.results || [];
@@ -360,54 +403,53 @@ export default function HomePage() {
       requests.forEach((r: any) => {
         const type = (r.request_type || "Other").toLowerCase();
         const amt = getTransactionAmount(r);
-        catTotals[type] = (catTotals[type] || 0) + amt;
-        total += amt;
+        if (amt > 0) {
+          catTotals[type] = (catTotals[type] || 0) + amt;
+          total += amt;
+        }
       });
-      const colors: Record<string, string> = {
-        purchase: "#F59E0B",
-        labor: "#2563EB",
-        labour: "#2563EB",
-        petty_cash: "#16A34A",
-        subcontractor: "#EF4444",
-        material: "#1E293B",
-      };
-      return Object.entries(catTotals).map(([type, amt], idx) => ({
-        name: type.charAt(0).toUpperCase() + type.slice(1).replace("_", " "),
-        value: total > 0 ? Math.round((amt / total) * 100) : 0,
-        amount: amt,
-        color: colors[type] || ["#2563EB", "#16A34A", "#F59E0B", "#EF4444", "#1E293B"][idx % 5],
-      }));
+      if (total > 0) {
+        const colors: Record<string, string> = {
+          purchase: "#F59E0B",
+          labor: "#2563EB",
+          labour: "#2563EB",
+          petty_cash: "#16A34A",
+          subcontractor: "#EF4444",
+          material: "#1E293B",
+          plant_equipment: "#8B5CF6",
+        };
+        return Object.entries(catTotals).map(([type, amt], idx) => ({
+          name: type.charAt(0).toUpperCase() + type.slice(1).replace("_", " "),
+          value: Math.round((amt / total) * 100),
+          amount: amt,
+          color: colors[type] || ["#2563EB", "#16A34A", "#F59E0B", "#EF4444", "#1E293B", "#8B5CF6"][idx % 6],
+        }));
+      }
     }
     return [];
   }, [financialData, projectRequestsData]);
 
-  const pendingProjectCostingList = useMemo(() => {
-    const list: any[] = Array.isArray(projectCostingProjects)
-      ? projectCostingProjects
-      : (projectCostingProjects as any)?.results || [];
-    return list.filter((p: any) => {
-      const s = (p.status || "").toUpperCase();
+  const pendingRequestsList = useMemo(() => {
+    const list: any[] = Array.isArray(projectRequestsData)
+      ? projectRequestsData
+      : (projectRequestsData as any)?.results || [];
+    return list.filter((r: any) => {
+      const s = (r.status || "").toLowerCase();
       return (
-        s === "AWAITING APPROVAL" ||
-        s === "PENDING" ||
-        s === "PENDING_APPROVAL" ||
-        s.includes("AWAITING")
+        s === "pending" ||
+        s === "awaiting" ||
+        s.includes("pending") ||
+        s.includes("awaiting")
       );
     });
-  }, [projectCostingProjects]);
+  }, [projectRequestsData]);
 
-  const pendingProjectCostingCount = useMemo(() => {
-    if (pendingProjectCostingList.length > 0) {
-      return pendingProjectCostingList.length;
+  const pendingRequestsCount = useMemo(() => {
+    if (countsData?.project_requests?.pending != null) {
+      return countsData.project_requests.pending;
     }
-    if ((countsData?.project_costing as any)?.pending != null) {
-      return (countsData?.project_costing as any).pending;
-    }
-    if (countsData?.pending_project_costing != null) {
-      return countsData.pending_project_costing;
-    }
-    return 0;
-  }, [pendingProjectCostingList, countsData]);
+    return pendingRequestsList.length;
+  }, [countsData, pendingRequestsList]);
 
   // Request Transactions
   const requestTransactions = useMemo(() => {
@@ -500,12 +542,6 @@ export default function HomePage() {
     });
   }, [projectRequestsData]);
 
-  const handleCreateProject = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsNewProjectOpen(false);
-    router.push("/project-costing/new");
-  };
-
   if (isPermissionLoading) {
     return (
       <div className="min-h-screen bg-[#FAFAFC] flex flex-col items-center justify-center p-6">
@@ -578,7 +614,7 @@ export default function HomePage() {
               ACTIVE PROJECTS
             </span>
             <div className="w-8 h-8 rounded-lg bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center font-bold text-sm">
-              $
+              <Briefcase className="w-4 h-4 text-[#2563EB]" />
             </div>
           </div>
           <div className="mt-2.5">
@@ -586,7 +622,7 @@ export default function HomePage() {
               {activeProjectsCount}
             </div>
             <div className="text-xs text-gray-400 mt-1 font-normal">
-              Across 5 project owners
+              Across {projectOwnersCount} project owner{projectOwnersCount === 1 ? "" : "s"}
             </div>
           </div>
         </div>
@@ -626,7 +662,7 @@ export default function HomePage() {
               {actualSpentDisplay}
             </div>
             <div className="text-xs text-gray-400 mt-1 font-normal">
-              36% of total budget
+              {spentPercentageDisplay} of total budget
             </div>
           </div>
         </div>
@@ -646,7 +682,7 @@ export default function HomePage() {
               {spentPercentageDisplay}
             </div>
             <div className="text-xs text-gray-400 mt-1 font-normal">
-              ₦80.4M allocated
+              {budgetDisplay} allocated
             </div>
           </div>
         </div>
@@ -666,7 +702,7 @@ export default function HomePage() {
               {totalCommittedDisplay}
             </div>
             <div className="text-xs text-gray-400 mt-1 font-normal">
-              25% of total budget
+              {committedPercentageDisplay} of total budget
             </div>
           </div>
         </div>
@@ -687,13 +723,13 @@ export default function HomePage() {
                 </h2>
               </div>
               <span className="text-xs sm:text-sm text-gray-400 font-normal">
-                September 2026
+                {monthlySpendingMonth}
               </span>
             </div>
 
             <div className="mt-4">
               <div className="text-3xl sm:text-4xl font-bold text-[#2563EB]">
-                ₦0
+                {monthlySpendingTotalValue}
               </div>
               <p className="text-xs sm:text-sm text-gray-400 mt-1 mb-5 font-normal">
                 Total value of requests raised this month
@@ -705,7 +741,7 @@ export default function HomePage() {
             {/* Total Requests */}
             <div className="bg-[#EFF6FF] rounded-xl py-4 px-3 text-center">
               <div className="text-2xl font-bold text-[#2563EB]">
-                0
+                {monthlyTotalRequests}
               </div>
               <div className="text-xs sm:text-sm font-medium text-[#2563EB] mt-0.5">
                 Total Requests
@@ -715,7 +751,7 @@ export default function HomePage() {
             {/* Approved */}
             <div className="bg-[#ECFDF5] rounded-xl py-4 px-3 text-center">
               <div className="text-2xl font-bold text-[#16A34A]">
-                0
+                {monthlyApprovedRequests}
               </div>
               <div className="text-xs sm:text-sm font-medium text-[#16A34A] mt-0.5">
                 Approved
@@ -725,7 +761,7 @@ export default function HomePage() {
             {/* Rejected */}
             <div className="bg-[#FFF1F2] rounded-xl py-4 px-3 text-center">
               <div className="text-2xl font-bold text-[#E11D48]">
-                0
+                {monthlyRejectedRequests}
               </div>
               <div className="text-xs sm:text-sm font-medium text-[#E11D48] mt-0.5">
                 Rejected
@@ -734,18 +770,18 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Right: Pending Project Costing */}
+        {/* Right: Pending Requests */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-gray-200/90 p-5 sm:p-6 flex flex-col justify-between shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
           <div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="w-5 h-5 text-[#F59E0B]" />
                 <h2 className="text-base font-bold text-gray-900">
-                  Pending Project Costing
+                  Pending Requests
                 </h2>
               </div>
               <Link
-                href="/project-costing"
+                href="/project-request/approve"
                 className="text-xs text-gray-400 hover:text-gray-600 font-normal transition-colors"
               >
                 View All
@@ -754,42 +790,68 @@ export default function HomePage() {
 
             <div className="mt-4">
               <div className="text-3xl sm:text-4xl font-bold text-[#F59E0B]">
-                {pendingProjectCostingCount}
+                {pendingRequestsCount}
               </div>
               <p className="text-xs sm:text-sm text-gray-400 mt-1 mb-5 font-normal">
-                Projects awaiting decision
+                Requests awaiting decision
               </p>
             </div>
           </div>
 
-          {pendingProjectCostingList.length > 0 ? (
+          {pendingRequestsList.length > 0 ? (
             <div className="space-y-2 max-h-[140px] overflow-y-auto">
-              {pendingProjectCostingList.slice(0, 3).map((proj: any) => (
-                <Link
-                  key={proj.id}
-                  href={`/project-costing/${proj.id}`}
-                  className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50/60 border border-amber-200/60 hover:bg-amber-100/60 transition-colors"
-                >
-                  <div className="truncate mr-2">
-                    <p className="text-xs font-semibold text-gray-900 truncate">
-                      {proj.name}
-                    </p>
-                    <p className="text-[10px] text-gray-500">
-                      {proj.project_code || "Pending Approval"}
-                    </p>
-                  </div>
-                  <span className="text-xs font-semibold text-amber-700 whitespace-nowrap">
-                    {proj.financials?.budget
-                      ? `₦${Number(proj.financials.budget).toLocaleString()}`
-                      : "Awaiting"}
-                  </span>
-                </Link>
-              ))}
+              {pendingRequestsList.slice(0, 3).map((req: any, idx: number) => {
+                const refId = getTransactionReferenceId(req, idx);
+                const amt = getTransactionAmount(req);
+                const rawType = (req.request_type || "Request").toLowerCase();
+                let displayType = "Purchase";
+                if (rawType.includes("labor") || rawType.includes("labour")) {
+                  displayType = "Labor";
+                } else if (rawType.includes("petty")) {
+                  displayType = "Petty Cash";
+                } else if (rawType.includes("sub") || rawType.includes("contract")) {
+                  displayType = "Subcontractor";
+                } else if (rawType.includes("plant") || rawType.includes("equipment")) {
+                  displayType = "Equipment";
+                } else if (rawType.includes("material")) {
+                  displayType = "Material";
+                }
+                const requester = req.created_by_details
+                  ? `${req.created_by_details.first_name || ""} ${req.created_by_details.last_name || ""}`.trim() || req.created_by_details.username
+                  : req.created_by_name || req.project_details?.name || "Pending Request";
+
+                return (
+                  <Link
+                    key={req.id || idx}
+                    href={`/project-request/approve/${req.id}`}
+                    className="flex items-center justify-between p-2.5 rounded-lg bg-amber-50/60 border border-amber-200/60 hover:bg-amber-100/60 transition-colors"
+                  >
+                    <div className="truncate mr-2">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-semibold text-gray-900 truncate">
+                          {refId}
+                        </p>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
+                          {displayType}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-500 truncate mt-0.5">
+                        {requester}
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-amber-700 whitespace-nowrap">
+                      {amt > 0
+                        ? `₦${amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : "₦0.00"}
+                    </span>
+                  </Link>
+                );
+              })}
             </div>
           ) : (
             <div className="bg-[#F8F9FA] rounded-xl py-8 px-4 flex items-center justify-center border border-gray-100/80 text-center">
               <span className="text-xs sm:text-sm text-gray-400 font-normal">
-                No pending project costing
+                No pending requests
               </span>
             </div>
           )}
@@ -1096,130 +1158,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ================================================================= */}
-      {/* MODAL: NEW PROJECT */}
-      {/* ================================================================= */}
-      {isNewProjectOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl border border-gray-200 overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
-              <div>
-                <h3 className="text-base font-bold text-gray-900">
-                  Create New Project
-                </h3>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Add a new project to your project costing portfolio
-                </p>
-              </div>
-              <button
-                onClick={() => setIsNewProjectOpen(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateProject} className="p-5 space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-gray-700 mb-1">
-                  Project Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Marina Commercial Towers Phase 2"
-                  value={newProjectForm.name}
-                  onChange={(e) =>
-                    setNewProjectForm({ ...newProjectForm, name: e.target.value })
-                  }
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2563EB] text-xs font-medium text-gray-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    Project Code
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="PRJ-2026-004"
-                    value={newProjectForm.code}
-                    onChange={(e) =>
-                      setNewProjectForm({ ...newProjectForm, code: e.target.value })
-                    }
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2563EB] text-xs font-medium text-gray-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    Allocated Budget (₦) *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="₦125,600,000"
-                    value={newProjectForm.budget}
-                    onChange={(e) =>
-                      setNewProjectForm({ ...newProjectForm, budget: e.target.value })
-                    }
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2563EB] text-xs font-medium text-gray-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    Project Manager
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Engr. Kolawole"
-                    value={newProjectForm.manager}
-                    onChange={(e) =>
-                      setNewProjectForm({ ...newProjectForm, manager: e.target.value })
-                    }
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2563EB] text-xs font-medium text-gray-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-gray-700 mb-1">
-                    Contract Type
-                  </label>
-                  <select
-                    value={newProjectForm.contractType}
-                    onChange={(e) =>
-                      setNewProjectForm({ ...newProjectForm, contractType: e.target.value })
-                    }
-                    className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2563EB] text-xs font-medium text-gray-900"
-                  >
-                    <option value="Fixed Price">Fixed Price</option>
-                    <option value="Time & Materials">Time & Materials</option>
-                    <option value="Cost Plus">Cost Plus</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-gray-100 flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsNewProjectOpen(false)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold rounded-lg text-xs transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold rounded-lg text-xs transition-colors shadow-xs cursor-pointer"
-                >
-                  Save & Setup
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       </div>
     </div>
   );

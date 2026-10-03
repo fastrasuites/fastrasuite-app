@@ -26,6 +26,7 @@ import {
 import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { motion, AnimatePresence } from "framer-motion";
 import { StatusModal } from "@/components/shared/StatusModal";
+import { FormActionFooter } from "@/components/shared/FormActionFooter";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -634,9 +635,7 @@ export default function EditPlantEquipmentRequestPage() {
             {selectedTaskId && (
               <div className="pt-4 mt-4 border-t border-gray-100 space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-semibold text-gray-900">
-                    Cost Code
-                  </span>
+                  
                   <span className="text-sm text-gray-600 font-medium">
                     {selectedCostCode}
                   </span>
@@ -707,17 +706,15 @@ export default function EditPlantEquipmentRequestPage() {
       </main>
 
       {/* Floating Action Submit Button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-4 z-20 shadow-none">
-        <div className="max-w-2xl mx-auto">
-          <Button
-            onClick={handleFormSubmit}
-            disabled={isUpdating}
-            className="w-full h-12 text-sm font-bold flex items-center justify-center bg-[#3B7CED] hover:bg-[#2d63c7] text-white rounded-lg shadow-none"
-          >
-            {isUpdating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Save Changes"}
-          </Button>
-        </div>
-      </div>
+      <FormActionFooter>
+        <Button
+          onClick={handleFormSubmit}
+          disabled={isUpdating}
+          className="w-full h-12 text-sm font-bold flex items-center justify-center bg-[#3B7CED] hover:bg-[#2d63c7] text-white rounded-lg shadow-none"
+        >
+          {isUpdating ? <Loader2 className="w-5 h-5 animate-spin" /> : "Save Changes"}
+        </Button>
+      </FormActionFooter>
 
       {/* Above Available Budget Dialog */}
       <StatusModal

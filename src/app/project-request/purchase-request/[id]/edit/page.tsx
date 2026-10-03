@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CreateProductModal } from "@/components/shared/CreateProductModal";
+import { FormActionFooter } from "@/components/shared/FormActionFooter";
 import {
   useGetAvailableBudgetQuery,
 } from "@/api/projectApi";
@@ -138,11 +139,22 @@ export default function EditPurchaseRequestPage() {
       
       if (parsedNotes && typeof parsedNotes === "string" && parsedNotes.includes(" | ")) {
         const parts = parsedNotes.split(" | ");
+        let extractedNote = "";
         parts.forEach((part: string) => {
-          if (part.startsWith("Phase: ") && !parsedPhase) parsedPhase = part.replace("Phase: ", "");
-          if (part.startsWith("Activity: ") && !parsedTask) parsedTask = part.replace("Activity: ", "");
-          if (part.startsWith("Notes: ")) parsedNotes = part.replace("Notes: ", "");
+          if (part.startsWith("Phase: ") && !parsedPhase) parsedPhase = part.replace("Phase: ", "").trim();
+          if (part.startsWith("Activity: ") && !parsedTask) parsedTask = part.replace("Activity: ", "").trim();
+          if (/^Notes?:/i.test(part)) {
+            extractedNote = part.replace(/^Notes?:\s*/i, "").trim();
+          }
         });
+        parsedNotes = extractedNote;
+      }
+      
+      if (typeof parsedNotes === "string") {
+        parsedNotes = parsedNotes.trim();
+        if (parsedNotes === "." || /^Notes?:\s*\.?$/i.test(parsedNotes)) {
+          parsedNotes = "";
+        }
       }
       
       setNotes(parsedNotes);
@@ -487,7 +499,8 @@ export default function EditPurchaseRequestPage() {
       return payloadLine;
     });
 
-    const purposeStr = `Project: ${projectName} | Phase: ${phaseName} | Activity: ${taskName} | Notes: ${notes}`;
+    const cleanNotes = notes?.trim() || "";
+    const purposeStr = `Project: ${projectName} | Phase: ${phaseName} | Activity: ${taskName}${cleanNotes ? ` | Notes: ${cleanNotes}` : ""}`;
 
     const payload: any = {
       project: Number(selectedProjectId) || 1,
@@ -495,7 +508,7 @@ export default function EditPurchaseRequestPage() {
       wbs_element: selectedTaskId,
       site_location: locationName,
       required_by_date: requiredDate,
-      notes: purposeStr,
+      notes: cleanNotes,
       lines: linesPayload,
       currency: currencies?.[0]?.id || 1,
       requester: requesterId,
@@ -1025,17 +1038,15 @@ export default function EditPurchaseRequestPage() {
       </main>
 
       {/* Floating Action Submit Button */}
-      <div className="fixed bottom-0 left-16 right-0 bg-white border-t border-gray-100 p-4 z-20">
-        <div className="max-w-2xl mx-auto">
-          <Button
-            className="w-full h-12 text-sm font-bold flex items-center justify-center bg-[#3B7CED] hover:bg-[#2d63c7] text-white rounded-lg shadow-sm"
-            onClick={handleSubmit}
-            disabled={isUpdating}
-          >
-            {isUpdating ? "Saving..." : "Save Changes"}
-          </Button>
-        </div>
-      </div>
+      <FormActionFooter>
+        <Button
+          className="w-full h-12 text-sm font-bold flex items-center justify-center bg-[#3B7CED] hover:bg-[#2d63c7] text-white rounded-lg shadow-sm"
+          onClick={handleSubmit}
+          disabled={isUpdating}
+        >
+          {isUpdating ? "Saving..." : "Save Changes"}
+        </Button>
+      </FormActionFooter>
 
       {/* Status Modal */}
       <StatusModal

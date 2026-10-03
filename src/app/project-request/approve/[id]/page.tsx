@@ -20,6 +20,7 @@ import { extractErrorMessage } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useGetUserByIdQuery } from "@/api/settings/usersApi";
 import { useGetVendorByIdQuery, useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
+import { FormActionFooter } from "@/components/shared/FormActionFooter";
 
 const DataField = ({ label, value, fullWidth = false }: { label: string; value: string | React.ReactNode; fullWidth?: boolean }) => (
   <div className={`flex flex-col gap-1 ${fullWidth ? "col-span-2" : ""}`}>
@@ -116,15 +117,21 @@ export default function RequestDetailsPage() {
     const raw = detail?.notes || detail?.justification_notes || detail?.purpose || "";
     if (typeof raw === "string" && raw.includes(" | ")) {
       const notesMatch = raw.match(/Notes?:\s*(.+)$/i);
-      if (notesMatch && notesMatch[1]) return notesMatch[1].trim();
+      if (notesMatch && notesMatch[1]) {
+        const val = notesMatch[1].trim();
+        return val === "." ? "N/A" : val;
+      }
       const parts = raw.split(" | ");
       for (const part of parts) {
-        if (part.startsWith("Notes: ") || part.startsWith("Note: ")) {
-          return part.replace(/^Notes?:\s*/, "").trim();
+        if (/^Notes?:/i.test(part)) {
+          const val = part.replace(/^Notes?:\s*/i, "").trim();
+          return val === "." ? "N/A" : (val || "N/A");
         }
       }
+      return "N/A";
     }
-    return raw || "N/A";
+    const trimmed = typeof raw === "string" ? raw.trim() : "";
+    return trimmed === "." || !trimmed ? "N/A" : trimmed;
   }, [detail]);
 
   const formatCurrency = (val?: string | number) => {
@@ -762,41 +769,39 @@ export default function RequestDetailsPage() {
 
       {/* Fixed Bottom Action Bar */}
       {request && effectiveStatus === "pending" && (
-        <div className="fixed bottom-0 left-0 md:left-16 right-0 bg-white border-t border-gray-100 px-4 py-4 md:py-6 z-40">
-          <div className="max-w-2xl mx-auto space-y-4">
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center text-sm font-bold text-gray-900">
-                <span>Available Budget</span>
-                <span>{formatCurrency(availableBudget)}</span>
-              </div>
-              <div className="flex justify-between items-center text-sm font-bold text-gray-900">
-                <span>Total Cost</span>
-                <span className="text-[#3B7CED]">
-                  {formatCurrency(getTotalCost())}
-                </span>
-              </div>
+        <FormActionFooter zIndex="z-40" className="px-4 py-4 md:py-6" containerClassName="space-y-4">
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center text-sm font-bold text-gray-900">
+              <span>Available Budget</span>
+              <span>{formatCurrency(availableBudget)}</span>
             </div>
-            <PermissionGuard module="project_request" entitlement="approve">
-              <div className="flex gap-3 pt-2">
-                <Button 
-                  variant="outline" 
-                  className="flex-1 border-red-500 text-red-500 hover:bg-red-50 hover:text-red-600 h-12 text-base font-semibold"
-                  disabled={isApproving || isRejecting}
-                  onClick={handleReject}
-                >
-                  {isRejecting ? "Rejecting..." : "Reject"}
-                </Button>
-                <Button 
-                  className="flex-1 bg-[#22c55e] hover:bg-[#16a34a] text-white h-12 text-base font-semibold border-none"
-                  disabled={isApproving || isRejecting}
-                  onClick={handleApprove}
-                >
-                  {isApproving ? "Approving..." : "Approve"}
-                </Button>
-              </div>
-            </PermissionGuard>
+            <div className="flex justify-between items-center text-sm font-bold text-gray-900">
+              <span>Total Cost</span>
+              <span className="text-[#3B7CED]">
+                {formatCurrency(getTotalCost())}
+              </span>
+            </div>
           </div>
-        </div>
+          <PermissionGuard module="project_request" entitlement="approve">
+            <div className="flex gap-3 pt-2">
+              <Button 
+                variant="outline" 
+                className="flex-1 border-red-500 text-red-500 hover:bg-red-50 hover:text-red-600 h-12 text-base font-semibold"
+                disabled={isApproving || isRejecting}
+                onClick={handleReject}
+              >
+                {isRejecting ? "Rejecting..." : "Reject"}
+              </Button>
+              <Button 
+                className="flex-1 bg-[#22c55e] hover:bg-[#16a34a] text-white h-12 text-base font-semibold border-none"
+                disabled={isApproving || isRejecting}
+                onClick={handleApprove}
+              >
+                {isApproving ? "Approving..." : "Approve"}
+              </Button>
+            </div>
+          </PermissionGuard>
+        </FormActionFooter>
       )}
 
       <StatusModal

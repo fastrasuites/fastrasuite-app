@@ -923,9 +923,7 @@ export function RequestForm<T extends Record<string, any>>({
                       !config.title?.toLowerCase().includes("petty cash") &&
                       !config.title?.toLowerCase().includes("subcontractor") && (
                         <div className="flex justify-between items-center">
-                          <span className="text-sm font-semibold text-gray-900">
-                            Cost Code
-                          </span>
+                       
                           <span className="text-sm text-gray-600 font-medium">
                             {selectedCostCode}
                           </span>
@@ -951,7 +949,10 @@ export function RequestForm<T extends Record<string, any>>({
 
               {/* Submit Button placed cleanly inside/below the last card */}
               {sIndex === config.sections.length - 1 && (
-                <PermissionGuard module="project_request" entitlement="create">
+                <PermissionGuard
+                  module="project_request"
+                  entitlement={config.title?.toLowerCase().includes("edit") ? "edit" : "create"}
+                >
                   <div className="pt-2">
                     <Button
                       type="button"
@@ -960,7 +961,13 @@ export function RequestForm<T extends Record<string, any>>({
                       onClick={handleSubmit(onSubmit, onInvalid)}
                       disabled={isSubmitting}
                     >
-                      {isSubmitting ? "Submitting..." : "Submit request"}
+                      {isSubmitting
+                        ? config.title?.toLowerCase().includes("edit")
+                          ? "Updating..."
+                          : "Submitting..."
+                        : config.title?.toLowerCase().includes("edit")
+                        ? "Update request"
+                        : "Submit request"}
                     </Button>
                   </div>
                 </PermissionGuard>

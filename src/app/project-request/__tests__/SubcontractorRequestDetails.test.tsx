@@ -17,17 +17,22 @@ jest.mock('next/navigation', () => ({
 }));
 
 jest.mock('@/api/subcontractorRequestApi', () => ({
+  ...jest.requireActual('@/api/subcontractorRequestApi'),
   useGetSubcontractorRequestQuery: jest.fn(),
   useDeleteSubcontractorRequestMutation: jest.fn(),
   useSubmitSubcontractorRequestMutation: jest.fn(),
+  useUpdateSubcontractorRequestMutation: jest.fn(),
+  usePatchSubcontractorRequestMutation: jest.fn(),
 }));
 
 jest.mock('@/api/invoice/vendorsApi', () => ({
+  ...jest.requireActual('@/api/invoice/vendorsApi'),
   useGetVendorByIdQuery: jest.fn(),
   useGetActiveVendorsQuery: jest.fn(),
 }));
 
 jest.mock('@/api/projectCostingApi', () => ({
+  ...jest.requireActual('@/api/projectCostingApi'),
   useGetProjectCostingProjectQuery: jest.fn(),
 }));
 

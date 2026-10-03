@@ -9,9 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
   useGetProjectRequestQuery,
-  usePatchProjectRequestMutation,
 } from "@/api/requests/projectRequestApi";
-import { useGetPettyCashRequestQuery } from "@/api/requests/pettyCashRequestApi";
+import {
+  useGetPettyCashRequestQuery,
+  usePatchPettyCashRequestMutation,
+} from "@/api/requests/pettyCashRequestApi";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
@@ -68,7 +70,7 @@ export default function EditPettyCashRequestPage() {
     skip: !effectiveProjectRequestId || effectiveProjectRequestId <= 0,
   });
 
-  const [patchProjectRequest] = usePatchProjectRequestMutation();
+  const [patchPettyCashRequest] = usePatchPettyCashRequestMutation();
 
   // Parse `detail` from the project request (it's either an object or a JSON string)
   const detail: any = useMemo(() => {
@@ -456,30 +458,19 @@ export default function EditPettyCashRequestPage() {
         return "00000000-0000-0000-0000-000000000000";
       };
 
-      const cleanDetail = { ...detail };
-      delete cleanDetail.cost_code;
-      delete cleanDetail.costCode;
-      delete cleanDetail.cost_code_details;
+      const targetPettyCashId = apiPettyCash?.id || detail?.id || id;
 
       const payload = {
         project: Number(data.project),
-        detail: {
-          ...cleanDetail,
-          project: Number(data.project),
-          phase: data.phase,
-          task: data.task,
-          wbs_element: ensureValidUUID(data.task),
-          activity: ensureValidUUID(data.task),
-          amount_requested: Number(data.amountRequested).toFixed(2),
-          purpose: data.purpose,
-          description: data.description || "",
-          notes: data.description || "",
-          justification_notes: data.description || "",
-        },
+        wbs_element: ensureValidUUID(data.task),
+        activity: ensureValidUUID(data.task),
+        amount_requested: Number(data.amountRequested).toFixed(2),
+        purpose: data.purpose,
+        description: data.description || "",
+        notes: data.description || "",
       };
 
-      const targetId = effectiveProjectRequestId > 0 ? effectiveProjectRequestId : id;
-      await patchProjectRequest({ id: targetId, data: payload }).unwrap();
+      await patchPettyCashRequest({ id: targetPettyCashId, data: payload }).unwrap();
     },
     successMessage: {
       title: "Request Updated",
@@ -496,7 +487,7 @@ export default function EditPettyCashRequestPage() {
     taskIdStr, defaultAvailableBudget,
     projectIdStr, resolvedPhaseId,
     amountRequestedVal, purposeVal, descriptionVal, notesVal,
-    detail, effectiveProjectRequestId, id, patchProjectRequest,
+    detail, apiPettyCash, id, patchPettyCashRequest,
   ]);
 
   const isLoading = isPettyCashLoading || (isProjectLoading && effectiveProjectRequestId > 0);

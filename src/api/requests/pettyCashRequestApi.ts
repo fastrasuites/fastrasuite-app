@@ -95,6 +95,17 @@ const getTenantBaseUrl = (state: RootState): string => {
   return `${protocol}://${tenantSchemaName}.${apiDomain}`;
 };
 
+export interface UpdatePettyCashRequest {
+  project?: number;
+  wbs_element?: string;
+  activity?: string;
+  amount_requested?: string;
+  purpose?: string;
+  description?: string;
+  notes?: string;
+  [key: string]: any;
+}
+
 export const pettyCashRequestApi = createApi({
   reducerPath: "pettyCashRequestApi",
   tagTypes: ["PettyCashRequest"],
@@ -183,6 +194,36 @@ export const pettyCashRequestApi = createApi({
       }),
       invalidatesTags: ["PettyCashRequest", { type: "PettyCashRequest", id: "LIST" }],
     }),
+    updatePettyCashRequest: builder.mutation<
+      PettyCashRequest,
+      { id: number | string; data: UpdatePettyCashRequest }
+    >({
+      query: ({ id, data }) => ({
+        url: `/project-requests/petty-cash/${id}/`,
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        "PettyCashRequest",
+        { type: "PettyCashRequest", id },
+        { type: "PettyCashRequest", id: "LIST" },
+      ],
+    }),
+    patchPettyCashRequest: builder.mutation<
+      PettyCashRequest,
+      { id: number | string; data: Partial<UpdatePettyCashRequest> }
+    >({
+      query: ({ id, data }) => ({
+        url: `/project-requests/petty-cash/${id}/`,
+        method: "PATCH",
+        body: data,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        "PettyCashRequest",
+        { type: "PettyCashRequest", id },
+        { type: "PettyCashRequest", id: "LIST" },
+      ],
+    }),
   }),
 });
 
@@ -190,4 +231,6 @@ export const {
   useGetPettyCashRequestsQuery,
   useGetPettyCashRequestQuery,
   useCreatePettyCashRequestMutation,
+  useUpdatePettyCashRequestMutation,
+  usePatchPettyCashRequestMutation,
 } = pettyCashRequestApi;

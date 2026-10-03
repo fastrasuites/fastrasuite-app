@@ -198,7 +198,7 @@ export default function ProjectDashboardPage() {
     );
   }
 
-  const { data: budgetAdjustments, isLoading: isLoadingAdjustments } = useGetBudgetAdjustmentsQuery(
+  const { data: budgetAdjustments, isLoading: isLoadingAdjustments, refetch: refetchAdjustments } = useGetBudgetAdjustmentsQuery(
     Number(id),
     { skip: !id }
   );
@@ -2663,8 +2663,13 @@ export default function ProjectDashboardPage() {
         onClose={() => {
           setIsBudgetAdjustmentModalOpen(false);
           refetch();
+          refetchAdjustments?.();
         }}
         project={project}
+        budgetAdjustments={budgetAdjustments}
+        actualSpend={actualSpend}
+        committedSpend={committed}
+        remainingBudget={remaining}
       />
 
       <AddDocumentModal

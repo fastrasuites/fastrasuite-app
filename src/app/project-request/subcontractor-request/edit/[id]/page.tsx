@@ -2,20 +2,22 @@
 
 import React, { useMemo } from "react";
 import { z } from "zod";
+import Link from "next/link";
 import { RequestForm } from "@/components/requests/RequestForm";
 import { RequestFormConfig } from "@/components/requests/types";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { ExternalLink, Loader2 } from "lucide-react";
 import { 
   useGetSubcontractorRequestQuery,
-  useUpdateSubcontractorRequestMutation 
+  useUpdateSubcontractorRequestMutation,
+  usePatchSubcontractorRequestMutation,
 } from "@/api/subcontractorRequestApi";
 import { useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useParams, useRouter } from "next/navigation";
 import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
-import { Loader2 } from "lucide-react";
 
 const milestoneSchema = z.object({
   name: z.string().min(1, "Milestone name is required"),
@@ -36,7 +38,6 @@ const formSchema = z.object({
   payment_type: z.enum(["lump_sum", "milestone"], {
     message: "Please select a payment type",
   }),
-  payment_terms: z.string().min(1, "Payment terms are required"),
   milestones: z.array(milestoneSchema).optional(),
   phase: z.string().min(1, "Please select a phase"),
   task: z.string().min(1, "Please select an activity"),
@@ -69,28 +70,77 @@ type FormValues = z.infer<typeof formSchema>;
 export default function EditSubcontractorRequestPage() {
   const router = useRouter();
   const params = useParams();
-  const id = Number(params.id);
+  const id = Number(params?.id);
 
   const { data: request, isLoading: isLoadingRequest } = useGetSubcontractorRequestQuery(id, {
-    skip: !id,
+    skip: !id || isNaN(id),
   });
 
   const [updateRequest, { isLoading: isSubmitting }] = useUpdateSubcontractorRequestMutation();
-  const { data: vendors = [], isLoading: isLoadingVendors } = useGetActiveVendorsQuery();
+  const [patchRequest] = usePatchSubcontractorRequestMutation();
+
+  const {
+    data: vendors = [],
+    isLoading: isLoadingVendors,
+  } = useGetActiveVendorsQuery(undefined, {
+    refetchOnFocus: true,
+    refetchOnMountOrArgChange: true,
+  });
+
   const loggedInUserName = useCurrentUserName();
 
-  const detail = useMemo(() => (request as any)?.detail || (request as any) || {}, [request]);
-  const projectRequest = useMemo(() => (request as any)?.project_request || (request as any) || {}, [request]);
+  // Safely parse detail if stringified or object
+  const parsedDetail = useMemo(() => {
+    let d = (request as any)?.detail;
+    if (typeof d === "string") {
+      try {
+        d = JSON.parse(d);
+      } catch {
+        d = null;
+      }
+    }
+    return d && typeof d === "object" ? d : {};
+  }, [request]);
 
+  // Safely parse project_request if stringified or object
+  const parsedProjectRequest = useMemo(() => {
+    let pr = (request as any)?.project_request;
+    if (typeof pr === "string") {
+      try {
+        pr = JSON.parse(pr);
+      } catch {
+        pr = null;
+      }
+    }
+    return pr && typeof pr === "object" ? pr : {};
+  }, [request]);
+
+  // Safely parse project_request.detail if present
+  const parsedProjectRequestDetail = useMemo(() => {
+    let prd = parsedProjectRequest?.detail;
+    if (typeof prd === "string") {
+      try {
+        prd = JSON.parse(prd);
+      } catch {
+        prd = null;
+      }
+    }
+    return prd && typeof prd === "object" ? prd : {};
+  }, [parsedProjectRequest]);
+
+  // Project identification
   const rawProjectId =
-    detail?.project_details?.id ??
-    detail?.project?.id ??
-    detail?.project ??
+    parsedDetail?.project_details?.id ??
+    parsedDetail?.project?.id ??
+    parsedDetail?.project ??
     (request as any)?.project_details?.id ??
     (request as any)?.project?.id ??
     (request as any)?.project ??
-    projectRequest?.project_details?.id ??
-    projectRequest?.project;
+    parsedProjectRequest?.project_details?.id ??
+    parsedProjectRequest?.project?.id ??
+    parsedProjectRequest?.project ??
+    parsedProjectRequestDetail?.project_details?.id ??
+    parsedProjectRequestDetail?.project;
   const projectIdStr = rawProjectId !== undefined && rawProjectId !== null ? String(rawProjectId) : "";
 
   const { data: projectCosting } = useGetProjectCostingProjectQuery(
@@ -98,30 +148,40 @@ export default function EditSubcontractorRequestPage() {
     { skip: !projectIdStr || isNaN(Number(projectIdStr)) }
   );
 
+  // Activity / Task identification
   const rawTaskId =
-    detail?.activity_details?.id ??
-    detail?.activity?.id ??
-    detail?.activity ??
-    detail?.activity_id ??
-    detail?.task?.id ??
-    detail?.task ??
-    detail?.task_id ??
+    parsedDetail?.activity_details?.id ??
+    parsedDetail?.activity?.id ??
+    parsedDetail?.activity ??
+    parsedDetail?.activity_id ??
+    parsedDetail?.task?.id ??
+    parsedDetail?.task ??
+    parsedDetail?.task_id ??
     (request as any)?.activity_details?.id ??
     (request as any)?.activity?.id ??
     (request as any)?.activity ??
-    (request as any)?.activity_id;
+    (request as any)?.activity_id ??
+    parsedProjectRequest?.activity_details?.id ??
+    parsedProjectRequest?.activity ??
+    parsedProjectRequestDetail?.activity_details?.id ??
+    parsedProjectRequestDetail?.activity;
   const taskIdStr = rawTaskId !== undefined && rawTaskId !== null ? String(rawTaskId) : "";
 
+  // Phase identification
   const resolvedPhaseId = useMemo(() => {
     const rawPhase =
-      detail?.phase_details?.id ??
-      detail?.phase?.id ??
-      detail?.phase ??
-      detail?.phase_id ??
+      parsedDetail?.phase_details?.id ??
+      parsedDetail?.phase?.id ??
+      parsedDetail?.phase ??
+      parsedDetail?.phase_id ??
       (request as any)?.phase_details?.id ??
       (request as any)?.phase?.id ??
       (request as any)?.phase ??
-      (request as any)?.phase_id;
+      (request as any)?.phase_id ??
+      parsedProjectRequest?.phase_details?.id ??
+      parsedProjectRequest?.phase ??
+      parsedProjectRequestDetail?.phase_details?.id ??
+      parsedProjectRequestDetail?.phase;
 
     if (rawPhase !== undefined && rawPhase !== null && String(rawPhase).trim() !== "") {
       return String(rawPhase);
@@ -145,10 +205,14 @@ export default function EditSubcontractorRequestPage() {
       }
     }
     return "";
-  }, [detail, request, projectCosting, taskIdStr]);
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail, projectCosting, taskIdStr]);
 
-  const rawBudget = (request as any)?.available_budget ?? detail?.available_budget;
-  const reqBudget = (rawBudget !== undefined && rawBudget !== null && rawBudget !== "") ? Number(rawBudget) : 0;
+  // Budget calculations
+  const rawBudget =
+    (request as any)?.available_budget ??
+    parsedDetail?.available_budget ??
+    parsedProjectRequest?.available_budget;
+  const reqBudget = rawBudget !== undefined && rawBudget !== null && rawBudget !== "" ? Number(rawBudget) : 0;
 
   const budgetFromCosting = useMemo(() => {
     if (!projectCosting) return 0;
@@ -193,12 +257,19 @@ export default function EditSubcontractorRequestPage() {
 
   const defaultAvailableBudget = reqBudget > 0 ? reqBudget : budgetFromCosting;
 
-  const projectName =
-    detail?.project_details?.name ||
-    (request as any)?.project_details?.name ||
-    projectRequest?.project_details?.name ||
-    projectCosting?.name ||
-    (projectIdStr ? `Project #${projectIdStr}` : "");
+  // Project display name & options
+  const projectName = useMemo(() => {
+    return (
+      parsedDetail?.project_details?.name ||
+      (request as any)?.project_details?.name ||
+      parsedProjectRequest?.project_details?.name ||
+      parsedProjectRequestDetail?.project_details?.name ||
+      (request as any)?.project_name ||
+      parsedDetail?.project_name ||
+      projectCosting?.name ||
+      (projectIdStr ? `Project #${projectIdStr}` : "")
+    );
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail, projectCosting, projectIdStr]);
 
   const projectOptions = useMemo(() => {
     if (projectIdStr) {
@@ -207,23 +278,46 @@ export default function EditSubcontractorRequestPage() {
     return [];
   }, [projectIdStr, projectName]);
 
+  // Vendor identification & options
   const rawVendorId =
-    detail?.vendor_details?.id ??
-    detail?.vendor?.id ??
-    detail?.vendor ??
+    parsedDetail?.vendor_details?.id ??
+    parsedDetail?.vendor?.id ??
+    parsedDetail?.vendor ??
+    parsedDetail?.vendor_id ??
     (request as any)?.vendor_details?.id ??
     (request as any)?.vendor?.id ??
     (request as any)?.vendor ??
     (request as any)?.vendor_id ??
-    detail?.vendor_id;
+    parsedProjectRequest?.vendor_details?.id ??
+    parsedProjectRequest?.vendor ??
+    parsedProjectRequestDetail?.vendor_details?.id ??
+    parsedProjectRequestDetail?.vendor;
   const vendorIdStr = rawVendorId !== undefined && rawVendorId !== null ? String(rawVendorId) : "";
 
-  const existingVendorName =
-    detail?.vendor_details?.vendor_name ||
-    detail?.vendor_name ||
-    (request as any)?.vendor_details?.vendor_name ||
-    (request as any)?.vendor_name ||
-    (vendorIdStr ? `Vendor #${vendorIdStr}` : "");
+  const existingVendorName = useMemo(() => {
+    const vName =
+      parsedDetail?.vendor_details?.vendor_name ||
+      (request as any)?.vendor_details?.vendor_name ||
+      parsedProjectRequest?.vendor_details?.vendor_name ||
+      parsedProjectRequestDetail?.vendor_details?.vendor_name ||
+      parsedDetail?.vendor_name ||
+      (request as any)?.vendor_name ||
+      parsedDetail?.subcontractor_name ||
+      (request as any)?.subcontractor_name ||
+      parsedDetail?.contractor_name ||
+      (request as any)?.contractor_name;
+
+    if (vName && String(vName).trim() !== "") {
+      return String(vName).trim();
+    }
+
+    if (vendorIdStr && vendors.length > 0) {
+      const found = vendors.find((v) => String(v.id) === vendorIdStr);
+      if (found) return found.vendor_name;
+    }
+
+    return vendorIdStr ? `Vendor #${vendorIdStr}` : "";
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail, vendorIdStr, vendors]);
 
   const vendorOptions = useMemo(() => {
     const opts = vendors.map((vendor) => ({
@@ -239,11 +333,15 @@ export default function EditSubcontractorRequestPage() {
     return opts;
   }, [vendors, vendorIdStr, existingVendorName]);
 
+  const hasNoVendors = !isLoadingVendors && vendors.length === 0;
+
+  // Phase options
   const phaseName = useMemo(() => {
-    if (detail?.phase_details?.name) return detail.phase_details.name;
-    if (detail?.phase_name) return detail.phase_name;
+    if (parsedDetail?.phase_details?.name) return parsedDetail.phase_details.name;
+    if (parsedDetail?.phase_name) return parsedDetail.phase_name;
     if ((request as any)?.phase_details?.name) return (request as any).phase_details.name;
     if ((request as any)?.phase_name) return (request as any).phase_name;
+    if (parsedProjectRequest?.phase_details?.name) return parsedProjectRequest.phase_details.name;
     if (projectCosting && resolvedPhaseId) {
       const phasesArr = Array.isArray(projectCosting.phases)
         ? projectCosting.phases
@@ -254,7 +352,7 @@ export default function EditSubcontractorRequestPage() {
       if (found) return found.name || found.phase_name || "";
     }
     return resolvedPhaseId ? `Phase ${resolvedPhaseId}` : "";
-  }, [detail, request, projectCosting, resolvedPhaseId]);
+  }, [parsedDetail, request, parsedProjectRequest, projectCosting, resolvedPhaseId]);
 
   const phaseOptions = useMemo(() => {
     if (resolvedPhaseId) {
@@ -263,17 +361,22 @@ export default function EditSubcontractorRequestPage() {
     return [];
   }, [resolvedPhaseId, phaseName]);
 
+  // Task / Activity options
   const taskName = useMemo(() => {
-    if (detail?.activity_details?.name) {
-      const sn = detail.activity_details.serial_number;
-      return sn !== undefined && sn !== null ? `${sn} - ${detail.activity_details.name}` : detail.activity_details.name;
+    if (parsedDetail?.activity_details?.name) {
+      const sn = parsedDetail.activity_details.serial_number;
+      return sn !== undefined && sn !== null ? `${sn} - ${parsedDetail.activity_details.name}` : parsedDetail.activity_details.name;
     }
-    if (detail?.task_name) return detail.task_name;
+    if (parsedDetail?.task_name) return parsedDetail.task_name;
     if ((request as any)?.activity_details?.name) {
       const sn = (request as any).activity_details.serial_number;
       return sn !== undefined && sn !== null ? `${sn} - ${(request as any).activity_details.name}` : (request as any).activity_details.name;
     }
     if ((request as any)?.task_name) return (request as any).task_name;
+    if (parsedProjectRequest?.activity_details?.name) {
+      const sn = parsedProjectRequest.activity_details.serial_number;
+      return sn !== undefined && sn !== null ? `${sn} - ${parsedProjectRequest.activity_details.name}` : parsedProjectRequest.activity_details.name;
+    }
     if (projectCosting && taskIdStr) {
       const phasesArr = Array.isArray(projectCosting.phases)
         ? projectCosting.phases
@@ -295,7 +398,7 @@ export default function EditSubcontractorRequestPage() {
       }
     }
     return taskIdStr ? `Activity ${taskIdStr}` : "";
-  }, [detail, request, projectCosting, taskIdStr]);
+  }, [parsedDetail, request, parsedProjectRequest, projectCosting, taskIdStr]);
 
   const taskOptions = useMemo(() => {
     if (taskIdStr) {
@@ -310,37 +413,172 @@ export default function EditSubcontractorRequestPage() {
     return [];
   }, [taskIdStr, taskName, defaultAvailableBudget]);
 
+  // Scope of Work
+  const resolvedScopeOfWork = useMemo(() => {
+    return (
+      parsedDetail.scope_of_work ??
+      parsedDetail.service_type ??
+      (request as any)?.scope_of_work ??
+      (request as any)?.service_type ??
+      parsedProjectRequest?.scope_of_work ??
+      parsedProjectRequestDetail?.scope_of_work ??
+      ""
+    );
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail]);
+
+  // Start Date & End Date
+  const startDateStr = useMemo(() => {
+    const raw =
+      parsedDetail.start_date ||
+      (request as any)?.start_date ||
+      parsedProjectRequest?.start_date ||
+      parsedProjectRequestDetail?.start_date;
+    if (!raw) return "";
+    const s = String(raw).trim();
+    if (s.includes("T")) return s.split("T")[0];
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? s : d.toISOString().split("T")[0];
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail]);
+
+  const endDateStr = useMemo(() => {
+    const raw =
+      parsedDetail.end_date ||
+      (request as any)?.end_date ||
+      parsedProjectRequest?.end_date ||
+      parsedProjectRequestDetail?.end_date;
+    if (!raw) return "";
+    const s = String(raw).trim();
+    if (s.includes("T")) return s.split("T")[0];
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? s : d.toISOString().split("T")[0];
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail]);
+
+  // Contract Value
+  const contractValueStr = useMemo(() => {
+    const raw =
+      parsedDetail.contract_value ??
+      (request as any)?.contract_value ??
+      parsedDetail.estimated_cost ??
+      (request as any)?.estimated_cost ??
+      parsedDetail.amount ??
+      (request as any)?.amount ??
+      parsedProjectRequest?.request_amount ??
+      (request as any)?.request_amount ??
+      parsedProjectRequestDetail?.contract_value ??
+      "";
+    return raw !== undefined && raw !== null && raw !== "" ? String(raw) : "";
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail]);
+
+  // Payment Type
+  const paymentTypeVal: "lump_sum" | "milestone" = useMemo(() => {
+    const pt =
+      parsedDetail.payment_type ||
+      (request as any)?.payment_type ||
+      parsedProjectRequest?.payment_type ||
+      parsedProjectRequestDetail?.payment_type;
+    return pt === "milestone" || pt === "milestone_based" ? "milestone" : "lump_sum";
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail]);
+
+  // Milestones
+  const milestonesVal = useMemo(() => {
+    let raw =
+      parsedDetail?.milestones ??
+      (request as any)?.milestones ??
+      parsedProjectRequest?.milestones ??
+      parsedProjectRequestDetail?.milestones ??
+      [];
+    if (typeof raw === "string") {
+      try {
+        raw = JSON.parse(raw);
+      } catch {
+        raw = [];
+      }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.map((m: any) => ({
+      name: m.name || m.title || m.milestone_name || "",
+      percentage:
+        m.percentage !== undefined && m.percentage !== null && m.percentage !== ""
+          ? Number(m.percentage) || m.percentage
+          : "",
+      completion_criteria: m.completion_criteria || m.criteria || m.description || "",
+    }));
+  }, [parsedDetail, request, parsedProjectRequest, parsedProjectRequestDetail]);
+
+  // Justification / Notes
+  const justificationNotesStr = useMemo(() => {
+    const raw =
+      parsedDetail.justification_notes ??
+      (request as any)?.justification_notes ??
+      parsedDetail.notes ??
+      (request as any)?.notes ??
+      parsedDetail.description ??
+      (request as any)?.description ??
+      parsedProjectRequest?.justification_notes ??
+      "";
+    return raw === "N/A" || raw === "n/a" ? "" : String(raw);
+  }, [parsedDetail, request, parsedProjectRequest]);
+
+  // Header display details
   const rawCreatedAt =
     (request as any)?.created_at ||
-    detail?.created_at ||
-    projectRequest?.created_at;
+    parsedDetail?.created_at ||
+    parsedProjectRequest?.created_at;
 
   const requestDate = useMemo(() => {
-    if (!rawCreatedAt) return "";
-    return new Date(rawCreatedAt).toLocaleDateString("en-GB", {
+    if (!rawCreatedAt) {
+      return new Date().toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    }
+    const d = new Date(rawCreatedAt);
+    if (isNaN(d.getTime())) {
+      return new Date().toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    }
+    return d.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "short",
       year: "numeric",
     });
   }, [rawCreatedAt]);
 
-  const requesterName =
-    (request as any)?.created_by_details?.first_name &&
-    (request as any)?.created_by_details?.last_name
-      ? `${(request as any).created_by_details.first_name} ${(request as any).created_by_details.last_name}`.trim()
-      : (request as any)?.created_by_details?.first_name ||
-        detail?.created_by_details?.first_name ||
-        projectRequest?.created_by_details?.first_name ||
-        detail?.created_by_name ||
-        (request as any)?.created_by_name ||
-        loggedInUserName ||
-        "Requester";
+  const requesterName = useMemo(() => {
+    const userObj =
+      (request as any)?.created_by_details ||
+      parsedDetail?.created_by_details ||
+      parsedProjectRequest?.created_by_details ||
+      parsedProjectRequestDetail?.created_by_details;
 
-  const requestId =
-    ((request as any)?.reference_id && String((request as any).reference_id).trim()) ||
-    (detail?.reference_id && String(detail.reference_id).trim()) ||
-    (projectRequest?.reference_id && String(projectRequest.reference_id).trim()) ||
-    (request ? `SUB${String(request.id).padStart(4, "0")}` : "SUB0001");
+    if (userObj?.first_name && userObj?.last_name) {
+      return `${userObj.first_name} ${userObj.last_name}`.trim();
+    }
+    return (
+      userObj?.first_name ||
+      userObj?.username ||
+      (request as any)?.created_by_name ||
+      parsedDetail?.created_by_name ||
+      parsedProjectRequest?.created_by_name ||
+      loggedInUserName ||
+      "Requester"
+    );
+  }, [request, parsedDetail, parsedProjectRequest, parsedProjectRequestDetail, loggedInUserName]);
+
+  const requestId = useMemo(() => {
+    const ref =
+      ((request as any)?.reference_id && String((request as any).reference_id).trim()) ||
+      (parsedDetail?.reference_id && String(parsedDetail.reference_id).trim()) ||
+      (parsedProjectRequest?.reference_id && String(parsedProjectRequest.reference_id).trim()) ||
+      (parsedProjectRequestDetail?.reference_id && String(parsedProjectRequestDetail.reference_id).trim());
+    if (ref) return ref;
+    const fallbackId = (request as any)?.id || id;
+    return fallbackId ? `SUB${String(fallbackId).padStart(4, "0")}` : "SUB0001";
+  }, [request, parsedDetail, parsedProjectRequest, parsedProjectRequestDetail, id]);
 
   const config: RequestFormConfig<FormValues> = useMemo(() => ({
     title: "Edit Subcontractor Request",
@@ -382,8 +620,23 @@ export default function EditSubcontractorRequestPage() {
             name: "vendor",
             label: "Subcontractor Name",
             type: "select",
-            placeholder: isLoadingVendors ? "Loading subcontractors..." : "Select subcontractor",
+            placeholder: isLoadingVendors
+              ? "Loading subcontractors..."
+              : hasNoVendors
+              ? "No vendors available (Create Vendor first)"
+              : "Select subcontractor",
             options: vendorOptions,
+            disabled: hasNoVendors || isLoadingVendors,
+            action: hasNoVendors ? (
+              <Link
+                href="/invoice/settings?tab=vendor"
+                className="text-xs text-[#3B7CED] hover:underline inline-flex items-center gap-1 font-medium"
+              >
+                <span>Create Vendor</span>
+                <ExternalLink className="w-3 h-3" />
+              </Link>
+            ) : undefined,
+            emptyMessage: "No vendors found. Please create a vendor in Invoice Settings > Vendor tab.",
           },
           {
             name: "scope_of_work",
@@ -431,12 +684,6 @@ export default function EditSubcontractorRequestPage() {
             label: "Milestones",
             type: "milestones",
             visibleIf: { field: "payment_type", value: "milestone" },
-          },
-          {
-            name: "payment_terms",
-            label: "Payment Terms",
-            type: "text",
-            placeholder: "Enter payment terms",
           },
         ],
       },
@@ -507,52 +754,15 @@ export default function EditSubcontractorRequestPage() {
     defaultValues: {
       project: projectIdStr,
       vendor: vendorIdStr,
-      scope_of_work:
-        detail.scope_of_work ??
-        detail.service_type ??
-        (request as any)?.scope_of_work ??
-        (request as any)?.service_type ??
-        "",
-      start_date: detail.start_date
-        ? String(detail.start_date).split("T")[0]
-        : (request as any)?.start_date
-        ? String((request as any).start_date).split("T")[0]
-        : "",
-      end_date: detail.end_date
-        ? String(detail.end_date).split("T")[0]
-        : (request as any)?.end_date
-        ? String((request as any).end_date).split("T")[0]
-        : "",
-      contract_value: String(
-        detail.contract_value ??
-        detail.estimated_cost ??
-        detail.amount ??
-        (request as any)?.contract_value ??
-        projectRequest?.request_amount ??
-        (request as any)?.request_amount ??
-        ""
-      ),
-      payment_type:
-        detail.payment_type === "milestone" ||
-        detail.payment_type === "milestone_based" ||
-        (request as any)?.payment_type === "milestone" ||
-        (request as any)?.payment_type === "milestone_based"
-          ? "milestone"
-          : "lump_sum",
-      payment_terms: detail.payment_terms ?? (request as any)?.payment_terms ?? "",
-      milestones: Array.isArray(detail.milestones)
-        ? detail.milestones
-        : Array.isArray((request as any)?.milestones)
-        ? (request as any).milestones
-        : [],
+      scope_of_work: resolvedScopeOfWork,
+      start_date: startDateStr,
+      end_date: endDateStr,
+      contract_value: contractValueStr,
+      payment_type: paymentTypeVal,
+      milestones: milestonesVal,
       phase: resolvedPhaseId,
       task: taskIdStr,
-      justification_notes:
-        detail.justification_notes ??
-        detail.notes ??
-        (request as any)?.justification_notes ??
-        (request as any)?.notes ??
-        "",
+      justification_notes: justificationNotesStr,
     },
     calculateProjectedCost: (data: FormValues) => {
       return Number(data.contract_value || 0);
@@ -560,6 +770,7 @@ export default function EditSubcontractorRequestPage() {
     budgetConfig: {
       projectField: "project",
       wbsField: "task",
+      costCode: "",
     },
     defaultBudget: defaultAvailableBudget,
     onSubmit: async (data) => {
@@ -583,7 +794,6 @@ export default function EditSubcontractorRequestPage() {
           scope_of_work: data.scope_of_work,
           payment_type: data.payment_type,
           contract_value: data.contract_value,
-          payment_terms: data.payment_terms,
           start_date: data.start_date,
           end_date: data.end_date,
           justification_notes: data.justification_notes?.trim() || "N/A",
@@ -598,8 +808,18 @@ export default function EditSubcontractorRequestPage() {
             : [],
         };
 
-        const targetId = (request as any)?.id || id;
-        await updateRequest({ id: targetId, body: payload }).unwrap();
+        const targetId =
+          (request as any)?.detail?.id ||
+          (request as any)?.subcontractor_request_id ||
+          (request as any)?.id ||
+          id;
+
+        try {
+          await updateRequest({ id: targetId, body: payload }).unwrap();
+        } catch (updateErr) {
+          console.warn("PUT update failed, attempting PATCH fallback:", updateErr);
+          await patchRequest({ id: targetId, body: payload }).unwrap();
+        }
       } catch (error) {
         console.error("Failed to update subcontractor request:", error);
         throw error;
@@ -620,6 +840,7 @@ export default function EditSubcontractorRequestPage() {
     requestDate,
     projectOptions,
     isLoadingVendors,
+    hasNoVendors,
     vendorOptions,
     phaseOptions,
     taskOptions,
@@ -627,12 +848,18 @@ export default function EditSubcontractorRequestPage() {
     defaultAvailableBudget,
     projectIdStr,
     vendorIdStr,
-    detail,
-    request,
-    projectRequest,
+    resolvedScopeOfWork,
+    startDateStr,
+    endDateStr,
+    contractValueStr,
+    paymentTypeVal,
+    milestonesVal,
     resolvedPhaseId,
+    justificationNotesStr,
     id,
+    request,
     updateRequest,
+    patchRequest,
   ]);
 
   if (isLoadingRequest || !request) {

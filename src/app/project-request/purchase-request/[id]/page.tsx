@@ -13,6 +13,7 @@ import {
   useSubmitProjectPurchaseRequestMutation,
 } from "@/api/requests/projectPurchaseRequestApi";
 import { StatusModal, useStatusModal, extractErrorMessage } from "@/components/shared/StatusModal";
+import { FormActionFooter } from "@/components/shared/FormActionFooter";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { motion } from "framer-motion";
@@ -65,18 +66,24 @@ const mapApiRequestToUi = (req: any): PurchaseRequestItem => {
   let parsedNotes = rawNotes;
 
   if (rawNotes && typeof rawNotes === "string" && rawNotes.includes(" | ")) {
-    const notesMatch = rawNotes.match(/Notes:\s*(.*)/);
-    if (notesMatch) {
-      parsedNotes = notesMatch[1];
-    } else {
-      const parts = rawNotes.split(" | ");
-      parts.forEach((part: string) => {
-        if (part.startsWith("Project: ")) parsedProject = part.replace("Project: ", "");
-        if (part.startsWith("Phase: ")) parsedPhase = part.replace("Phase: ", "");
-        if (part.startsWith("Task: ")) parsedTask = part.replace("Task: ", "");
-        if (part.startsWith("Activity: ")) parsedTask = part.replace("Activity: ", "");
-        if (part.startsWith("Notes: ")) parsedNotes = part.replace("Notes: ", "");
-      });
+    const parts = rawNotes.split(" | ");
+    let extractedNote = "";
+    parts.forEach((part: string) => {
+      if (part.startsWith("Project: ")) parsedProject = part.replace("Project: ", "").trim();
+      if (part.startsWith("Phase: ")) parsedPhase = part.replace("Phase: ", "").trim();
+      if (part.startsWith("Task: ")) parsedTask = part.replace("Task: ", "").trim();
+      if (part.startsWith("Activity: ")) parsedTask = part.replace("Activity: ", "").trim();
+      if (/^Notes?:/i.test(part)) {
+        extractedNote = part.replace(/^Notes?:\s*/i, "").trim();
+      }
+    });
+    parsedNotes = extractedNote;
+  }
+
+  if (typeof parsedNotes === "string") {
+    parsedNotes = parsedNotes.trim();
+    if (parsedNotes === "." || /^Notes?:\s*\.?$/i.test(parsedNotes)) {
+      parsedNotes = "";
     }
   }
 
@@ -675,42 +682,45 @@ export default function PurchaseRequestDetailPage() {
 
         {/* Floating Bottom Action Bar for Draft/Editable requests */}
         {(canEdit || canDelete || canSubmit) && (
-          <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 p-3.5 z-40 shadow-lg">
-            <div className="max-w-[430px] mx-auto flex items-center justify-between gap-3">
-              <div className="w-full flex items-center justify-end gap-2.5">
-                {canDelete && (
-                  <Button
-                    variant="outline"
-                    onClick={handleDelete}
-                    disabled={isDeleting}
-                    className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
-                  >
-                    <Trash2 size={15} /> {isDeleting ? "Deleting..." : "Delete"}
-                  </Button>
-                )}
+          <FormActionFooter
+            maxWidth="max-w-[430px]"
+            zIndex="z-40"
+            className="bg-white/95 backdrop-blur-sm border-t border-gray-200 p-3.5 shadow-lg"
+            containerClassName="flex items-center justify-between gap-3"
+          >
+            <div className="w-full flex items-center justify-end gap-2.5">
+              {canDelete && (
+                <Button
+                  variant="outline"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                  className="h-10 px-3.5 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50 rounded-lg gap-1.5"
+                >
+                  <Trash2 size={15} /> {isDeleting ? "Deleting..." : "Delete"}
+                </Button>
+              )}
 
-                {canEdit && (
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push(`/project-request/purchase-request/${request.id}/edit`)}
-                    className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
-                  >
-                    <Edit3 size={15} /> Edit
-                  </Button>
-                )}
+              {canEdit && (
+                <Button
+                  variant="outline"
+                  onClick={() => router.push(`/project-request/purchase-request/${request.id}/edit`)}
+                  className="h-10 px-4 text-xs font-semibold border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg gap-1.5"
+                >
+                  <Edit3 size={15} /> Edit
+                </Button>
+              )}
 
-                {canSubmit && (
-                  <Button
-                    disabled={isSubmitting || isUpdating}
-                    onClick={() => handleStatusChange("pending")}
-                    className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
-                  >
-                    <Send size={14} /> Submit
-                  </Button>
-                )}
-              </div>
+              {canSubmit && (
+                <Button
+                  disabled={isSubmitting || isUpdating}
+                  onClick={() => handleStatusChange("pending")}
+                  className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
+                >
+                  <Send size={14} /> Submit
+                </Button>
+              )}
             </div>
-          </div>
+          </FormActionFooter>
         )}
 
         {/* Status Modal */}

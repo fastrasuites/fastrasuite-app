@@ -22,13 +22,18 @@ import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { 
   useCreateBudgetAdjustmentMutation,
   useGetProjectSettingsQuery,
-  useUpdateProjectSettingsMutation 
+  useUpdateProjectSettingsMutation,
+  useGetBudgetAdjustmentsQuery,
 } from "@/api/projectCostingApi";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   project?: any;
+  budgetAdjustments?: any[];
+  actualSpend?: number;
+  committedSpend?: number;
+  remainingBudget?: number;
 }
 
 interface AdjustmentLine {
@@ -41,19 +46,48 @@ interface AdjustmentLine {
   phaseName: string;
   direction: "INCREASE" | "DECREASE";
   currentAmount?: number;
+  remainingAmount?: number;
   quantity: number;
   rate: number;
   amount: number;
   reason?: string;
 }
 
-export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
+export function AddBudgetAdjustmentModal({ 
+  isOpen, 
+  onClose, 
+  project,
+  budgetAdjustments: propBudgetAdjustments,
+  actualSpend: propActualSpend,
+  committedSpend: propCommittedSpend,
+  remainingBudget: propRemainingBudget,
+}: Props) {
   const [activeTab, setActiveTab] = useState<"existing" | "new">("existing");
   
   // Modals & API
   const statusModal = useStatusModal();
   const [createBudgetAdjustment, { isLoading: isSubmitting }] = useCreateBudgetAdjustmentMutation();
   
+  // Budget adjustments query if not provided via props
+  const { data: fetchedAdjustments } = useGetBudgetAdjustmentsQuery(
+    project?.id,
+    { skip: !project?.id || !isOpen || (Array.isArray(propBudgetAdjustments) && propBudgetAdjustments.length > 0) }
+  );
+
+  const rawAdjustments = (Array.isArray(propBudgetAdjustments) && propBudgetAdjustments.length > 0)
+    ? propBudgetAdjustments
+    : fetchedAdjustments || [];
+
+  const parsedAdjustments = (rawAdjustments && ((rawAdjustments as any).data || (rawAdjustments as any).results)) || rawAdjustments || [];
+  const approvedAdjustments = Array.isArray(parsedAdjustments)
+    ? parsedAdjustments.filter((a: any) => ["APPROVED", "COMPLETED"].includes(a.status?.toUpperCase()))
+    : [];
+
+  const totalApprovedAdjustment = approvedAdjustments.reduce(
+    (acc: number, a: any) => acc + Number(a.total_adjustment || a.amount || 0),
+    0
+  );
+
   // Project settings query & mutation
   const { data: projectSettings, refetch: refetchSettings } = useGetProjectSettingsQuery(
     project?.id,
@@ -63,6 +97,7 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
 
   // State for lines
   const [adjustmentLines, setAdjustmentLines] = useState<AdjustmentLine[]>([]);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   
   // Form State
   const [selectedActivity, setSelectedActivity] = useState("");
@@ -104,6 +139,40 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
                   : Number(act.quantity || 1) * Number(act.rate || 0)
               );
               phasesTotalSum += actAmt;
+
+              let actApprovedRevision = 0;
+              if (act.approved_revision !== undefined && act.approved_revision !== null) {
+                actApprovedRevision = Number(act.approved_revision);
+              } else if (act.approved_adjustment !== undefined && act.approved_adjustment !== null) {
+                actApprovedRevision = Number(act.approved_adjustment);
+              } else if (approvedAdjustments.length > 0) {
+                approvedAdjustments.forEach((adj: any) => {
+                  if (adj.lines && Array.isArray(adj.lines)) {
+                    adj.lines.forEach((line: any) => {
+                      const matches =
+                        (line.activity && String(line.activity) === String(act.id || act.uuid)) ||
+                        (line.activity_id && String(line.activity_id) === String(act.id || act.uuid)) ||
+                        (line.activity_name && act.name && line.activity_name.trim().toLowerCase() === act.name.trim().toLowerCase());
+                      if (matches) {
+                        const isDecrease = line.direction?.toUpperCase() === "DECREASE" || Number(line.adjustment_amount || line.amount || 0) < 0;
+                        const lineAmt = Math.abs(Number(
+                          line.rate ? (Number(line.quantity || 1) * Number(line.rate)) :
+                          (line.adjustment_amount !== undefined ? line.adjustment_amount : (line.amount || 0))
+                        ));
+                        actApprovedRevision += isDecrease ? -lineAmt : lineAmt;
+                      }
+                    });
+                  }
+                });
+              }
+
+              const currentActBudget = actAmt + actApprovedRevision;
+              const actSpent = Number(act.actual_spent || act.spent || 0);
+              const actCommitted = Number(act.committed || 0);
+              const actRemaining = act.available_budget !== undefined 
+                ? Number(act.available_budget) 
+                : (currentActBudget - actSpent - actCommitted);
+
               const actObj = {
                 activity_id: String(act.id || act.uuid || `${phaseObj.id}-act-${aIndex}`),
                 activity_name: act.name || `Activity ${aIndex + 1}`,
@@ -114,8 +183,11 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
                   : `Act ${aIndex + 1}`,
                 phase_id: phaseId,
                 phase_name: pName,
-                amount: actAmt,
-                budget: actAmt,
+                base_amount: actAmt,
+                approved_revision: actApprovedRevision,
+                amount: currentActBudget,
+                budget: currentActBudget,
+                remaining_budget: actRemaining,
               };
               phaseObj.activities.push(actObj);
               allActivities.push(actObj);
@@ -131,21 +203,45 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
 
   let rawBudgetNum = 0;
   let originalBudgetNum = 0;
+  let actualSpendNum = propActualSpend ?? 0;
+  let committedSpendNum = propCommittedSpend ?? 0;
+
   if (project?.financials) {
     try {
       const fin = typeof project.financials === 'string' ? JSON.parse(project.financials) : project.financials;
       rawBudgetNum = Number(fin?.budget || 0);
-      originalBudgetNum = Number(fin?.original_budget || fin?.budget || 0);
+      originalBudgetNum = Number(fin?.original_budget || 0);
+      if (propActualSpend === undefined && (fin.actual_spent !== undefined || fin.actual_spend !== undefined)) {
+        actualSpendNum = Number(fin.actual_spent ?? fin.actual_spend ?? 0);
+      }
+      if (propCommittedSpend === undefined && fin.committed !== undefined) {
+        committedSpendNum = Number(fin.committed || 0);
+      }
     } catch (e) {
       console.error(e);
     }
   }
 
-  const budgetNum = rawBudgetNum > 0 ? rawBudgetNum : (phasesTotalSum > 0 ? phasesTotalSum : Number(project?.budget || project?.total_budget || 0));
-  const origBudgetNum = originalBudgetNum > 0 ? originalBudgetNum : (phasesTotalSum > 0 ? phasesTotalSum : Number(project?.budget || project?.total_budget || 0));
-  const currentBudgetNum = budgetNum;
+  // Base / original budget
+  const origBudgetNum = originalBudgetNum > 0
+    ? originalBudgetNum
+    : (totalApprovedAdjustment !== 0 && rawBudgetNum > 0
+        ? rawBudgetNum - totalApprovedAdjustment
+        : (phasesTotalSum > 0 ? phasesTotalSum : Number(project?.budget || project?.total_budget || 0)));
+
+  // Current revised approved budget (incorporates approved adjustments)
+  const currentBudgetNum = totalApprovedAdjustment !== 0
+    ? (originalBudgetNum > 0 && rawBudgetNum > 0 && rawBudgetNum !== originalBudgetNum ? rawBudgetNum : origBudgetNum + totalApprovedAdjustment)
+    : (rawBudgetNum > 0 ? rawBudgetNum : origBudgetNum);
+
+  // Remaining available budget
+  const remainingBudgetNum = propRemainingBudget !== undefined
+    ? propRemainingBudget
+    : (currentBudgetNum - actualSpendNum - committedSpendNum);
+
   const totalStagedAdjustment = adjustmentLines.reduce((acc, line) => acc + (line.direction === "DECREASE" ? -line.amount : line.amount), 0);
-  const proposedTotalBudget = budgetNum + totalStagedAdjustment;
+  const proposedTotalBudget = currentBudgetNum + totalStagedAdjustment;
+  const proposedRemainingBudget = remainingBudgetNum + totalStagedAdjustment;
 
   const selectedActivityObj = allActivities.find(
     (a) => String(a.activity_id) === String(selectedActivity)
@@ -299,6 +395,7 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
         body: payload,
       }).unwrap();
 
+      setSubmitError(null);
       statusModal.showSuccess(
         "Action Successful",
         `Successfully submitted budget adjustment request with ${adjustmentLines.length} line(s).`
@@ -316,14 +413,33 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
       } else if (error?.data?.error) {
         errorMsg = typeof error.data.error === "string" ? error.data.error : JSON.stringify(error.data.error);
       }
+      setSubmitError(errorMsg);
       statusModal.showError("Submission Failed", errorMsg);
     }
   };
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[540px] p-0 overflow-hidden bg-white rounded-xl shadow-xl font-['Open_Sans',sans-serif] font-open-sans">
+      <Dialog 
+        open={isOpen} 
+        onOpenChange={(open) => {
+          if (!open) {
+            // If a status modal is open, don't let the main dialog close
+            if (statusModal.isOpen) return;
+            onClose();
+          }
+        }}
+      >
+        <DialogContent 
+          onPointerDownOutside={(e) => {
+            // Prevent clicks on nested modals or backdrop from closing and wiping the form
+            e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            e.preventDefault();
+          }}
+          className="sm:max-w-[540px] p-0 overflow-hidden bg-white rounded-xl shadow-xl font-['Open_Sans',sans-serif] font-open-sans"
+        >
           <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle className="text-xl font-bold text-gray-900 tracking-tight font-['Open_Sans',sans-serif] font-open-sans">
               Create Budget Adjustment
@@ -337,21 +453,43 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
             {/* Budget Summary */}
             <div className="flex flex-col gap-3">
               <h3 className="text-sm font-semibold text-gray-900">Budget Summary</h3>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-gray-50/80 p-3.5 rounded-lg border border-gray-100">
                 <div>
-                  <p className="text-xs text-gray-400 font-medium mb-1">Original Approved Budget</p>
-                  <div className="flex items-center gap-2">
-                    <p className="text-2xl font-semibold text-gray-900 tracking-tight">₦{origBudgetNum.toLocaleString()}</p>
-                    <span className="text-[11px] text-gray-400 font-normal px-2.5 py-0.5 rounded-full border border-gray-200 bg-white">
-                      Locked
-                    </span>
-                  </div>
+                  <p className="text-[11px] text-gray-500 font-medium mb-1">Original Budget</p>
+                  <p className="text-base font-bold text-gray-900 tracking-tight">₦{origBudgetNum.toLocaleString()}</p>
+                  <span className="text-[10px] text-gray-400 font-normal">Base locked</span>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400 font-medium mb-1">Current Approved Budget</p>
-                  <p className="text-2xl font-semibold text-gray-900 tracking-tight">₦{currentBudgetNum.toLocaleString()}</p>
+                  <p className="text-[11px] text-gray-500 font-medium mb-1">Approved Revisions</p>
+                  <p className={`text-base font-bold tracking-tight ${totalApprovedAdjustment > 0 ? "text-emerald-600" : totalApprovedAdjustment < 0 ? "text-red-500" : "text-gray-700"}`}>
+                    {totalApprovedAdjustment > 0 ? "+" : ""}₦{totalApprovedAdjustment.toLocaleString()}
+                  </p>
+                  <span className="text-[10px] text-gray-400 font-normal">{approvedAdjustments.length} approved</span>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 font-medium mb-1">Current Budget</p>
+                  <p className="text-base font-bold text-[#3B7CED] tracking-tight">₦{currentBudgetNum.toLocaleString()}</p>
+                  <span className="text-[10px] text-gray-400 font-normal">Revised total</span>
+                </div>
+                <div>
+                  <p className="text-[11px] text-gray-500 font-medium mb-1">Remaining Budget</p>
+                  <p className={`text-base font-bold tracking-tight ${remainingBudgetNum < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                    ₦{remainingBudgetNum.toLocaleString()}
+                  </p>
+                  <span className="text-[10px] text-gray-400 font-normal">Available left</span>
                 </div>
               </div>
+
+              {totalStagedAdjustment !== 0 && (
+                <div className="flex flex-wrap items-center justify-between px-3 py-2 bg-blue-50/60 border border-blue-100 rounded-md text-xs gap-1.5">
+                  <span className="text-gray-600">
+                    Projected New Budget: <strong className="text-gray-900">₦{proposedTotalBudget.toLocaleString()}</strong> ({totalStagedAdjustment > 0 ? "+" : ""}₦{totalStagedAdjustment.toLocaleString()})
+                  </span>
+                  <span className="text-gray-600">
+                    Projected Remaining: <strong className={proposedRemainingBudget < 0 ? "text-red-600" : "text-emerald-600"}>₦{proposedRemainingBudget.toLocaleString()}</strong>
+                  </span>
+                </div>
+              )}
 
               {/* Reason for Adjustment */}
               <div className="mt-1">
@@ -416,11 +554,16 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
                               </SelectLabel>
                               {p.activities.map((act) => (
                                 <SelectItem key={act.activity_id} value={act.activity_id} className="py-2.5 font-['Open_Sans',sans-serif]">
-                                  <div className="flex items-center justify-between gap-6 w-full">
+                                  <div className="flex items-center justify-between gap-4 w-full">
                                     <span className="font-medium text-gray-800">{act.activity_name}</span>
-                                    <span className="font-bold text-xs text-gray-900 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 shrink-0">
-                                      ₦{Number(act.amount || 0).toLocaleString()}
-                                    </span>
+                                    <div className="flex items-center gap-1.5 shrink-0 text-xs">
+                                      <span className="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded border border-gray-200">
+                                        Budget: ₦{Number(act.amount || 0).toLocaleString()}
+                                      </span>
+                                      <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                        Rem: ₦{Number(act.remaining_budget || 0).toLocaleString()}
+                                      </span>
+                                    </div>
                                   </div>
                                 </SelectItem>
                               ))}
@@ -434,15 +577,30 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
 
                     {/* Connected Phase & Current Amount Banner */}
                     {selectedActivityObj && (
-                      <div className="flex items-center justify-between px-3 py-1.5 bg-blue-50/60 border border-blue-100 rounded-md text-xs mt-0.5 font-['Open_Sans',sans-serif]">
-                        <div className="flex items-center gap-1.5 text-[#3B7CED]">
-                          <span className="font-semibold uppercase tracking-wider text-[11px]">Phase:</span>
-                          <span className="font-medium text-gray-800">{selectedActivityObj.phase_name}</span>
+                      <div className="flex flex-col gap-1.5 p-2.5 bg-blue-50/60 border border-blue-100 rounded-md text-xs mt-0.5 font-['Open_Sans',sans-serif]">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-[#3B7CED]">
+                            <span className="font-semibold uppercase tracking-wider text-[11px]">Phase:</span>
+                            <span className="font-medium text-gray-800">{selectedActivityObj.phase_name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-gray-600">
+                            <span className="text-[11px]">Current Budget:</span>
+                            <span className="font-bold text-xs text-gray-900 bg-white px-2 py-0.5 rounded border border-blue-200">
+                              ₦{Number(selectedActivityObj.amount || 0).toLocaleString()}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1.5 text-gray-600">
-                          <span className="text-[11px]">Current Budget:</span>
-                          <span className="font-bold text-xs text-gray-900 bg-white px-2 py-0.5 rounded border border-blue-200">
-                            ₦{Number(selectedActivityObj.amount || 0).toLocaleString()}
+                        <div className="flex items-center justify-between pt-1 border-t border-blue-100 text-[11px]">
+                          <span className="text-gray-500">
+                            Base: ₦{Number(selectedActivityObj.base_amount || 0).toLocaleString()}
+                            {selectedActivityObj.approved_revision !== 0 && (
+                              <span className={selectedActivityObj.approved_revision > 0 ? "text-emerald-600 font-medium ml-1" : "text-red-500 font-medium ml-1"}>
+                                ({selectedActivityObj.approved_revision > 0 ? "+" : ""}₦{Number(selectedActivityObj.approved_revision || 0).toLocaleString()} rev)
+                              </span>
+                            )}
+                          </span>
+                          <span className="font-semibold text-gray-700">
+                            Remaining Available: <span className="text-emerald-700 font-bold">₦{Number(selectedActivityObj.remaining_budget || 0).toLocaleString()}</span>
                           </span>
                         </div>
                       </div>
@@ -651,6 +809,22 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
               </div>
             )}
 
+            {submitError && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-600" />
+                  <span>{submitError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSubmitError(null)}
+                  className="text-red-400 hover:text-red-600 shrink-0"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Bottom Action: Submit for approval */}
             <div className="flex justify-end pt-2 pb-1">
               <Button
@@ -668,8 +842,9 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
       <StatusModal
         isOpen={statusModal.isOpen}
         onClose={() => {
+          const wasSuccess = statusModal.type === "success";
           statusModal.close();
-          if (statusModal.type === "success") {
+          if (wasSuccess) {
             onClose(); // Close the budget modal as well if successful
           }
         }}
@@ -677,6 +852,13 @@ export function AddBudgetAdjustmentModal({ isOpen, onClose, project }: Props) {
         title={statusModal.title}
         message={statusModal.message}
         actionText={statusModal.type === "success" ? "Done" : "Try again"}
+        onAction={() => {
+          const wasSuccess = statusModal.type === "success";
+          statusModal.close();
+          if (wasSuccess) {
+            onClose();
+          }
+        }}
       />
     </>
   );
