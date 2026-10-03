@@ -19,12 +19,6 @@ import {
 } from "lucide-react";
 
 import fastraLogo from "../../../public/fastraLogo.png";
-import { Open_Sans } from "next/font/google";
-
-const openSans = Open_Sans({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-});
 
 const AuthLayout = ({
   children,
@@ -62,7 +56,7 @@ const AuthLayout = ({
           </div>
 
           {/* Hero Heading - Open Sans & Spaced */}
-          <div className={`hidden lg:block mb-6 max-w-lg space-y-2 ${openSans.className}`}>
+          <div className="hidden lg:block mb-6 max-w-lg space-y-2 [font-family:var(--font-open-sans)]">
             <h1 className="text-xl leading-tight font-bold text-gray-900 tracking-tight">
               Maximize the Planning of Projects with{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#3B7CED] to-[#2143a9]">
