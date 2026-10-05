@@ -1,10 +1,20 @@
-
 import { createApi } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "../../lib/store/store";
+// import type { RootState } from "../../lib/store/store";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 
-export type AccountType = "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "EXPENSE";
+export type AccountType =
+  | "ASSET"
+  | "LIABILITY"
+  | "EQUITY"
+  | "INCOME"
+  | "EXPENSE";
 export type AccountSubtype = "bank" | "inventory" | string;
-export type ControlType = "accounts_payable" | "accounts_receivable" | "bank" | "inventory" | string;
+export type ControlType =
+  | "accounts_payable"
+  | "accounts_receivable"
+  | "bank"
+  | "inventory"
+  | string;
 
 export interface ChartOfAccountSummary {
   id: number;
@@ -26,7 +36,6 @@ export interface ChartOfAccountDetail extends ChartOfAccountSummary {
   children: ChartOfAccountDetail[];
   created_at?: string;
 }
-
 
 /** Response from GET /invoicing/chart-of-accounts/grouped/ */
 export type ChartOfAccountsGrouped = Partial<
@@ -54,80 +63,82 @@ export interface GetChartOfAccountsParams {
   [key: string]: string | number | boolean | undefined;
 }
 
-const getTenantBaseUrl = (state: RootState): string => {
-  const tenantSchemaName = state.auth.tenant_schema_name;
-  const apiDomain =
-    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
-  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
-};
+// const getTenantBaseUrl = (state: RootState): string => {
+//   const tenantSchemaName = state.auth.tenant_schema_name;
+//   const apiDomain =
+//     process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
+//   const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
+//   return `${protocol}://${tenantSchemaName}.${apiDomain}`;
+// };
 
 export const chartOfAccountsApi = createApi({
   reducerPath: "chartOfAccountsApi",
   tagTypes: ["ChartOfAccount"],
-  baseQuery: async (args, api, _extraOptions) => {
-    const state = api.getState() as RootState;
-    const baseUrl = getTenantBaseUrl(state);
-    const token = state.auth.access_token;
+  baseQuery: createTenantBaseQuery(),
+  refetchOnMountOrArgChange: true,
+  // baseQuery: async (args, api, _extraOptions) => {
+  //   const state = api.getState() as RootState;
+  //   const baseUrl = getTenantBaseUrl(state);
+  //   const token = state.auth.access_token;
 
-    const headers = new Headers();
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`);
-    }
-    headers.set("content-type", "application/json");
+  //   const headers = new Headers();
+  //   if (token) {
+  //     headers.set("authorization", `Bearer ${token}`);
+  //   }
+  //   headers.set("content-type", "application/json");
 
-    let url: string;
-    if (typeof args === "string") {
-      url = `${baseUrl}${args}`;
-    } else {
-      const params = new URLSearchParams();
-      if (args.params) {
-        Object.entries(args.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== "") {
-            params.append(key, String(value));
-          }
-        });
-      }
-      const queryString = params.toString();
-      url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
-    }
+  //   let url: string;
+  //   if (typeof args === "string") {
+  //     url = `${baseUrl}${args}`;
+  //   } else {
+  //     const params = new URLSearchParams();
+  //     if (args.params) {
+  //       Object.entries(args.params).forEach(([key, value]) => {
+  //         if (value !== undefined && value !== null && value !== "") {
+  //           params.append(key, String(value));
+  //         }
+  //       });
+  //     }
+  //     const queryString = params.toString();
+  //     url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
+  //   }
 
-    try {
-      const response = await fetch(url, {
-        method: typeof args === "string" ? "GET" : args.method || "GET",
-        headers,
-        body:
-          typeof args === "string"
-            ? undefined
-            : args.body
-              ? JSON.stringify(args.body)
-              : undefined,
-      });
+  //   try {
+  //     const response = await fetch(url, {
+  //       method: typeof args === "string" ? "GET" : args.method || "GET",
+  //       headers,
+  //       body:
+  //         typeof args === "string"
+  //           ? undefined
+  //           : args.body
+  //             ? JSON.stringify(args.body)
+  //             : undefined,
+  //     });
 
-      if (!response.ok) {
-        return {
-          error: {
-            status: response.status,
-            data: await response.json(),
-          },
-        };
-      }
+  //     if (!response.ok) {
+  //       return {
+  //         error: {
+  //           status: response.status,
+  //           data: await response.json(),
+  //         },
+  //       };
+  //     }
 
-      if (response.status === 204) {
-        return { data: null };
-      }
+  //     if (response.status === 204) {
+  //       return { data: null };
+  //     }
 
-      const data = await response.json();
-      return { data };
-    } catch (error) {
-      return {
-        error: {
-          status: "FETCH_ERROR" as const,
-          data: error,
-        },
-      };
-    }
-  },
+  //     const data = await response.json();
+  //     return { data };
+  //   } catch (error) {
+  //     return {
+  //       error: {
+  //         status: "FETCH_ERROR" as const,
+  //         data: error,
+  //       },
+  //     };
+  //   }
+  // },
   endpoints: (builder) => ({
     getChartOfAccounts: builder.query<
       ChartOfAccountSummary[],
@@ -135,11 +146,11 @@ export const chartOfAccountsApi = createApi({
     >({
       query: (params) => ({
         url: "/invoicing/chart-of-accounts/",
-        params,
+        ...(params ? { params } : {}),
       }),
       providesTags: ["ChartOfAccount"],
     }),
-    
+
     getChartOfAccountsGrouped: builder.query<ChartOfAccountsGrouped, void>({
       query: () => ({
         url: "/invoicing/chart-of-accounts/grouped/",
@@ -253,4 +264,3 @@ export const {
   useGetChartOfAccountsSummaryQuery,
   useGetChartOfAccountsTreeQuery,
 } = chartOfAccountsApi;
-

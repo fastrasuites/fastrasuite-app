@@ -1,5 +1,6 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "../../lib/store/store";
+// import type { RootState } from "../../lib/store/store";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 
 export type AccountLedgerTransactionType =
   | "vendor_bill"
@@ -120,90 +121,92 @@ export interface AccountLedgerExportParams {
   [key: string]: string | number | boolean | undefined;
 }
 
-const getTenantBaseUrl = (state: RootState): string => {
-  const tenantSchemaName = state.auth.tenant_schema_name;
-  const apiDomain =
-    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol =
-    apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
-      ? "http"
-      : "https";
-  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
-};
+// const getTenantBaseUrl = (state: RootState): string => {
+//   const tenantSchemaName = state.auth.tenant_schema_name;
+//   const apiDomain =
+//     process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
+//   const protocol =
+//     apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
+//       ? "http"
+//       : "https";
+//   return `${protocol}://${tenantSchemaName}.${apiDomain}`;
+// };
 
 export const accountLedgerApi = createApi({
   reducerPath: "accountLedgerApi",
-  baseQuery: async (args, api, _extraOptions) => {
-    const state = api.getState() as RootState;
-    const baseUrl = getTenantBaseUrl(state);
-    const token = state.auth.access_token;
+  baseQuery: createTenantBaseQuery(),
+  refetchOnMountOrArgChange: true,
+  // baseQuery: async (args, api, _extraOptions) => {
+  //   const state = api.getState() as RootState;
+  //   const baseUrl = getTenantBaseUrl(state);
+  //   const token = state.auth.access_token;
 
-    const headers = new Headers();
-    if (token) headers.set("authorization", `Bearer ${token}`);
-    headers.set("content-type", "application/json");
+  //   const headers = new Headers();
+  //   if (token) headers.set("authorization", `Bearer ${token}`);
+  //   headers.set("content-type", "application/json");
 
-    let url: string;
-    if (typeof args === "string") {
-      url = `${baseUrl}${args}`;
-    } else {
-      const params = new URLSearchParams();
-      if (args.params) {
-        Object.entries(args.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== "") {
-            params.append(key, String(value));
-          }
-        });
-      }
-      const queryString = params.toString();
-      url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
-    }
+  //   let url: string;
+  //   if (typeof args === "string") {
+  //     url = `${baseUrl}${args}`;
+  //   } else {
+  //     const params = new URLSearchParams();
+  //     if (args.params) {
+  //       Object.entries(args.params).forEach(([key, value]) => {
+  //         if (value !== undefined && value !== null && value !== "") {
+  //           params.append(key, String(value));
+  //         }
+  //       });
+  //     }
+  //     const queryString = params.toString();
+  //     url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
+  //   }
 
-    try {
-      const response = await fetch(url, {
-        method: typeof args === "string" ? "GET" : args.method || "GET",
-        headers,
-        body:
-          typeof args === "string"
-            ? undefined
-            : args.body
-              ? JSON.stringify(args.body)
-              : undefined,
-      });
+  //   try {
+  //     const response = await fetch(url, {
+  //       method: typeof args === "string" ? "GET" : args.method || "GET",
+  //       headers,
+  //       body:
+  //         typeof args === "string"
+  //           ? undefined
+  //           : args.body
+  //             ? JSON.stringify(args.body)
+  //             : undefined,
+  //     });
 
-      if (!response.ok) {
-        return {
-          error: {
-            status: response.status,
-            data: await response.json().catch(() => null),
-          },
-        };
-      }
+  //     if (!response.ok) {
+  //       return {
+  //         error: {
+  //           status: response.status,
+  //           data: await response.json().catch(() => null),
+  //         },
+  //       };
+  //     }
 
-      if (response.status === 204) return { data: null };
+  //     if (response.status === 204) return { data: null };
 
-      const contentType = response.headers.get("content-type");
-      if (contentType?.includes("application/json")) {
-        const data = await response.json();
-        return { data };
-      } else {
-        const blob = await response.blob();
-        const disposition = response.headers.get("content-disposition");
-        const filename = disposition
-          ? disposition.split("filename=")[1]
-          : `account-ledger-export.${url.includes("pdf") ? "pdf" : "xlsx"}`;
-        return {
-          data: {
-            blob,
-            filename,
-            url: URL.createObjectURL(blob),
-            contentType: response.headers.get("content-type"),
-          },
-        };
-      }
-    } catch (error) {
-      return { error: { status: "FETCH_ERROR" as const, data: error } };
-    }
-  },
+  //     const contentType = response.headers.get("content-type");
+  //     if (contentType?.includes("application/json")) {
+  //       const data = await response.json();
+  //       return { data };
+  //     } else {
+  //       const blob = await response.blob();
+  //       const disposition = response.headers.get("content-disposition");
+  //       const filename = disposition
+  //         ? disposition.split("filename=")[1]
+  //         : `account-ledger-export.${url.includes("pdf") ? "pdf" : "xlsx"}`;
+  //       return {
+  //         data: {
+  //           blob,
+  //           filename,
+  //           url: URL.createObjectURL(blob),
+  //           contentType: response.headers.get("content-type"),
+  //         },
+  //       };
+  //     }
+  //   } catch (error) {
+  //     return { error: { status: "FETCH_ERROR" as const, data: error } };
+  //   }
+  // },
   tagTypes: ["AccountLedger"],
   endpoints: (builder) => ({
     getAccountLedger: builder.query<
