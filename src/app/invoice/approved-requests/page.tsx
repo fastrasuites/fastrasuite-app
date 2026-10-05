@@ -1,5 +1,4 @@
 "use client";
-
 import { useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -25,7 +24,7 @@ import { BreadcrumbItem } from "@/components/shared/types";
 import { ToastNotification } from "@/components/shared/ToastNotification";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
-
+import { SimulateExpiredTokenButton } from "@/components/dev/SimulateExpiredTokenButton";
 /* -------------------------------------------------------------------------- */
 /*                              Type helpers                                  */
 /* -------------------------------------------------------------------------- */
@@ -464,6 +463,7 @@ export default function ApprovedRequestsPage() {
     <PageGuard module="invoice" entitlement="view_approved_requests">
       <div className="p-6">
         <Breadcrumbs items={items} className="pl-0 mb-6" />
+        <SimulateExpiredTokenButton />
 
         {/* ── Summary cards (mirrors Inventory Operation style) ─────────── */}
         <div className="bg-white rounded-xl border border-gray-200 mb-6 overflow-hidden">

@@ -1,5 +1,6 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "../../lib/store/store";
+// import type { RootState } from "../../lib/store/store";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 
 export type PurchaseOrderStatus =
   | "draft"
@@ -103,117 +104,119 @@ export interface GetPurchaseOrdersParams {
   [key: string]: string | number | boolean | undefined;
 }
 
-const getTenantBaseUrl = (state: RootState): string => {
-  let tenantSchemaName = state.auth?.tenant_schema_name;
-  if (!tenantSchemaName && typeof window !== "undefined") {
-    try {
-      tenantSchemaName = localStorage.getItem("tenant_schema_name");
-      if (!tenantSchemaName) {
-        const persistedAuth = localStorage.getItem("persist:auth");
-        if (persistedAuth) {
-          const parsed = JSON.parse(persistedAuth);
-          tenantSchemaName = parsed.tenant_schema_name
-            ? JSON.parse(parsed.tenant_schema_name)
-            : null;
-        }
-      }
-    } catch {
-      // Ignore localStorage errors
-    }
-  }
-  const apiDomain =
-    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol =
-    apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
-      ? "http"
-      : "https";
-  return tenantSchemaName
-    ? `${protocol}://${tenantSchemaName}.${apiDomain}`
-    : `${protocol}://app.${apiDomain}`;
-};
+// const getTenantBaseUrl = (state: RootState): string => {
+//   let tenantSchemaName = state.auth?.tenant_schema_name;
+//   if (!tenantSchemaName && typeof window !== "undefined") {
+//     try {
+//       tenantSchemaName = localStorage.getItem("tenant_schema_name");
+//       if (!tenantSchemaName) {
+//         const persistedAuth = localStorage.getItem("persist:auth");
+//         if (persistedAuth) {
+//           const parsed = JSON.parse(persistedAuth);
+//           tenantSchemaName = parsed.tenant_schema_name
+//             ? JSON.parse(parsed.tenant_schema_name)
+//             : null;
+//         }
+//       }
+//     } catch {
+//       // Ignore localStorage errors
+//     }
+//   }
+//   const apiDomain =
+//     process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
+//   const protocol =
+//     apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
+//       ? "http"
+//       : "https";
+//   return tenantSchemaName
+//     ? `${protocol}://${tenantSchemaName}.${apiDomain}`
+//     : `${protocol}://app.${apiDomain}`;
+// };
 
 export const projectPurchaseOrdersApi = createApi({
   reducerPath: "projectPurchaseOrdersApi",
-  baseQuery: async (args, api, _extraOptions) => {
-    const state = api.getState() as RootState;
-    const baseUrl = getTenantBaseUrl(state);
-    let token = state.auth?.access_token;
+  // baseQuery: async (args, api, _extraOptions) => {
+  //   const state = api.getState() as RootState;
+  //   const baseUrl = getTenantBaseUrl(state);
+  //   let token = state.auth?.access_token;
 
-    if (!token && typeof window !== "undefined") {
-      try {
-        token = localStorage.getItem("access_token");
-        if (!token) {
-          const persistedAuth = localStorage.getItem("persist:auth");
-          if (persistedAuth) {
-            const parsed = JSON.parse(persistedAuth);
-            token = parsed.access_token
-              ? JSON.parse(parsed.access_token)
-              : null;
-          }
-        }
-      } catch {
-        // Ignore localStorage errors
-      }
-    }
+  //   if (!token && typeof window !== "undefined") {
+  //     try {
+  //       token = localStorage.getItem("access_token");
+  //       if (!token) {
+  //         const persistedAuth = localStorage.getItem("persist:auth");
+  //         if (persistedAuth) {
+  //           const parsed = JSON.parse(persistedAuth);
+  //           token = parsed.access_token
+  //             ? JSON.parse(parsed.access_token)
+  //             : null;
+  //         }
+  //       }
+  //     } catch {
+  //       // Ignore localStorage errors
+  //     }
+  //   }
 
-    const headers = new Headers();
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`);
-    }
-    headers.set("content-type", "application/json");
+  //   const headers = new Headers();
+  //   if (token) {
+  //     headers.set("authorization", `Bearer ${token}`);
+  //   }
+  //   headers.set("content-type", "application/json");
 
-    let url: string;
-    if (typeof args === "string") {
-      url = `${baseUrl}${args}`;
-    } else {
-      const params = new URLSearchParams();
-      if (args.params) {
-        Object.entries(args.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== "") {
-            params.append(key, String(value));
-          }
-        });
-      }
-      const queryString = params.toString();
-      url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
-    }
+  //   let url: string;
+  //   if (typeof args === "string") {
+  //     url = `${baseUrl}${args}`;
+  //   } else {
+  //     const params = new URLSearchParams();
+  //     if (args.params) {
+  //       Object.entries(args.params).forEach(([key, value]) => {
+  //         if (value !== undefined && value !== null && value !== "") {
+  //           params.append(key, String(value));
+  //         }
+  //       });
+  //     }
+  //     const queryString = params.toString();
+  //     url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
+  //   }
 
-    try {
-      const response = await fetch(url, {
-        method: typeof args === "string" ? "GET" : args.method || "GET",
-        headers,
-        body:
-          typeof args === "string"
-            ? undefined
-            : args.body
-              ? JSON.stringify(args.body)
-              : undefined,
-      });
+  //   try {
+  //     const response = await fetch(url, {
+  //       method: typeof args === "string" ? "GET" : args.method || "GET",
+  //       headers,
+  //       body:
+  //         typeof args === "string"
+  //           ? undefined
+  //           : args.body
+  //             ? JSON.stringify(args.body)
+  //             : undefined,
+  //     });
 
-      if (!response.ok) {
-        return {
-          error: {
-            status: response.status,
-            data: await response.json().catch(() => null),
-          },
-        };
-      }
+  //     if (!response.ok) {
+  //       return {
+  //         error: {
+  //           status: response.status,
+  //           data: await response.json().catch(() => null),
+  //         },
+  //       };
+  //     }
 
-      if (response.status === 204) {
-        return { data: null };
-      }
+  //     if (response.status === 204) {
+  //       return { data: null };
+  //     }
 
-      const data = await response.json().catch(() => null);
-      return { data };
-    } catch (error) {
-      return {
-        error: {
-          status: "FETCH_ERROR" as const,
-          data: error,
-        },
-      };
-    }
-  },
+  //     const data = await response.json().catch(() => null);
+  //     return { data };
+  //   } catch (error) {
+  //     return {
+  //       error: {
+  //         status: "FETCH_ERROR" as const,
+  //         data: error,
+  //       },
+  //     };
+  //   }
+  // },
+  baseQuery: createTenantBaseQuery(),
+  refetchOnMountOrArgChange: true,
   endpoints: (builder) => ({
     getPurchaseOrders: builder.query<
       ProjectPurchaseOrder[],
@@ -221,7 +224,7 @@ export const projectPurchaseOrdersApi = createApi({
     >({
       query: (params) => ({
         url: "/invoicing/project-purchase-orders/",
-        params,
+        ...(params ? { params } : {}),
       }),
     }),
     createPurchaseOrder: builder.mutation<

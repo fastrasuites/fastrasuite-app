@@ -16,9 +16,9 @@ import SubscriptionGuard from "@/components/shared/SubscriptionGuard";
 const AdminOnboardingChecklist = dynamic(
   () =>
     import("@/components/shared/onboarding/AdminOnboardingChecklist").then(
-      (mod) => mod.AdminOnboardingChecklist
+      (mod) => mod.AdminOnboardingChecklist,
     ),
-  { ssr: false }
+  { ssr: false },
 );
 
 import { createContext, useContext } from "react";
@@ -48,7 +48,10 @@ function AuthCookieSync() {
         fetch("/api/auth/set-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ access_token: token, refresh_token: refreshToken }),
+          body: JSON.stringify({
+            access_token: token,
+            refresh_token: refreshToken,
+          }),
         }).catch(() => {});
       }
     } catch {
@@ -162,9 +165,7 @@ export default function AppWrapper({
                   <div
                     className={`flex-1 min-w-0 min-h-screen flex flex-col transition-all duration-300 ${!isAuthPage ? (sidebarExpanded ? "md:ml-64" : "md:ml-16") : ""}`}
                   >
-                    <SubscriptionGuard>
-                      {children}
-                    </SubscriptionGuard>
+                    <SubscriptionGuard>{children}</SubscriptionGuard>
                   </div>
                   {!isAuthPage && <AdminOnboardingChecklist />}
                 </div>
