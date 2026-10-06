@@ -1,5 +1,5 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "../../lib/store/store";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 
 export interface InventoryProductUnitOfMeasureDetails {
   id?: number;
@@ -63,88 +63,16 @@ export interface GetInventoryProductsParams {
   [key: string]: any;
 }
 
-const getTenantBaseUrl = (state: RootState): string => {
-  const tenantSchemaName = state.auth.tenant_schema_name;
-  const apiDomain =
-    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
-  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
-};
-
 export const inventoryProductsApi = createApi({
   reducerPath: "inventoryProductsApi",
   tagTypes: ["InventoryProducts"],
-  baseQuery: async (args, api) => {
-    const state = api.getState() as RootState;
-    const baseUrl = getTenantBaseUrl(state);
-    const token = state.auth.access_token;
+  baseQuery: createTenantBaseQuery(),
 
-    const headers = new Headers();
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`);
-    }
-    headers.set("content-type", "application/json");
-
-    let url: string;
-    if (typeof args === "string") {
-      url = `${baseUrl}${args}`;
-    } else {
-      const params = new URLSearchParams();
-      if (args.params) {
-        Object.entries(args.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== "") {
-            params.append(key, String(value));
-          }
-        });
-      }
-      const queryString = params.toString();
-      url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
-    }
-
-    try {
-      const response = await fetch(url, {
-        method: typeof args === "string" ? "GET" : args.method || "GET",
-        headers,
-        body:
-          typeof args === "string"
-            ? undefined
-            : args.body
-            ? JSON.stringify(args.body)
-            : undefined,
-      });
-
-      if (response.status === 204) {
-        return { data: undefined };
-      }
-
-      if (!response.ok) {
-        let errData: any = {};
-        try {
-          errData = await response.json();
-        } catch {
-          errData = { message: response.statusText };
-        }
-        return {
-          error: {
-            status: response.status,
-            data: errData,
-          },
-        };
-      }
-
-      const data = await response.json();
-      return { data };
-    } catch (error) {
-      return {
-        error: {
-          status: "FETCH_ERROR" as const,
-          data: error,
-        },
-      };
-    }
-  },
   endpoints: (builder) => ({
-    getInventoryProducts: builder.query<InventoryProduct[], GetInventoryProductsParams>({
+    getInventoryProducts: builder.query<
+      InventoryProduct[],
+      GetInventoryProductsParams
+    >({
       query: (params) => ({
         url: "/inventory/products/",
         params,
@@ -163,7 +91,10 @@ export const inventoryProductsApi = createApi({
       query: (id) => `/inventory/products/${id}/`,
       providesTags: (result, error, id) => [{ type: "InventoryProducts", id }],
     }),
-    createInventoryProduct: builder.mutation<InventoryProduct, CreateInventoryProductRequest>({
+    createInventoryProduct: builder.mutation<
+      InventoryProduct,
+      CreateInventoryProductRequest
+    >({
       query: (body) => ({
         url: "/inventory/products/",
         method: "POST",
@@ -171,21 +102,33 @@ export const inventoryProductsApi = createApi({
       }),
       invalidatesTags: ["InventoryProducts"],
     }),
-    updateInventoryProduct: builder.mutation<InventoryProduct, { id: number | string; data: UpdateInventoryProductRequest }>({
+    updateInventoryProduct: builder.mutation<
+      InventoryProduct,
+      { id: number | string; data: UpdateInventoryProductRequest }
+    >({
       query: ({ id, data }) => ({
         url: `/inventory/products/${id}/`,
         method: "PUT",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "InventoryProducts", id }, "InventoryProducts"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "InventoryProducts", id },
+        "InventoryProducts",
+      ],
     }),
-    patchInventoryProduct: builder.mutation<InventoryProduct, { id: number | string; data: UpdateInventoryProductRequest }>({
+    patchInventoryProduct: builder.mutation<
+      InventoryProduct,
+      { id: number | string; data: UpdateInventoryProductRequest }
+    >({
       query: ({ id, data }) => ({
         url: `/inventory/products/${id}/`,
         method: "PATCH",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "InventoryProducts", id }, "InventoryProducts"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "InventoryProducts", id },
+        "InventoryProducts",
+      ],
     }),
     softDeleteInventoryProduct: builder.mutation<void, number | string>({
       query: (id) => ({
@@ -194,13 +137,19 @@ export const inventoryProductsApi = createApi({
       }),
       invalidatesTags: ["InventoryProducts"],
     }),
-    toggleHiddenStatusInventoryProduct: builder.mutation<InventoryProduct, { id: number | string; data: UpdateInventoryProductRequest }>({
+    toggleHiddenStatusInventoryProduct: builder.mutation<
+      InventoryProduct,
+      { id: number | string; data: UpdateInventoryProductRequest }
+    >({
       query: ({ id, data }) => ({
         url: `/inventory/products/${id}/toggle_hidden_status/`,
         method: "PUT",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "InventoryProducts", id }, "InventoryProducts"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "InventoryProducts", id },
+        "InventoryProducts",
+      ],
     }),
     deleteAllInventoryProducts: builder.mutation<void, void>({
       query: () => ({
@@ -212,7 +161,10 @@ export const inventoryProductsApi = createApi({
     downloadTemplateInventoryProducts: builder.query<any, void>({
       query: () => "/inventory/products/download-template/",
     }),
-    uploadExcelInventoryProducts: builder.mutation<any, { file: string; check_for_duplicates?: boolean }>({
+    uploadExcelInventoryProducts: builder.mutation<
+      any,
+      { file: string; check_for_duplicates?: boolean }
+    >({
       query: (body) => ({
         url: "/inventory/products/upload_excel/",
         method: "POST",

@@ -43,7 +43,8 @@ export const getAuthBaseUrl = () => {
 /** Tenant-scoped host — all business APIs */
 export const getTenantBaseUrl = (state: RootState): string => {
   const schema = state.auth.tenant_schema_name;
-  if (!schema) {
+  // Match subscription / public-tenant behaviour
+  if (!schema || schema === "public") {
     return getAuthBaseUrl();
   }
   return `${getProtocol()}://${schema}.${getApiDomain()}`;
