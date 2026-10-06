@@ -138,6 +138,7 @@ export default function ProjectDashboardPage() {
   const [showActual, setShowActual] = useState(true);
   const [showCommitted, setShowCommitted] = useState(true);
   const [showPlanned, setShowPlanned] = useState(true);
+  const [hoveredCategoryIndex, setHoveredCategoryIndex] = useState<number | null>(null);
   const [isBudgetAdjustmentModalOpen, setIsBudgetAdjustmentModalOpen] = useState(false);
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
@@ -755,14 +756,15 @@ export default function ProjectDashboardPage() {
               </div>
 
               {/* Spend by Category */}
-              <div className="bg-white p-6 rounded shadow-sm border border-gray-100 flex flex-col gap-4">
-                <Skeleton className="h-5 w-36 bg-gray-200" />
-                <div className="flex items-center gap-4">
-                  <Skeleton className="h-36 w-36 bg-gray-200 rounded-full" />
-                  <div className="flex flex-col gap-2 flex-1">
-                    <Skeleton className="h-4 w-full bg-gray-200" />
-                    <Skeleton className="h-4 w-5/6 bg-gray-200" />
-                  </div>
+              <div className="bg-white p-6 rounded shadow-sm border border-gray-100 flex flex-col items-center gap-4">
+                <div className="w-full flex justify-between">
+                  <Skeleton className="h-5 w-36 bg-gray-200" />
+                </div>
+                <Skeleton className="h-36 w-36 bg-gray-200 rounded-full" />
+                <div className="grid grid-cols-3 gap-2 w-full pt-2">
+                  <Skeleton className="h-6 w-full bg-gray-200" />
+                  <Skeleton className="h-6 w-full bg-gray-200" />
+                  <Skeleton className="h-6 w-full bg-gray-200" />
                 </div>
               </div>
             </div>
@@ -1716,7 +1718,7 @@ export default function ProjectDashboardPage() {
                     }`}
                   >
                     <span className={`w-2 h-2 rounded-full transition-transform ${showCommitted ? "bg-[#F59E0B] scale-110" : "bg-gray-300"}`} />
-                    <span>Committed Spent</span>
+                    <span>Committed Amount</span>
                     <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
                       showCommitted ? "bg-[#F59E0B] text-white" : "bg-gray-200 text-gray-400"
                     }`}>
@@ -1734,7 +1736,7 @@ export default function ProjectDashboardPage() {
                     }`}
                   >
                     <span className={`w-2 h-2 rounded-full transition-transform ${showPlanned ? "bg-[#3B7CED] scale-110" : "bg-gray-300"}`} />
-                    <span>Planned Spend</span>
+                    <span>Project Budget</span>
                     <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
                       showPlanned ? "bg-[#3B7CED] text-white" : "bg-gray-200 text-gray-400"
                     }`}>
@@ -1787,7 +1789,7 @@ export default function ProjectDashboardPage() {
                                 const isPlanned = entry.dataKey === "planned";
                                 const isCommitted = entry.dataKey === "committed";
                                 const color = isPlanned ? "#3B7CED" : isCommitted ? "#F59E0B" : "#2BA24D";
-                                const name = isPlanned ? "Planned Budget" : isCommitted ? "Committed Spent" : "Actual Spent";
+                                const name = isPlanned ? "Project Budget" : isCommitted ? "Committed Amount" : "Actual Spent";
                                 const valNum = Number(entry.value || 0);
                                 const value = entry.value !== null && entry.value !== undefined 
                                   ? `₦${valNum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
@@ -1920,13 +1922,13 @@ export default function ProjectDashboardPage() {
               </div>
             </div>
 
-            {/* Spend by Category - 100% Perfect Circle Donut Chart */}
+            {/* Spend by Category - Complete Filled Pie Chart */}
             <div className="bg-white p-6 rounded shadow-sm border border-gray-100">
-              <div className="flex justify-between items-center mb-5">
+              <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg font-medium text-[#3B7CED]">Spend by Category</h3>
                 <span className="text-xs text-gray-400 font-medium">Breakdown</span>
               </div>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 relative min-h-[180px]">
+              <div className="flex flex-col items-center justify-center gap-4 relative min-h-[180px]">
                 {pieChartData.length > 0 ? (
                   <>
                     {/* Fixed Square 1:1 Aspect Ratio Container Guaranteed to be a Perfect Circle */}
@@ -1936,46 +1938,74 @@ export default function ProjectDashboardPage() {
                           data={pieChartData}
                           cx={90}
                           cy={90}
-                          innerRadius={52}
-                          outerRadius={78}
-                          paddingAngle={pieChartData.length > 1 ? 3 : 0}
+                          innerRadius={0}
+                          outerRadius={80}
+                          paddingAngle={pieChartData.length > 1 ? 1.5 : 0}
                           dataKey="value"
                           stroke="#ffffff"
-                          strokeWidth={2}
+                          strokeWidth={1.5}
+                          onMouseEnter={(_, index) => setHoveredCategoryIndex(index)}
+                          onMouseLeave={() => setHoveredCategoryIndex(null)}
                         >
-                          {pieChartData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
+                          {pieChartData.map((entry, index) => {
+                            const isHovered = hoveredCategoryIndex === index;
+                            return (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={entry.color} 
+                                fillOpacity={hoveredCategoryIndex === null || isHovered ? 1 : 0.35}
+                                stroke="#ffffff"
+                                strokeWidth={1.5}
+                                className="transition-all duration-150 cursor-pointer"
+                              />
+                            );
+                          })}
                         </Pie>
-                        <Tooltip 
-                          formatter={(val: any, name: any) => [
-                            `${Math.round(Number(val))}%`,
-                            name
-                          ]}
-                          contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.1)" }}
-                        />
                       </PieChart>
-                      {/* Center Stat inside the Donut Hole */}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Share</span>
-                        <span className="text-sm font-bold text-gray-800">
-                          {categoryTotal > 0 ? `${Math.round(categoryTotal)}%` : "0%"}
-                        </span>
-                      </div>
                     </div>
 
-                    {/* Legend */}
-                    <div className="flex flex-col gap-2.5 flex-1 min-w-0 w-full sm:w-auto">
+                    {/* Legend at the bottom in a 3-column grid ("3 for 3") */}
+                    <div className="grid grid-cols-3 gap-x-2.5 gap-y-2 w-full pt-3 border-t border-gray-100">
                       {pieChartData.map((entry, index) => {
                         const pct = Math.round(Number(entry.percentage || entry.value || 0));
+                        const isHovered = hoveredCategoryIndex === index;
                         return (
-                          <div key={index} className="flex items-center justify-between gap-3 text-xs">
-                            <div className="flex items-center gap-2 truncate">
-                              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }}></div>
-                              <span className="text-gray-700 font-medium capitalize truncate">{entry.name}</span>
+                          <div 
+                            key={index} 
+                            onMouseEnter={() => setHoveredCategoryIndex(index)}
+                            onMouseLeave={() => setHoveredCategoryIndex(null)}
+                            className={`flex flex-col gap-0.5 p-1 rounded-md transition-all duration-150 cursor-pointer select-none min-w-0 ${
+                              isHovered 
+                                ? "bg-gray-50/90 scale-[1.03] shadow-2xs z-10" 
+                                : hoveredCategoryIndex !== null 
+                                ? "opacity-40" 
+                                : "opacity-100 hover:bg-gray-50/60"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span 
+                                className={`w-2 h-2 rounded-full shrink-0 transition-transform ${isHovered ? "scale-115 ring-1.5 ring-offset-1 ring-gray-300" : ""}`} 
+                                style={{ backgroundColor: entry.color }} 
+                              />
+                              <span 
+                                className={`text-[11px] truncate transition-all ${
+                                  isHovered 
+                                    ? "font-semibold text-gray-800 scale-[1.02] origin-left" 
+                                    : "font-normal text-gray-500"
+                                }`}
+                                title={entry.name}
+                              >
+                                {entry.name}
+                              </span>
                             </div>
-                            <div className="flex items-center shrink-0">
-                              <span className="text-gray-900 font-semibold text-xs min-w-[42px] text-right">{pct}%</span>
+                            <div className="flex items-center pl-3.5">
+                              <span className={`text-xs transition-all ${
+                                isHovered 
+                                  ? "font-bold text-gray-900 scale-[1.04] origin-left" 
+                                  : "font-medium text-gray-700"
+                              }`}>
+                                {pct}%
+                              </span>
                             </div>
                           </div>
                         );

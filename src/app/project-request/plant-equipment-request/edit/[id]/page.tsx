@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, Bell, AlertTriangle, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, AlertTriangle, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { UserHeaderActions } from "@/components/shared/TopBar/UserHeaderActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -420,18 +421,7 @@ export default function EditPlantEquipmentRequestPage() {
             <h1 className="text-lg font-bold text-gray-800">Edit Plant & Equipment Request</h1>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button className="p-2 rounded-lg hover:bg-gray-50 transition-colors">
-              <Bell size={20} className="text-gray-800" />
-            </button>
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-gray-200">
-              <img
-                src="https://api.dicebear.com/7.x/pixel-art/svg?seed=user123"
-                alt="User Profile"
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </div>
+          <UserHeaderActions />
         </div>
       </header>
 
@@ -634,12 +624,7 @@ export default function EditPlantEquipmentRequestPage() {
             {/* Available Budget Section */}
             {selectedTaskId && (
               <div className="pt-4 mt-4 border-t border-gray-100 space-y-3">
-                <div className="flex justify-between items-center">
-                  
-                  <span className="text-sm text-gray-600 font-medium">
-                    {selectedCostCode}
-                  </span>
-                </div>
+               
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold text-gray-900">
                     Available Budget

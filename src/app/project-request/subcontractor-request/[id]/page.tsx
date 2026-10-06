@@ -6,12 +6,12 @@ import React, { useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft,
-  Bell,
   Trash2,
   Edit3,
   Send,
   AlertCircle,
 } from "lucide-react";
+import { UserHeaderActions } from "@/components/shared/TopBar/UserHeaderActions";
 import { Button } from "@/components/ui/button";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { FormActionFooter } from "@/components/shared/FormActionFooter";
@@ -244,7 +244,7 @@ export default function SubcontractorRequestDetailsPage() {
           </div>
         </header>
         <div className="w-full h-2.5 bg-[#F1F3F6]" />
-        <main className="max-w-[430px] mx-auto px-5 py-6 space-y-6">
+        <main className="max-w-4xl mx-auto px-5 py-6 space-y-6">
           <Skeleton className="h-6 w-36 rounded bg-gray-200" />
           <div className="grid grid-cols-2 gap-y-5 gap-x-6">
             {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
@@ -475,7 +475,7 @@ export default function SubcontractorRequestDetailsPage() {
         transition={{ duration: 0.2 }}
         className="min-h-screen bg-white text-[#111827] font-['Open_Sans',sans-serif] pb-32"
       >
-        <div className="max-w-[430px] mx-auto bg-white min-h-screen flex flex-col">
+        <div className="max-w-4xl mx-auto bg-white min-h-screen flex flex-col">
           {/* Top Header */}
           <header className="w-full bg-white px-5 h-16 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-4">
@@ -489,18 +489,7 @@ export default function SubcontractorRequestDetailsPage() {
               <h1 className="text-[18px] font-normal text-[#1F2937]">Request Details</h1>
             </div>
 
-            <div className="flex items-center gap-4">
-              <button className="text-[#1E293B] hover:opacity-80 transition-opacity">
-                <Bell size={22} strokeWidth={2} className="fill-current" />
-              </button>
-              <div className="w-9 h-9 rounded-full overflow-hidden bg-[#FECDD3] flex items-center justify-center shrink-0">
-                <img
-                  src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
-                  alt="User Profile"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            </div>
+            <UserHeaderActions />
           </header>
 
           {/* Divider Bar under header */}
@@ -713,7 +702,7 @@ export default function SubcontractorRequestDetailsPage() {
           {/* Floating Bottom Action Bar for Draft/Editable requests */}
           {(canEdit || canDelete || canSubmit) && (
             <FormActionFooter
-              maxWidth="max-w-[430px]"
+              maxWidth="max-w-4xl"
               zIndex="z-40"
               className="bg-white/95 backdrop-blur-sm border-t border-gray-200 p-3.5 shadow-lg"
               containerClassName="flex items-center justify-between gap-3"

@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, Bell, User } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import { UserHeaderActions } from "@/components/shared/TopBar/UserHeaderActions";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/lib/store/store";
 import { Button } from "@/components/ui/button";
@@ -411,7 +412,7 @@ export default function RequestDetailsPage() {
     >
       {/* Custom Header */}
       <header className="w-full border-b border-gray-100 bg-white sticky top-0 z-30">
-        <div className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.back()}
@@ -423,22 +424,11 @@ export default function RequestDetailsPage() {
             <h1 className="text-xl md:text-2xl font-normal text-gray-900">Approve Request</h1>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-4">
-            <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <Bell size={24} className="text-gray-900" />
-            </button>
-            <div className="w-8 h-8 bg-[#ffcdd2] rounded-full flex items-center justify-center overflow-hidden">
-              {user?.user_image ? (
-                <img src={user.user_image} alt="Avatar" className="w-full h-full object-cover" />
-              ) : (
-                <User size={18} className="text-red-900" />
-              )}
-            </div>
-          </div>
+          <UserHeaderActions />
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 pt-6 bg-white min-h-[calc(100vh-64px)] shadow-sm pb-56 md:pb-64">
+      <main className="max-w-4xl mx-auto px-4 pt-6 bg-white min-h-[calc(100vh-64px)] shadow-sm pb-56 md:pb-64">
         {isRequestLoading ? (
           <div className="flex flex-col gap-6 py-6">
             <Skeleton className="h-5 w-40 bg-gray-200" />
@@ -769,7 +759,7 @@ export default function RequestDetailsPage() {
 
       {/* Fixed Bottom Action Bar */}
       {request && effectiveStatus === "pending" && (
-        <FormActionFooter zIndex="z-40" className="px-4 py-4 md:py-6" containerClassName="space-y-4">
+        <FormActionFooter maxWidth="max-w-4xl" zIndex="z-40" className="px-4 py-4 md:py-6" containerClassName="space-y-4">
           <div className="space-y-1.5">
             <div className="flex justify-between items-center text-sm font-bold text-gray-900">
               <span>Available Budget</span>

@@ -4,7 +4,8 @@ export const dynamic = "force-dynamic";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, Bell, Pencil, Trash, X, Plus, ChevronDown } from "lucide-react";
+import { ArrowLeft, Pencil, Trash, X, Plus, ChevronDown } from "lucide-react";
+import { UserHeaderActions } from "@/components/shared/TopBar/UserHeaderActions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -632,18 +633,7 @@ export default function EditPurchaseRequestPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button className="p-2 rounded-lg hover:bg-gray-50 transition-colors">
-              <Bell size={20} className="text-gray-800" />
-            </button>
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-gray-200">
-              <img
-                src="https://api.dicebear.com/7.x/pixel-art/svg?seed=user123"
-                alt="User Profile"
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </div>
+          <UserHeaderActions />
         </div>
       </header>
 

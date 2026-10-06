@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bell, User, Loader2, FileCheck, ArrowRight } from "lucide-react";
+import { ArrowLeft, Loader2, FileCheck, ArrowRight } from "lucide-react";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/lib/store/store";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { useGetProjectCostingProjectsQuery } from "@/api/projectCostingApi";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { extractErrorMessage } from "@/lib/utils";
-import { ModuleWizard, WizardGuideButton } from "@/components/shared/wizard/ModuleWizard";
+import { UserHeaderActions } from "@/components/shared/TopBar/UserHeaderActions";
 
 export default function ApproveRequestPage() {
   const router = useRouter();
@@ -187,23 +187,7 @@ export default function ApproveRequestPage() {
             </h1>
           </div>
 
-          <div className="flex items-center gap-2 md:gap-4">
-            <WizardGuideButton moduleId="project-request" />
-            <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-              <Bell size={24} className="text-gray-900" />
-            </button>
-            <div className="w-8 h-8 bg-[#ffcdd2] rounded-full flex items-center justify-center overflow-hidden">
-              {user?.user_image ? (
-                <img
-                  src={user.user_image}
-                  alt="Avatar"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <User size={18} className="text-red-900" />
-              )}
-            </div>
-          </div>
+          <UserHeaderActions wizardModuleId="project-request" />
         </div>
       </header>
 
@@ -344,7 +328,6 @@ export default function ApproveRequestPage() {
         actionText="Done"
         onAction={handleModalClose}
       />
-      <ModuleWizard moduleId="project-request" />
     </motion.div>
   );
 }

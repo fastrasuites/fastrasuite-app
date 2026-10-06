@@ -19,12 +19,14 @@ jest.mock('next/navigation', () => ({
 }));
 
 jest.mock('@/api/requests/plantEquipmentRequestApi', () => ({
+  ...jest.requireActual('@/api/requests/plantEquipmentRequestApi'),
   useGetPlantEquipmentRequestQuery: jest.fn(),
   useDeletePlantEquipmentRequestMutation: jest.fn(),
   useSubmitPlantEquipmentRequestMutation: jest.fn(),
 }));
 
 jest.mock('@/api/projectCostingApi', () => ({
+  ...jest.requireActual('@/api/projectCostingApi'),
   useGetProjectCostingProjectsQuery: jest.fn(),
   useGetProjectCostingProjectQuery: jest.fn(),
 }));
