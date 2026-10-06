@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "@/lib/store/store";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 import type { PermissionDetail } from "@/utils/normalizePermissions";
 
 // Company Role interface
@@ -75,83 +75,10 @@ export interface ResetPasswordRequest {
   email?: string;
 }
 
-// Helper to get tenant-specific base URL
-const getTenantBaseUrl = (state: RootState) => {
-  const tenantSchemaName = state.auth.tenant_schema_name;
-  const apiDomain =
-    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
-  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
-};
-
 export const tenantUserApi = createApi({
   reducerPath: "tenantUserApi",
-  baseQuery: async (args, api) => {
-    const state = api.getState() as RootState;
-    const baseUrl = getTenantBaseUrl(state);
-    const token = state.auth.access_token;
-
-    const headers = new Headers();
-    if (token) headers.set("authorization", `Bearer ${token}`);
-    headers.set("accept", "application/json");
-
-    let url: string;
-    let method = "GET";
-    let body: any = undefined;
-
-    if (typeof args === "string") {
-      url = `${baseUrl}${args}`;
-    } else {
-      method = args.method || "GET";
-      const params = new URLSearchParams();
-      if (args.params) {
-        Object.entries(args.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== "") {
-            params.append(key, String(value));
-          }
-        });
-      }
-      const queryString = params.toString();
-      url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
-
-      if (args.body instanceof FormData) {
-        body = args.body;
-      } else if (args.body) {
-        body = JSON.stringify(args.body);
-        headers.set("content-type", "application/json");
-      }
-    }
-
-    try {
-      const response = await fetch(url, { method, headers, body });
-      if (!response.ok) {
-        let errorData;
-        try {
-          errorData = await response.json();
-        } catch {
-          errorData = await response.text();
-        }
-        return {
-          error: {
-            status: response.status,
-            data: errorData,
-          },
-        };
-      }
-      if (response.status === 204) {
-        return { data: null };
-      }
-      const data = await response.json();
-      return { data };
-    } catch (error) {
-      return {
-        error: {
-          status: "FETCH_ERROR" as const,
-          data: error,
-        },
-      };
-    }
-  },
+  baseQuery: createTenantBaseQuery(),
+  refetchOnMountOrArgChange: true,
   tagTypes: ["TenantUser"],
   endpoints: (builder) => ({
     // GET /users/tenant-users/ - List/search tenant users
@@ -287,7 +214,8 @@ export const tenantUserApi = createApi({
     // POST /users/tenant-users/change-password/ - Change password
     changePassword: builder.mutation<
       unknown,
-      ChangePasswordRequest | { id?: number | string; data: ChangePasswordRequest }
+      | ChangePasswordRequest
+      | { id?: number | string; data: ChangePasswordRequest }
     >({
       query: (arg) => {
         const body = "data" in arg ? arg.data : arg;

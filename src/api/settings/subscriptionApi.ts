@@ -1,5 +1,5 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "@/lib/store/store";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 
 export interface Plan {
   id: number;
@@ -63,21 +63,6 @@ export interface CheckoutResponse {
   interval: string;
 }
 
-const getTenantBaseUrl = (state: RootState) => {
-  const tenantSchemaName = state.auth.tenant_schema_name;
-  const apiDomain =
-    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol =
-    apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
-      ? "http"
-      : "https";
-
-  if (!tenantSchemaName || tenantSchemaName === "public") {
-    return `${protocol}://${apiDomain}`;
-  }
-  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
-};
-
 export const SUBSCRIPTION_TAG = "Subscription" as const;
 export const INVOICE_TAG = "SubscriptionInvoice" as const;
 export const PLAN_TAG = "SubscriptionPlan" as const;
@@ -85,72 +70,8 @@ export const PLAN_TAG = "SubscriptionPlan" as const;
 export const subscriptionApi = createApi({
   reducerPath: "subscriptionApi",
   tagTypes: [SUBSCRIPTION_TAG, INVOICE_TAG, PLAN_TAG],
-  baseQuery: async (args, api) => {
-    const state = api.getState() as RootState;
-    const baseUrl = getTenantBaseUrl(state);
-    const token = state.auth.access_token;
-
-    const headers = new Headers();
-    if (token) headers.set("authorization", `Bearer ${token}`);
-
-    let url: string;
-    let method = "GET";
-    let body: any = undefined;
-
-    if (typeof args === "string") {
-      url = `${baseUrl}${args}`;
-    } else {
-      url = `${baseUrl}${args.url}`;
-      method = args.method || "GET";
-
-      if (args.body instanceof FormData) {
-        body = args.body;
-      } else if (args.body) {
-        headers.set("content-type", "application/json");
-        body = JSON.stringify(args.body);
-      }
-    }
-
-    try {
-      const response = await fetch(url, { method, headers, body });
-
-      const text = await response.text();
-      let parsedData: any = null;
-      try {
-        parsedData = text ? JSON.parse(text) : {};
-      } catch {
-        parsedData = null;
-      }
-
-      if (!response.ok) {
-        return {
-          error: {
-            status: response.status,
-            data: parsedData || { error: response.statusText || text },
-          },
-        };
-      }
-
-      if (parsedData !== null && typeof parsedData === "object") {
-        return { data: parsedData };
-      }
-
-      return {
-        error: {
-          status: "PARSE_ERROR",
-          data: { error: "Received non-JSON response from server" },
-        },
-      };
-    } catch (error: any) {
-      return {
-        error: {
-          status: "FETCH_ERROR",
-          data: error?.message || error,
-        },
-      };
-    }
-  },
-
+  baseQuery: createTenantBaseQuery(),
+  refetchOnMountOrArgChange: true,
   endpoints: (builder) => ({
     getSubscriptionPlans: builder.query<Plan[], void>({
       query: () => "/subscriptions/plans/",

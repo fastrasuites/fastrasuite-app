@@ -28,16 +28,24 @@ const getTenantBaseUrl = (state: RootState): string => {
         const persistedAuth = localStorage.getItem("persist:auth");
         if (persistedAuth) {
           const parsed = JSON.parse(persistedAuth);
-          tenantSchemaName = parsed.tenant_schema_name ? JSON.parse(parsed.tenant_schema_name) : null;
+          tenantSchemaName = parsed.tenant_schema_name
+            ? JSON.parse(parsed.tenant_schema_name)
+            : null;
         }
       }
     } catch {
       // Ignore localStorage read errors
     }
   }
-  const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
-  return tenantSchemaName ? `${protocol}://${tenantSchemaName}.${apiDomain}` : "";
+  const apiDomain =
+    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
+  const protocol =
+    apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
+      ? "http"
+      : "https";
+  return tenantSchemaName
+    ? `${protocol}://${tenantSchemaName}.${apiDomain}`
+    : "";
 };
 
 export const projectCostingApi = createApi({
@@ -53,7 +61,9 @@ export const projectCostingApi = createApi({
           const persistedAuth = localStorage.getItem("persist:auth");
           if (persistedAuth) {
             const parsed = JSON.parse(persistedAuth);
-            token = parsed.access_token ? JSON.parse(parsed.access_token) : null;
+            token = parsed.access_token
+              ? JSON.parse(parsed.access_token)
+              : null;
           }
         }
       } catch {
@@ -74,7 +84,7 @@ export const projectCostingApi = createApi({
     if (token) {
       headers.set("authorization", `Bearer ${token}`);
     }
-    
+
     // Do not set content-type if the body is FormData (for file uploads)
     if (args && (args as any).body && (args as any).body instanceof FormData) {
       // Browser will set the correct multipart/form-data boundary
@@ -101,9 +111,12 @@ export const projectCostingApi = createApi({
 
     try {
       const isStringArgs = typeof args === "string";
-      const body = !isStringArgs && args.body 
-        ? (args.body instanceof FormData ? args.body : JSON.stringify(args.body)) 
-        : undefined;
+      const body =
+        !isStringArgs && args.body
+          ? args.body instanceof FormData
+            ? args.body
+            : JSON.stringify(args.body)
+          : undefined;
 
       const response = await fetch(url, {
         method: isStringArgs ? "GET" : args.method || "GET",
@@ -157,7 +170,10 @@ export const projectCostingApi = createApi({
   tagTypes: ["ProjectCosting", "BudgetAdjustments"],
   endpoints: (builder) => ({
     // Projects Core Endpoints
-    getProjectCostingProjects: builder.query<ProjectCostingProject[], ProjectCostingFilterParams>({
+    getProjectCostingProjects: builder.query<
+      ProjectCostingProject[],
+      ProjectCostingFilterParams
+    >({
       query: (params) => ({
         url: "/project-costing/projects/",
         params,
@@ -168,7 +184,10 @@ export const projectCostingApi = createApi({
       query: (id) => `/project-costing/projects/${id}/`,
       providesTags: (result, error, id) => [{ type: "ProjectCosting", id }],
     }),
-    createProjectCostingProject: builder.mutation<ProjectCostingProject, CreateProjectCostingProjectRequest>({
+    createProjectCostingProject: builder.mutation<
+      ProjectCostingProject,
+      CreateProjectCostingProjectRequest
+    >({
       query: (body) => ({
         url: "/project-costing/projects/",
         method: "POST",
@@ -176,7 +195,10 @@ export const projectCostingApi = createApi({
       }),
       invalidatesTags: ["ProjectCosting"],
     }),
-    createPendingProjectCostingProject: builder.mutation<ProjectCostingProject, CreateProjectCostingProjectRequest>({
+    createPendingProjectCostingProject: builder.mutation<
+      ProjectCostingProject,
+      CreateProjectCostingProjectRequest
+    >({
       query: (body) => ({
         url: "/project-costing/projects/create-pending/",
         method: "POST",
@@ -184,14 +206,20 @@ export const projectCostingApi = createApi({
       }),
       invalidatesTags: ["ProjectCosting"],
     }),
-    updateProjectCostingProject: builder.mutation<ProjectCostingProject, { id: number; body: UpdateProjectCostingProjectRequest }>({
+    updateProjectCostingProject: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body: UpdateProjectCostingProjectRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/`,
         method: "PUT",
         body,
       }),
     }),
-    patchProjectCostingProject: builder.mutation<ProjectCostingProject, { id: number; body: Partial<UpdateProjectCostingProjectRequest> }>({
+    patchProjectCostingProject: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body: Partial<UpdateProjectCostingProjectRequest> }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/`,
         method: "PATCH",
@@ -207,45 +235,65 @@ export const projectCostingApi = createApi({
     }),
 
     // Project Actions
-    approveProject: builder.mutation<ProjectCostingProject, { id: number; body?: ProjectActionRequest }>({
+    approveProject: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body?: ProjectActionRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/approve/`,
         method: "POST",
         body,
       }),
     }),
-    closeProject: builder.mutation<ProjectCostingProject, { id: number; body?: ProjectActionRequest }>({
+    closeProject: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body?: ProjectActionRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/close/`,
         method: "POST",
         body,
       }),
     }),
-    rejectProject: builder.mutation<ProjectCostingProject, { id: number; body?: ProjectActionRequest }>({
+    rejectProject: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body?: ProjectActionRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/reject/`,
         method: "POST",
         body,
       }),
     }),
-    submitProject: builder.mutation<ProjectCostingProject, { id: number; body?: ProjectActionRequest }>({
+    submitProject: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body?: ProjectActionRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/submit/`,
         method: "POST",
         body,
       }),
     }),
-    addProjectDocument: builder.mutation<ProjectCostingProject, { id: number; body: FormData }>({
+    addProjectDocument: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body: FormData }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/add_document/`,
         method: "POST",
         body,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "ProjectCosting", id }],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "ProjectCosting", id },
+      ],
     }),
 
     // Phase & Activity Management
-    createAddPhaseActivity: builder.mutation<{ phase_id: number; activities: Activity[] }, { id: number; body: CreateAddPhaseActivityRequest }>({
+    createAddPhaseActivity: builder.mutation<
+      { phase_id: number; activities: Activity[] },
+      { id: number; body: CreateAddPhaseActivityRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/createAdd_phase_activity/`,
         method: "POST",
@@ -256,7 +304,10 @@ export const projectCostingApi = createApi({
         "ProjectCosting",
       ],
     }),
-    deletePhase: builder.mutation<void, { id: number; body: DeletePhaseRequest }>({
+    deletePhase: builder.mutation<
+      void,
+      { id: number; body: DeletePhaseRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/delete_phase/`,
         method: "DELETE",
@@ -267,7 +318,10 @@ export const projectCostingApi = createApi({
         "ProjectCosting",
       ],
     }),
-    updatePhaseBundle: builder.mutation<any, { id: number; body: UpdatePhaseBundleRequest }>({
+    updatePhaseBundle: builder.mutation<
+      any,
+      { id: number; body: UpdatePhaseBundleRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/update_phase_bundle/`,
         method: "PATCH",
@@ -280,11 +334,17 @@ export const projectCostingApi = createApi({
     }),
 
     // Budget Adjustments
-    approveBudgetAdjustment: builder.mutation<ProjectCostingProject, { id: number; adjustment_id?: string; body?: any }>({
+    approveBudgetAdjustment: builder.mutation<
+      ProjectCostingProject,
+      { id: number; adjustment_id?: string; body?: any }
+    >({
       query: ({ id, adjustment_id, body }) => ({
         url: `/project-costing/projects/${id}/approve_budget_adjustment/`,
         method: "POST",
-        params: { adjustment_id: adjustment_id || body?.adjustment_id || body?.uuid || body?.id },
+        params: {
+          adjustment_id:
+            adjustment_id || body?.adjustment_id || body?.uuid || body?.id,
+        },
         body,
       }),
       invalidatesTags: (result, error, { id }) => [
@@ -292,7 +352,10 @@ export const projectCostingApi = createApi({
         { type: "BudgetAdjustments", id },
       ],
     }),
-    createBudgetAdjustment: builder.mutation<ProjectCostingProject, { id: number; body: CreateBudgetAdjustmentRequest }>({
+    createBudgetAdjustment: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body: CreateBudgetAdjustmentRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/create_budget_adjustment/`,
         method: "POST",
@@ -303,11 +366,17 @@ export const projectCostingApi = createApi({
         { type: "BudgetAdjustments", id },
       ],
     }),
-    rejectBudgetAdjustment: builder.mutation<ProjectCostingProject, { id: number; adjustment_id?: string; body?: any }>({
+    rejectBudgetAdjustment: builder.mutation<
+      ProjectCostingProject,
+      { id: number; adjustment_id?: string; body?: any }
+    >({
       query: ({ id, adjustment_id, body }) => ({
         url: `/project-costing/projects/${id}/reject_budget_adjustment/`,
         method: "POST",
-        params: { adjustment_id: adjustment_id || body?.adjustment_id || body?.uuid || body?.id },
+        params: {
+          adjustment_id:
+            adjustment_id || body?.adjustment_id || body?.uuid || body?.id,
+        },
         body,
       }),
       invalidatesTags: (result, error, { id }) => [
@@ -315,11 +384,17 @@ export const projectCostingApi = createApi({
         { type: "BudgetAdjustments", id },
       ],
     }),
-    submitBudgetAdjustment: builder.mutation<ProjectCostingProject, { id: number; adjustment_id?: string; body?: any }>({
+    submitBudgetAdjustment: builder.mutation<
+      ProjectCostingProject,
+      { id: number; adjustment_id?: string; body?: any }
+    >({
       query: ({ id, adjustment_id, body }) => ({
         url: `/project-costing/projects/${id}/submit_budget_adjustment/`,
         method: "POST",
-        params: { adjustment_id: adjustment_id || body?.adjustment_id || body?.uuid || body?.id },
+        params: {
+          adjustment_id:
+            adjustment_id || body?.adjustment_id || body?.uuid || body?.id,
+        },
         body,
       }),
       invalidatesTags: (result, error, { id }) => [
@@ -336,31 +411,49 @@ export const projectCostingApi = createApi({
       query: (id) => `/project-costing/projects/${id}/project_settings/`,
       providesTags: (result, error, id) => [{ type: "ProjectCosting", id }],
     }),
-    updateProjectSettings: builder.mutation<any, { id: number; body: { allow_budget_decrease?: boolean; [key: string]: any } }>({
+    updateProjectSettings: builder.mutation<
+      any,
+      {
+        id: number;
+        body: { allow_budget_decrease?: boolean; [key: string]: any };
+      }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/project_settings/`,
         method: "PATCH",
         body,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "ProjectCosting", id }],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "ProjectCosting", id },
+      ],
     }),
 
     // Financials & Costs
-    createActualCost: builder.mutation<ProjectCostingProject, { id: number; body: CreateActualCostRequest }>({
+    createActualCost: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body: CreateActualCostRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/create_actual_cost/`,
         method: "POST",
         body,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "ProjectCosting", id }],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "ProjectCosting", id },
+      ],
     }),
-    createCommitment: builder.mutation<ProjectCostingProject, { id: number; body: CreateCommitmentRequest }>({
+    createCommitment: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body: CreateCommitmentRequest }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/create_commitment/`,
         method: "POST",
         body,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "ProjectCosting", id }],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "ProjectCosting", id },
+      ],
     }),
     getProjectTransactions: builder.query<ProjectTransaction[], number>({
       query: (id) => `/project-costing/projects/${id}/transactions/`,
@@ -376,7 +469,10 @@ export const projectCostingApi = createApi({
       query: (id) => `/project-costing/projects/${id}/dashboard/`,
       providesTags: (result, error, id) => [{ type: "ProjectCosting", id }],
     }),
-    importProjectXlsx: builder.mutation<ProjectCostingProject, { id: number; body: FormData }>({
+    importProjectXlsx: builder.mutation<
+      ProjectCostingProject,
+      { id: number; body: FormData }
+    >({
       query: ({ id, body }) => ({
         url: `/project-costing/projects/${id}/import_xlsx/`,
         method: "POST",

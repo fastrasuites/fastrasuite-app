@@ -1,5 +1,5 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "../../lib/store/store";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 
 // Define nested response types
 export interface User {
@@ -175,85 +175,11 @@ export interface UpdateProjectPurchaseRequest {
   [key: string]: any;
 }
 
-// Helper to resolve the tenant schema name API base URL
-const getTenantBaseUrl = (state: RootState): string => {
-  const tenantSchemaName = state.auth.tenant_schema_name;
-  const apiDomain =
-    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
-  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
-};
-
 export const projectPurchaseRequestApi = createApi({
   reducerPath: "projectPurchaseRequestApi",
   tagTypes: ["ProjectPurchaseRequest"],
-  baseQuery: async (args, api, extraOptions) => {
-    const state = api.getState() as RootState;
-    const baseUrl = getTenantBaseUrl(state);
-    const token = state.auth.access_token;
-
-    // Prepare headers with Authorization token
-    const headers = new Headers();
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`);
-    }
-    headers.set("content-type", "application/json");
-    headers.set("accept", "application/json");
-
-    let url: string;
-    if (typeof args === "string") {
-      url = `${baseUrl}${args}`;
-    } else {
-      // Build search params
-      const params = new URLSearchParams();
-      if (args.params) {
-        Object.entries(args.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== "") {
-            params.append(key, String(value));
-          }
-        });
-      }
-
-      const queryString = params.toString();
-      url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
-    }
-
-    try {
-      const response = await fetch(url, {
-        method: typeof args === "string" ? "GET" : args.method || "GET",
-        headers,
-        body:
-          typeof args === "string"
-            ? undefined
-            : args.body
-            ? JSON.stringify(args.body)
-            : undefined,
-      });
-
-      if (!response.ok) {
-        return {
-          error: {
-            status: response.status,
-            data: await response.json().catch(() => ({})),
-          },
-        };
-      }
-
-      if (response.status === 204) {
-        return { data: undefined };
-      }
-
-      const data = await response.json().catch(() => null);
-      return { data };
-    } catch (error) {
-      return {
-        error: {
-          status: "FETCH_ERROR" as const,
-          data: error,
-        },
-      };
-    }
-  },
+  baseQuery: createTenantBaseQuery(),
+  refetchOnMountOrArgChange: true,
   endpoints: (builder) => ({
     getProjectPurchaseRequests: builder.query<
       ProjectPurchaseRequest[],
@@ -320,7 +246,10 @@ export const projectPurchaseRequestApi = createApi({
       }),
       invalidatesTags: ["ProjectPurchaseRequest"],
     }),
-    submitProjectPurchaseRequest: builder.mutation<any, { id: number | string; data?: any }>({
+    submitProjectPurchaseRequest: builder.mutation<
+      any,
+      { id: number | string; data?: any }
+    >({
       query: ({ id, data }) => ({
         url: `/project-requests/project-requests/${id}/submit/`,
         method: "POST",
@@ -343,4 +272,3 @@ export const {
   useDeleteProjectPurchaseRequestMutation,
   useSubmitProjectPurchaseRequestMutation,
 } = projectPurchaseRequestApi;
-

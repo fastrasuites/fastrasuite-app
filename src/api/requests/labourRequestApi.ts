@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import type { RootState } from "../../lib/store/store";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 
 // Define types for nested objects
 export interface User {
@@ -168,148 +168,18 @@ export interface CancelLabourRequest {
   cancellation_notes?: string;
 }
 // Helper function to get tenant-specific base URL
-const getTenantBaseUrl = (state: RootState): string => {
-  let tenantSchemaName = state.auth.tenant_schema_name;
-  if (!tenantSchemaName && typeof window !== "undefined") {
-    try {
-      tenantSchemaName = localStorage.getItem("tenant_schema_name");
-      if (!tenantSchemaName) {
-        const persistedAuth = localStorage.getItem("persist:auth");
-        if (persistedAuth) {
-          const parsed = JSON.parse(persistedAuth);
-          tenantSchemaName = parsed.tenant_schema_name ? JSON.parse(parsed.tenant_schema_name) : null;
-        }
-      }
-    } catch {
-      // Ignore localStorage read errors
-    }
-  }
-  const apiDomain =
-    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
-  const protocol = (apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")) ? "http" : "https";
-  return tenantSchemaName ? `${protocol}://${tenantSchemaName}.${apiDomain}` : "";
-};
 
 export const labourRequestApi = createApi({
   reducerPath: "labourRequestApi",
   tagTypes: ["LabourRequest"],
-  baseQuery: async (args, api, extraOptions) => {
-    const state = api.getState() as RootState;
-    const baseUrl = getTenantBaseUrl(state);
-    let token = state.auth.access_token;
-    if (!token && typeof window !== "undefined") {
-      try {
-        token = localStorage.getItem("access_token");
-        if (!token) {
-          const persistedAuth = localStorage.getItem("persist:auth");
-          if (persistedAuth) {
-            const parsed = JSON.parse(persistedAuth);
-            token = parsed.access_token ? JSON.parse(parsed.access_token) : null;
-          }
-        }
-      } catch {
-        // Ignore localStorage read errors
-      }
-    }
-
-    if (!baseUrl) {
-      return {
-        error: {
-          status: "CUSTOM_ERROR" as const,
-          data: { message: "Tenant schema name is missing" },
-        },
-      };
-    }
-
-    // Prepare headers
-    const headers = new Headers();
-    if (token) {
-      headers.set("authorization", `Bearer ${token}`);
-    }
-    headers.set("content-type", "application/json");
-    headers.set("accept", "application/json");
-
-    // Handle both string URLs and object URLs with params
-    let url: string;
-    if (typeof args === "string") {
-      url = `${baseUrl}${args}`;
-    } else {
-      // Build URL with query parameters
-      const params = new URLSearchParams();
-      if (args.params) {
-        Object.entries(args.params).forEach(([key, value]) => {
-          if (value !== undefined && value !== null && value !== "") {
-            params.append(key, String(value));
-          }
-        });
-      }
-
-      const queryString = params.toString();
-      url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
-    }
-
-    try {
-      const response = await fetch(url, {
-        method: typeof args === "string" ? "GET" : args.method || "GET",
-        headers,
-        body:
-          typeof args === "string"
-            ? undefined
-            : args.body
-              ? JSON.stringify(args.body)
-              : undefined,
-      });
-
-      const contentType = response.headers.get("content-type") || "";
-      const isJson = contentType.includes("application/json");
-
-      if (!response.ok) {
-        let errorData: any = {};
-        if (isJson) {
-          errorData = await response.json().catch(() => ({}));
-        } else {
-          const text = await response.text().catch(() => "");
-          errorData = { message: text || response.statusText };
-        }
-        return {
-          error: {
-            status: response.status,
-            data: errorData,
-          },
-        };
-      }
-
-      if (response.status === 204) {
-        return { data: undefined };
-      }
-
-      let data: any = null;
-      if (isJson) {
-        data = await response.json().catch(() => null);
-      } else {
-        const text = await response.text().catch(() => null);
-        try {
-          data = text ? JSON.parse(text) : null;
-        } catch {
-          data = text;
-        }
-      }
-      return { data };
-    } catch (error) {
-      return {
-        error: {
-          status: "FETCH_ERROR" as const,
-          data: error,
-        },
-      };
-    }
-  },
+  baseQuery: createTenantBaseQuery(),
+  refetchOnMountOrArgChange: true,
   endpoints: (builder) => ({
     // Labour Request Query endpoints
     getLabourRequests: builder.query<LabourRequest[], GetLabourRequestsParams>({
       query: (params) => ({
         url: "/project-requests/project-requests/?request_type=labour",
-        params,
+        ...(params ? { params } : {}),
       }),
       transformResponse: (response: LabourRequest[]) => response,
       providesTags: ["LabourRequest"],
@@ -346,7 +216,10 @@ export const labourRequestApi = createApi({
         method: "PUT",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "LabourRequest", id }, "LabourRequest"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "LabourRequest", id },
+        "LabourRequest",
+      ],
     }),
     patchLabourRequest: builder.mutation<
       LabourRequest,
@@ -357,14 +230,20 @@ export const labourRequestApi = createApi({
         method: "PATCH",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "LabourRequest", id }, "LabourRequest"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "LabourRequest", id },
+        "LabourRequest",
+      ],
     }),
     deleteLabourRequest: builder.mutation<void, number>({
       query: (id) => ({
         url: `/project-requests/project-requests/${id}/`,
         method: "DELETE",
       }),
-      invalidatesTags: (result, error, id) => [{ type: "LabourRequest", id }, "LabourRequest"],
+      invalidatesTags: (result, error, id) => [
+        { type: "LabourRequest", id },
+        "LabourRequest",
+      ],
     }),
     submitLabourRequest: builder.mutation<
       LabourRequest,
@@ -375,7 +254,10 @@ export const labourRequestApi = createApi({
         method: "POST",
         body: data || {},
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "LabourRequest", id }, "LabourRequest"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "LabourRequest", id },
+        "LabourRequest",
+      ],
     }),
 
     approveLabourRequest: builder.mutation<
@@ -387,7 +269,10 @@ export const labourRequestApi = createApi({
         method: "POST",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "LabourRequest", id }, "LabourRequest"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "LabourRequest", id },
+        "LabourRequest",
+      ],
     }),
 
     rejectLabourRequest: builder.mutation<
@@ -399,7 +284,10 @@ export const labourRequestApi = createApi({
         method: "POST",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "LabourRequest", id }, "LabourRequest"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "LabourRequest", id },
+        "LabourRequest",
+      ],
     }),
 
     cancelLabourRequest: builder.mutation<
@@ -411,7 +299,10 @@ export const labourRequestApi = createApi({
         method: "POST",
         body: data,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "LabourRequest", id }, "LabourRequest"],
+      invalidatesTags: (result, error, { id }) => [
+        { type: "LabourRequest", id },
+        "LabourRequest",
+      ],
     }),
   }),
 });
