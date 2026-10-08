@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertTriangle, X, Loader2, ArrowRight, Download, Layers, Users, Warehouse, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -216,6 +217,74 @@ export default function BillingPage() {
     setModalStep(1);
     setIsPlanModalOpen(true);
   };
+
+  // Auto-select package and optionally open plan modal when coming from landing page
+  const hasHandledLandingIntent = useRef(false);
+
+  useEffect(() => {
+    if (hasHandledLandingIntent.current || isStatusLoading || isPlansLoading) return;
+
+    // 1. Read query parameters
+    const planParam = searchParams.get("plan");
+    const cycleParam =
+      searchParams.get("cycle") ||
+      searchParams.get("billing") ||
+      searchParams.get("interval");
+    const actionParam = searchParams.get("action");
+
+    // 2. Read localStorage fallback (useful after email verification/login)
+    let savedIntent: { plan?: string; cycle?: string; action?: string } | null = null;
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("fastra_intended_subscription");
+        if (stored) {
+          savedIntent = JSON.parse(stored);
+          localStorage.removeItem("fastra_intended_subscription");
+        }
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
+
+    const rawPlan = (planParam || savedIntent?.plan)?.toLowerCase();
+    const rawCycle = (cycleParam || savedIntent?.cycle)?.toLowerCase();
+    const shouldOpenModal =
+      actionParam === "checkout" ||
+      actionParam === "select" ||
+      savedIntent?.action === "checkout" ||
+      Boolean(planParam);
+
+    if (!rawPlan && !rawCycle) return;
+
+    // Apply billing cycle
+    if (rawCycle === "yearly" || rawCycle === "annually") {
+      setBillingCycle("annually");
+    } else if (rawCycle === "monthly") {
+      setBillingCycle("monthly");
+    }
+
+    // Map and validate plan tier
+    let targetTier: "starter" | "professional" | "enterprise" | null = null;
+    if (rawPlan === "starter" || rawPlan === "core") {
+      targetTier = "starter";
+    } else if (rawPlan === "professional" || rawPlan === "pro") {
+      targetTier = "professional";
+    } else if (rawPlan === "enterprise") {
+      targetTier = "enterprise";
+    }
+
+    if (targetTier) {
+      hasHandledLandingIntent.current = true;
+      setSelectedPlanTier(targetTier);
+
+      if (shouldOpenModal) {
+        const timer = setTimeout(() => {
+          handleOpenPlanModal(targetTier!);
+        }, 120);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [searchParams, isStatusLoading, isPlansLoading, subStatus]);
 
   const handleReviewAndConfirm = async () => {
     const targetPlan = getPlanByTierAndInterval(selectedPlanTier, billingCycle);
@@ -941,7 +1010,7 @@ export default function BillingPage() {
                     >
                       {isMostPopular && (
                         <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#708090] text-white text-[11px] font-semibold px-3 py-0.5 rounded-full shadow-2xs uppercase tracking-wide">
-                          Most Popular
+                          Popular
                         </div>
                       )}
 
@@ -952,12 +1021,23 @@ export default function BillingPage() {
                         </div>
 
                         <div>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-2xl font-extrabold text-gray-900">
-                              ₦{price.toLocaleString()}
-                            </span>
-                            <span className="text-xs text-gray-500 font-medium">{unitText}</span>
-                          </div>
+                          {tier === "enterprise" ? (
+                            <div className="flex flex-col justify-center min-h-[36px]">
+                              <span className="text-2xl font-extrabold text-gray-900 leading-tight">
+                                Custom
+                              </span>
+                              <span className="text-xs text-gray-500 font-medium mt-0.5">
+                                Talk to our team
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-baseline gap-1">
+                              <span className="text-2xl font-extrabold text-gray-900">
+                                ₦{price.toLocaleString()}
+                              </span>
+                              <span className="text-xs text-gray-500 font-medium">{unitText}</span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="space-y-3 border-t border-gray-100 pt-5">
@@ -979,19 +1059,27 @@ export default function BillingPage() {
                       </div>
 
                       <div className="pt-8">
-                        <Button
-                          disabled={isCurrent || isDowngradeDisabled}
-                          onClick={() => handleOpenPlanModal(tier)}
-                          className={`w-full h-11 text-xs font-semibold rounded-lg transition-all ${
-                            isCurrent
-                              ? "bg-slate-400 text-white cursor-default"
-                              : isDowngradeDisabled
-                              ? "bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300 shadow-none"
-                              : "bg-[#3B7CED] hover:bg-[#2d63c7] text-white shadow-2xs"
-                          }`}
-                        >
-                          {buttonText}
-                        </Button>
+                        {tier === "enterprise" ? (
+                          <Link href="/contact" className="block w-full">
+                            <Button className="w-full h-11 text-xs font-semibold rounded-lg bg-[#3B7CED] hover:bg-[#2d63c7] text-white shadow-2xs">
+                              Talk to our team
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Button
+                            disabled={isCurrent || isDowngradeDisabled}
+                            onClick={() => handleOpenPlanModal(tier)}
+                            className={`w-full h-11 text-xs font-semibold rounded-lg transition-all ${
+                              isCurrent
+                                ? "bg-slate-400 text-white cursor-default"
+                                : isDowngradeDisabled
+                                ? "bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300 shadow-none"
+                                : "bg-[#3B7CED] hover:bg-[#2d63c7] text-white shadow-2xs"
+                            }`}
+                          >
+                            {buttonText}
+                          </Button>
+                        )}
                         {isDowngradeDisabled && (
                           <p className="text-[11px] text-amber-700 mt-2 text-center font-medium leading-tight">
                             Downgrades are not permitted while subscription is active.

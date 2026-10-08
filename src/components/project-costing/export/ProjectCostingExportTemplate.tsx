@@ -330,21 +330,30 @@ export const ProjectCostingExportTemplate = ({
 
   const { poList, billList, disburseList, ledgerList } = categorizeTransactions(transactions, budgetNum, today);
 
-  const pmFirstName = (project as any)?.project_manager_details?.first_name;
-  const pmLastName = (project as any)?.project_manager_details?.last_name;
+  const pmFirstName = (project as any)?.project_manager_details?.first_name?.trim();
+  const pmLastName = (project as any)?.project_manager_details?.last_name?.trim();
+  const pmCombined = `${pmFirstName || ""} ${pmLastName || ""}`.trim();
   const pmEmail = (project as any)?.project_manager_details?.email;
-  const pmNameStr = pmFirstName || pmLastName
-    ? `${pmFirstName || ""} ${pmLastName || ""}`.trim()
-    : (pmEmail || "-");
+  const pmNameStr = (pmCombined && pmCombined.toLowerCase() !== "admin")
+    ? pmCombined
+    : (typeof (project as any)?.project_manager === "string" && (project as any).project_manager.toLowerCase() !== "admin" && (project as any).project_manager.trim()
+        ? (project as any).project_manager.trim()
+        : (pmEmail && !pmEmail.toLowerCase().startsWith("admin") ? pmEmail : "Unassigned"));
 
   // Effective Pie Chart Data fallback if not supplied
-  let effectivePieData = pieChartData;
+  let effectivePieData = pieChartData ? pieChartData.filter(item => {
+    const lower = (item.name || "").toLowerCase().trim();
+    return !lower.includes("material_consumption") && !lower.includes("material consumption");
+  }) : [];
   if (!effectivePieData || effectivePieData.length === 0) {
     const catMap = new Map<string, number>();
     let totalCatAmt = 0;
     const rawTxList = Array.isArray(transactions) ? transactions : [];
     rawTxList.forEach((tx: any) => {
-      const cat = formatCategoryStr(tx.request_type || tx.category || tx.type || "General");
+      const rawCat = tx.request_type || tx.category || tx.type || "General";
+      const lower = String(rawCat).toLowerCase().trim();
+      if (lower.includes("material_consumption") || lower.includes("material consumption")) return;
+      const cat = formatCategoryStr(rawCat);
       const amt = extractAmount(tx);
       if (amt > 0) {
         catMap.set(cat, (catMap.get(cat) || 0) + amt);
@@ -459,6 +468,9 @@ export const ProjectCostingExportTemplate = ({
             <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">{getDocumentTitle()}</span>
           </div>
           <div className="text-xs text-gray-600 mt-1">
+            <span className="font-semibold text-gray-500">Client:</span>{" "}
+            {(project as any)?.client_name || "N/A"}{" "}
+            <span className="mx-2 text-gray-300">|</span>{" "}
             <span className="font-semibold text-gray-500">Project Manager:</span>{" "}
             {pmNameStr}{" "}
             <span className="mx-2 text-gray-300">|</span>{" "}

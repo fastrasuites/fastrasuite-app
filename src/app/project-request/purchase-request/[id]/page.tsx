@@ -13,6 +13,7 @@ import {
   usePatchProjectPurchaseRequestMutation,
   useSubmitProjectPurchaseRequestMutation,
 } from "@/api/requests/projectPurchaseRequestApi";
+import { useGetActivityOptionsQuery } from "@/api/requests/projectRequestApi";
 import { StatusModal, useStatusModal, extractErrorMessage } from "@/components/shared/StatusModal";
 import { FormActionFooter } from "@/components/shared/FormActionFooter";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
@@ -149,9 +150,11 @@ const mapApiRequestToUi = (req: any): PurchaseRequestItem => {
   });
 
   const refId =
-    req.project_request?.reference_id ||
-    req.reference_id ||
-    (req.id ? `PR${String(req.id).padStart(5, "0")}` : "PR-REQ");
+    (req.reference_id && String(req.reference_id).trim()) ||
+    ((req as any).detail?.reference_id && String((req as any).detail.reference_id).trim()) ||
+    (typeof req.project_request === "object" && req.project_request?.reference_id && String(req.project_request.reference_id).trim()) ||
+    (typeof req.project_request === "string" && req.project_request.trim()) ||
+    (req.id ? `PR${String(req.id).padStart(4, "0")}` : "PR-REQ");
 
   const statusVal =
     req.project_request?.status || req.request_status || req.status || "draft";
@@ -231,10 +234,34 @@ export default function PurchaseRequestDetailPage() {
     { skip: !projectId || isNaN(Number(projectId)) }
   );
 
-  const availableBudget = useMemo(() => {
-    if (!projectCosting) return 5000000;
+  const phaseId = request?.phase || apiData?.phase_details?.id || apiData?.phase;
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(projectId), phase_id: String(phaseId) },
+    { skip: !projectId || !phaseId }
+  );
 
-    if (activityId) {
+  const availableBudget = useMemo(() => {
+    // 1. Check activity options from permission-safe endpoint
+    if (activityId && Array.isArray(rawActivityOptions) && rawActivityOptions.length > 0) {
+      const match = rawActivityOptions.find((a: any) => String(a.id) === String(activityId));
+      if (match) {
+        if (match.available_budget !== undefined && match.available_budget !== null) {
+          return Number(match.available_budget);
+        }
+        if (match.current_budget !== undefined && match.current_budget !== null) {
+          return Number(match.current_budget);
+        }
+      }
+    }
+
+    // 2. Check direct available_budget on request
+    if (apiData?.available_budget !== undefined && apiData?.available_budget !== null) {
+      const num = Number(apiData.available_budget);
+      if (!isNaN(num) && num > 0) return num;
+    }
+
+    // 3. Fallback to project costing if available
+    if (projectCosting && activityId) {
       const phasesArr = Array.isArray(projectCosting.phases)
         ? projectCosting.phases
         : Array.isArray((projectCosting as any).phase_list)
@@ -253,12 +280,14 @@ export default function PurchaseRequestDetailPage() {
             return Number(act.available_budget);
           if (act.remaining_budget !== undefined && act.remaining_budget !== null)
             return Number(act.remaining_budget);
+          if (act.current_budget !== undefined && act.current_budget !== null)
+            return Number(act.current_budget);
           if (act.amount !== undefined && act.amount !== null) return Number(act.amount);
         }
       }
     }
 
-    if (projectCosting.financials) {
+    if (projectCosting?.financials) {
       if (
         projectCosting.financials.remaining_budget !== undefined &&
         projectCosting.financials.remaining_budget !== null
@@ -271,8 +300,8 @@ export default function PurchaseRequestDetailPage() {
         return Number(projectCosting.financials.budget);
     }
 
-    return 5000000;
-  }, [projectCosting, activityId]);
+    return 0;
+  }, [projectCosting, activityId, rawActivityOptions, apiData]);
 
   const handleDelete = () => {
     statusModal.showConfirm(
@@ -328,21 +357,21 @@ export default function PurchaseRequestDetailPage() {
           const extraDetails: string[] = [];
           if (errObj.available !== undefined && errObj.available !== null) {
             extraDetails.push(
-              `Available: N${Number(errObj.available).toLocaleString("en-NG", {
+              `Available: ₦${Number(errObj.available).toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
               })}`
             );
           }
           if (errObj.requested !== undefined && errObj.requested !== null) {
             extraDetails.push(
-              `Requested: N${Number(errObj.requested).toLocaleString("en-NG", {
+              `Requested: ₦${Number(errObj.requested).toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
               })}`
             );
           }
           if (errObj.activity_budget !== undefined && errObj.activity_budget !== null) {
             extraDetails.push(
-              `Activity Budget: N${Number(errObj.activity_budget).toLocaleString("en-NG", {
+              `Activity Budget: ₦${Number(errObj.activity_budget).toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
               })}`
             );
@@ -365,21 +394,21 @@ export default function PurchaseRequestDetailPage() {
           const extraDetails: string[] = [];
           if (errObj.available !== undefined && errObj.available !== null) {
             extraDetails.push(
-              `Available: N${Number(errObj.available).toLocaleString("en-NG", {
+              `Available: ₦${Number(errObj.available).toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
               })}`
             );
           }
           if (errObj.requested !== undefined && errObj.requested !== null) {
             extraDetails.push(
-              `Requested: N${Number(errObj.requested).toLocaleString("en-NG", {
+              `Requested: ₦${Number(errObj.requested).toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
               })}`
             );
           }
           if (errObj.activity_budget !== undefined && errObj.activity_budget !== null) {
             extraDetails.push(
-              `Activity Budget: N${Number(errObj.activity_budget).toLocaleString("en-NG", {
+              `Activity Budget: ₦${Number(errObj.activity_budget).toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
               })}`
             );
@@ -418,7 +447,7 @@ export default function PurchaseRequestDetailPage() {
     return error.message || "Failed to update status on server.";
   };
 
-  const handleStatusChange = async (newStatus: "approved" | "rejected" | "pending") => {
+  const handleStatusChange = async (newStatus: "approved" | "rejected" | "pending", confirmOverBudget = false) => {
     try {
       if (newStatus === "pending" && apiData) {
         const parentId =
@@ -427,7 +456,8 @@ export default function PurchaseRequestDetailPage() {
             : apiData.project_request;
 
         if (parentId) {
-          await submitProjectRequest({ id: parentId as number }).unwrap();
+          const payloadData = confirmOverBudget ? { confirm_over_budget: true } : {};
+          await submitProjectRequest({ id: parentId as number, data: payloadData }).unwrap();
           if (request) {
             setRequest((prev) => (prev ? { ...prev, status: newStatus } : null));
           }
@@ -449,6 +479,46 @@ export default function PurchaseRequestDetailPage() {
       );
     } catch (error: any) {
       console.error("API Error Response:", error);
+      const errData = error?.data || error?.response?.data || error?.error?.data || error || {};
+      const isOverBudget =
+        errData?.confirmation_required === true ||
+        errData?.code === "OVER_BUDGET" ||
+        errData?.warning === true;
+
+      if (isOverBudget) {
+        const msg =
+          errData?.confirmation_message ||
+          errData?.message ||
+          "This request is higher than the amount currently available for the selected activity. Do you want to continue?";
+
+        let detailText = "";
+        if (errData?.details) {
+          const d = errData.details;
+          const reqAmt = d.requested_amount ? `₦${Number(d.requested_amount).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+          const availAmt = d.available_budget ? `₦${Number(d.available_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+          const overAmt = d.amount_over_budget ? `₦${Number(d.amount_over_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+
+          const parts: string[] = [];
+          if (reqAmt) parts.push(`Requested: ${reqAmt}`);
+          if (availAmt) parts.push(`Available: ${availAmt}`);
+          if (overAmt) parts.push(`Over Budget: ${overAmt}`);
+          if (parts.length > 0) {
+            detailText = `\n\n• ${parts.join("\n• ")}`;
+          }
+        }
+
+        statusModal.showConfirm(
+          "Over Budget Warning",
+          `${msg}${detailText}`,
+          async () => {
+            await handleStatusChange(newStatus, true);
+          },
+          "Yes, Continue",
+          "No, Cancel"
+        );
+        return;
+      }
+
       const errorMsg = formatApiError(error);
       statusModal.showError(
         "Submission Failed",
@@ -628,7 +698,7 @@ export default function PurchaseRequestDetailPage() {
                   <div className="flex justify-between items-start">
                     <span className="text-[14px] font-semibold text-black/80">{line.productName}</span>
                     <span className="text-[14px] font-semibold text-black/80">
-                      N{line.lineTotal.toLocaleString("en-NG")}
+                      ₦{line.lineTotal.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div className="text-[12px] text-[#475569] font-normal mt-0.5">{line.quantity} QTY</div>
@@ -659,13 +729,13 @@ export default function PurchaseRequestDetailPage() {
           <div className="flex justify-between items-center">
             <span className="text-[14px] font-semibold text-black/80">Available Budget</span>
             <span className="text-[14px] font-semibold text-black/80">
-              N{availableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ₦{availableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[14px] font-semibold text-[#111827]">Total Cost</span>
             <span className="text-[14px] font-semibold text-[#3B82F6]">
-              N{totalCost.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              ₦{totalCost.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </section>

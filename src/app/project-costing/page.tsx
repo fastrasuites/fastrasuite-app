@@ -40,12 +40,28 @@ const STATUS_TABS = [
 
 const getProjectManager = (project: any) => {
   if (project.project_manager_details) {
-    const { first_name, last_name } = project.project_manager_details;
-    if (first_name || last_name) {
-      return `${first_name || ""} ${last_name || ""}`.trim();
+    const { first_name, last_name, username, email } = project.project_manager_details;
+    const combined = `${first_name || ""} ${last_name || ""}`.trim();
+    if (combined && combined.toLowerCase() !== "admin") {
+      return combined;
+    }
+    if (username && username.toLowerCase() !== "admin") {
+      return username;
+    }
+    if (email) {
+      const prefix = email.split("@")[0];
+      if (prefix.toLowerCase() !== "admin") {
+        return prefix;
+      }
     }
   }
-  return project.client_name || "Unknown";
+  if (typeof project.project_manager === "string" && project.project_manager.trim() && project.project_manager.toLowerCase() !== "admin") {
+    return project.project_manager.trim();
+  }
+  if (typeof project.project_manager_name === "string" && project.project_manager_name.trim() && project.project_manager_name.toLowerCase() !== "admin") {
+    return project.project_manager_name.trim();
+  }
+  return "Unassigned";
 };
 
 const formatDate = (dateStr?: string) => {

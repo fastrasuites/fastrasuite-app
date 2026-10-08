@@ -15,7 +15,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRegisterMutation } from "@/api/authApi";
 import { Eye, EyeOff, Check, X } from "lucide-react";
 import { StatusModal } from "@/components/shared/StatusModal";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/lib/store/store";
 
 const companyFormSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters"),
@@ -52,6 +54,45 @@ const fakeSubmit = (payload: CompanyFormData & PasswordFormData) =>
 
 const RegisterPage: NextPage = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const auth = useSelector((state: RootState) => state.auth);
+
+  const planParam = searchParams.get("plan");
+  const cycleParam = searchParams.get("cycle") || searchParams.get("billing");
+  const explicitRedirect = searchParams.get("redirect");
+
+  const redirectTarget =
+    explicitRedirect ||
+    (planParam
+      ? `/settings/billing?plan=${planParam}&cycle=${cycleParam || "monthly"}&action=checkout`
+      : "/");
+
+  // Save selected plan to localStorage so email verification / login won't lose it
+  React.useEffect(() => {
+    if (planParam) {
+      try {
+        localStorage.setItem(
+          "fastra_intended_subscription",
+          JSON.stringify({
+            plan: planParam,
+            cycle: cycleParam || "monthly",
+            action: "checkout",
+            timestamp: Date.now(),
+          })
+        );
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
+  }, [planParam, cycleParam]);
+
+  // If already authenticated, redirect straight to target
+  React.useEffect(() => {
+    if (auth?.access_token) {
+      router.replace(redirectTarget !== "/" ? redirectTarget : "/settings/billing");
+    }
+  }, [auth?.access_token, router, redirectTarget]);
+
   const [loading, setLoading] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -120,6 +161,16 @@ const RegisterPage: NextPage = () => {
     <main className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="flex-1 flex items-center justify-center p-6 md:p-12 lg:px-20">
         <div className="max-w-md w-full">
+          {planParam && (
+            <div className="mb-4 p-3 bg-blue-50/90 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#3B7CED] animate-pulse" />
+                <span>
+                  Selected Plan: <strong className="capitalize">{planParam}</strong> ({cycleParam === "annually" || cycleParam === "yearly" ? "Yearly" : "Monthly"})
+                </span>
+              </div>
+            </div>
+          )}
           <h2 className="text-xl font-semibold text-gray-900 mb-2 text-center">
             Register
           </h2>
@@ -202,7 +253,11 @@ const RegisterPage: NextPage = () => {
 
                   {!showPasswordSection && (
                     <Link
-                      href="/auth/login"
+                      href={
+                        redirectTarget !== "/"
+                          ? `/auth/login?redirect=${encodeURIComponent(redirectTarget)}`
+                          : "/auth/login"
+                      }
                       className="text-center mt-4 w-full block cursor-pointer"
                     >
                       <p className="text-[#3B7CED] font-semibold hover:underline text-sm cursor-pointer">
@@ -428,12 +483,24 @@ const RegisterPage: NextPage = () => {
 
             <StatusModal
               isOpen={!!submittedId}
-              onClose={() => router.push("/auth/login")}
+              onClose={() =>
+                router.push(
+                  redirectTarget !== "/"
+                    ? `/auth/login?redirect=${encodeURIComponent(redirectTarget)}`
+                    : "/auth/login"
+                )
+              }
               type="info"
               title="Confirmation Link Sent"
               message="We sent a confirmation link to your email, click on that link to proceed."
               actionText="Done"
-              onAction={() => router.push("/auth/login")}
+              onAction={() =>
+                router.push(
+                  redirectTarget !== "/"
+                    ? `/auth/login?redirect=${encodeURIComponent(redirectTarget)}`
+                    : "/auth/login"
+                )
+              }
             />
           </div>
         </div>

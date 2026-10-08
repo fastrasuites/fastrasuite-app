@@ -13,6 +13,7 @@ import {
   useUpdateSubcontractorRequestMutation,
   usePatchSubcontractorRequestMutation,
 } from "@/api/subcontractorRequestApi";
+import { useGetActivityOptionsQuery } from "@/api/requests/projectRequestApi";
 import { useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useParams, useRouter } from "next/navigation";
@@ -214,6 +215,21 @@ export default function EditSubcontractorRequestPage() {
     parsedProjectRequest?.available_budget;
   const reqBudget = rawBudget !== undefined && rawBudget !== null && rawBudget !== "" ? Number(rawBudget) : 0;
 
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(projectIdStr), phase_id: resolvedPhaseId },
+    { skip: !projectIdStr || isNaN(Number(projectIdStr)) || !resolvedPhaseId }
+  );
+  const activityOptionsList = Array.isArray(rawActivityOptions)
+    ? rawActivityOptions
+    : (rawActivityOptions as any)?.results || [];
+  const matchingActivity = activityOptionsList.find((a: any) => String(a.id) === String(taskIdStr));
+  const activityApprovedBudget =
+    matchingActivity?.current_budget !== undefined && matchingActivity.current_budget !== null
+      ? Number(matchingActivity.current_budget)
+      : matchingActivity?.original_amount !== undefined && matchingActivity.original_amount !== null
+      ? Number(matchingActivity.original_amount || 0) + Number(matchingActivity.approved_adjustment || 0)
+      : 0;
+
   const budgetFromCosting = useMemo(() => {
     if (!projectCosting) return 0;
     if (taskIdStr) {
@@ -235,7 +251,11 @@ export default function EditSubcontractorRequestPage() {
             return Number(act.available_budget);
           if (act.remaining_budget !== undefined && act.remaining_budget !== null)
             return Number(act.remaining_budget);
-          if (act.amount !== undefined && act.amount !== null) return Number(act.amount);
+          if (act.current_budget !== undefined && act.current_budget !== null)
+            return Number(act.current_budget);
+          if (act.amount !== undefined && act.amount !== null) {
+            return Number(act.amount) + Number(act.approved_adjustment || 0);
+          }
         }
       }
     }
@@ -255,7 +275,15 @@ export default function EditSubcontractorRequestPage() {
     return 0;
   }, [projectCosting, taskIdStr]);
 
-  const defaultAvailableBudget = reqBudget > 0 ? reqBudget : budgetFromCosting;
+  const defaultApprovedBudget = activityApprovedBudget > 0 ? activityApprovedBudget : 0;
+  const defaultAvailableBudget =
+    matchingActivity?.available_budget !== undefined && matchingActivity.available_budget !== null
+      ? Number(matchingActivity.available_budget)
+      : defaultApprovedBudget > 0
+      ? defaultApprovedBudget
+      : reqBudget > 0
+      ? reqBudget
+      : budgetFromCosting;
 
   // Project display name & options
   const projectName = useMemo(() => {
@@ -407,11 +435,13 @@ export default function EditSubcontractorRequestPage() {
           label: taskName || `Activity ${taskIdStr}`,
           value: taskIdStr,
           amount: defaultAvailableBudget,
+          approvedBudget: defaultApprovedBudget,
+          balance: defaultAvailableBudget,
         },
       ];
     }
     return [];
-  }, [taskIdStr, taskName, defaultAvailableBudget]);
+  }, [taskIdStr, taskName, defaultAvailableBudget, defaultApprovedBudget]);
 
   // Scope of Work
   const resolvedScopeOfWork = useMemo(() => {
@@ -720,6 +750,13 @@ export default function EditSubcontractorRequestPage() {
         ],
         renderTop: (data: FormValues, extra?: any) => {
           const isSameTask = String(data.task || "") === String(taskIdStr || "");
+          const approvedBudget =
+            extra?.approvedBudget && Number(extra.approvedBudget) > 0
+              ? Number(extra.approvedBudget)
+              : isSameTask
+              ? defaultApprovedBudget
+              : Number(extra?.approvedBudget || 0);
+
           const availBudget =
             extra?.availableBudget && Number(extra.availableBudget) > 0
               ? Number(extra.availableBudget)
@@ -731,6 +768,14 @@ export default function EditSubcontractorRequestPage() {
 
           return (
             <div className="pb-4 mb-4 border-b border-gray-200 space-y-2">
+              {approvedBudget > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-gray-900">Approved Budget</span>
+                  <span className="text-sm font-semibold text-gray-700">
+                    ₦{Number(approvedBudget).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
               {(availBudget > 0 || Boolean(data.task)) && (
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold text-gray-900">Available Budget</span>

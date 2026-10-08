@@ -199,14 +199,16 @@ export function resolveNotificationUrl(notification: {
     const idMatch = url.match(/\/(?:project_request|project-requests|project-request)\/(\d+)/);
     const masterId = idMatch ? idMatch[1] : objectId;
 
-    // Check if it is an approval or submission event
-    const isApprovalOrSubmission =
+    // Check if it is an approval, submission, or rejection event
+    const isApprovalSubmissionOrRejection =
       event.includes("approved") ||
       event.includes("submitted") ||
+      event.includes("rejected") ||
       title.includes("approved") ||
-      title.includes("submitted");
+      title.includes("submitted") ||
+      title.includes("rejected");
 
-    if (isApprovalOrSubmission && masterId) {
+    if (isApprovalSubmissionOrRejection && masterId) {
       return `/project-request/approve/${masterId}`;
     }
 
@@ -222,6 +224,29 @@ export function resolveNotificationUrl(notification: {
       return url;
     }
 
+    // For specific sub-module creation/updates where objectId is the specific record ID
+    const targetSubId = objectId || masterId;
+    if (targetSubId) {
+      if (title.includes("purchase") || message.includes("purchase")) {
+        return `/project-request/purchase-request/${targetSubId}`;
+      }
+      if (title.includes("plant") || title.includes("equipment") || message.includes("plant") || message.includes("equipment")) {
+        return `/project-request/plant-equipment-request/${targetSubId}`;
+      }
+      if (title.includes("subcontractor") || message.includes("subcontractor")) {
+        return `/project-request/subcontractor-request/${targetSubId}`;
+      }
+      if (title.includes("material") || title.includes("consumption") || message.includes("material") || message.includes("consumption")) {
+        return `/project-request/material-consumption-request/${targetSubId}`;
+      }
+      if (title.includes("labour") || message.includes("labour")) {
+        return `/project-request/labour-request/${targetSubId}`;
+      }
+      if (title.includes("petty") || message.includes("petty")) {
+        return `/project-request/petty-cash-request/${targetSubId}`;
+      }
+    }
+
     // Default: Dispatch through /project-request/[id] which dynamically handles
     // draft vs approved/pending status and routes with correct detail IDs
     if (masterId) {
@@ -230,8 +255,7 @@ export function resolveNotificationUrl(notification: {
   }
 
   // 3. Invoicing / Invoice Routes
-  // Backend gives: /invoicing/purchase-orders/1
-  // Frontend route: /invoice/purchase-order/1
+  // 3a. Purchase Orders: /invoicing/purchase-orders/1 -> /invoice/purchase-order/1
   if (
     url.startsWith("/invoicing/purchase-orders/") ||
     url.startsWith("/invoice/purchase-orders/") ||
@@ -245,6 +269,38 @@ export function resolveNotificationUrl(notification: {
       return `/invoice/purchase-order/${poId}`;
     }
     return "/invoice/purchase-order";
+  }
+
+  // 3b. Vendor Bills: /invoicing/vendor-bills/11 -> /invoice/payment-queue/11
+  if (
+    url.startsWith("/invoicing/vendor-bills/") ||
+    url.startsWith("/invoice/vendor-bills/") ||
+    url.startsWith("/invoicing/vendor-bill/") ||
+    url.startsWith("/invoice/vendor-bill/") ||
+    (mod === "invoice" && (event.includes("vendor_bill") || title.includes("vendor bill") || message.includes("vendor bill")))
+  ) {
+    const vbMatch = url.match(/\/(?:invoicing|invoice)\/vendor-bills?\/([^\/\s]+)/);
+    const vbId = vbMatch ? vbMatch[1] : objectId;
+    if (vbId) {
+      return `/invoice/payment-queue/${vbId}`;
+    }
+    return "/invoice/payment-queue";
+  }
+
+  // 3c. Disbursements: /invoicing/disbursements/3 -> /invoice/payment-queue/disbursement/3
+  if (
+    url.startsWith("/invoicing/disbursements/") ||
+    url.startsWith("/invoice/disbursements/") ||
+    url.startsWith("/invoicing/disbursement/") ||
+    url.startsWith("/invoice/disbursement/") ||
+    (mod === "invoice" && (event.includes("disbursement") || title.includes("disbursement") || message.includes("disbursement")))
+  ) {
+    const disMatch = url.match(/\/(?:invoicing|invoice)\/disbursements?\/([^\/\s]+)/);
+    const disId = disMatch ? disMatch[1] : objectId;
+    if (disId) {
+      return `/invoice/payment-queue/disbursement/${disId}`;
+    }
+    return "/invoice/payment-queue/disbursement";
   }
 
   // 4. Inventory Routes
@@ -277,6 +333,22 @@ export function resolveNotificationUrl(notification: {
       return `/inventory/operation/incoming_product/${encodeURIComponent(cleanCode)}`;
     }
     return "/inventory/operation";
+  }
+
+  // 4c. Stock Adjustments: Backend gives: /inventory/stock-adjustments/STJ0001/
+  // Frontend route: /inventory/stocks/adjustment/STJ0001
+  if (
+    url.includes("/inventory/stock-adjustments/") ||
+    url.includes("/inventory/stock-adjustment/") ||
+    (mod === "inventory" && (event.includes("stock_adjustment") || title.includes("stock adjustment") || message.includes("stock adjustment")))
+  ) {
+    const adjMatch = url.match(/\/inventory\/(?:stock-adjustments|stock-adjustment)\/([^\/\s]+)/);
+    const adjId = adjMatch ? adjMatch[1] : objectId;
+    if (adjId) {
+      const cleanId = adjId.replace(/\/$/, "");
+      return `/inventory/stocks/adjustment/${cleanId}`;
+    }
+    return "/inventory/stocks/adjustment";
   }
 
   // 5. Direct purchase routes

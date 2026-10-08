@@ -551,7 +551,7 @@ export default function ConvertToPOModal({
               <TruncateWithTooltip text={displayVendorName} maxLength={28} />
             </strong>
             . The Committed Amount of{" "}
-            <strong>N{totalAmount.toLocaleString()}</strong> will be locked
+            <strong>₦{totalAmount.toLocaleString()}</strong> will be locked
             against{" "}
             <strong>
               <TruncateWithTooltip text={wbsLabel} maxLength={36} />

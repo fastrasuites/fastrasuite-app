@@ -111,11 +111,12 @@ const mapApiRequestToUi = (req: any): PurchaseRequestItem => {
   });
 
   const refId =
-    req.reference_id ||
+    (req.reference_id && String(req.reference_id).trim()) ||
+    ((req as any).detail?.reference_id && String((req as any).detail.reference_id).trim()) ||
     (typeof req.project_request === "object"
       ? (req as any).project_request?.reference_id
       : null) ||
-    (req.id ? `PR-${String(req.id).padStart(5, "0")}` : "PR-REQ");
+    (req.id ? `PR${String(req.id).padStart(4, "0")}` : "PR-REQ");
     
   const statusVal =
     req.request_status ||

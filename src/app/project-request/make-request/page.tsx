@@ -28,7 +28,7 @@ export default function MakeRequestPage() {
     },
     {
       title: "Petty Cash Request",
-      description: "Request to procure goods or materials needed on-site",
+      description: "Request for small cash disbursements for on-site expenses",
       icon: Wallet,
       href: "/project-request/petty-cash-request",
       iconColor: "text-yellow-500",

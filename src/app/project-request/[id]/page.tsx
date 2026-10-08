@@ -30,13 +30,26 @@ export default function ProjectRequestDynamicRedirectPage() {
     if (request) {
       const type = (request.request_type || "").toLowerCase();
       const status = (request.status || "").toLowerCase();
-      const detailId = (request as any).detail?.id;
 
-      // If already pending or approved, the approve page is the primary view
-      if (status === "pending" || status === "approved") {
+      // If already pending, approved, rejected, or cancelled, the approve page is the primary view
+      if (status === "pending" || status === "approved" || status === "rejected" || status === "cancelled") {
         router.replace(`/project-request/approve/${numericId}`);
         return;
       }
+
+      let parsedDetail: any = (request as any).detail;
+      if (typeof parsedDetail === "string") {
+        try {
+          parsedDetail = JSON.parse(parsedDetail);
+        } catch {
+          parsedDetail = null;
+        }
+      }
+      const detailId =
+        (typeof parsedDetail === "object" && parsedDetail?.id) ||
+        (typeof parsedDetail === "number" ? parsedDetail : null) ||
+        (request as any).detail_id ||
+        (request as any).object_id;
 
       // Otherwise direct to the respective sub-module page
       if (type.includes("purchase")) {
@@ -44,9 +57,9 @@ export default function ProjectRequestDynamicRedirectPage() {
       } else if (type.includes("subcontractor")) {
         router.replace(`/project-request/subcontractor-request/${detailId || numericId}`);
       } else if (type.includes("labour")) {
-        router.replace(`/project-request/labour-request/${numericId}`);
+        router.replace(`/project-request/labour-request/${detailId || numericId}`);
       } else if (type.includes("petty")) {
-        router.replace(`/project-request/petty-cash-request/${numericId}`);
+        router.replace(`/project-request/petty-cash-request/${detailId || numericId}`);
       } else if (type.includes("material")) {
         router.replace(`/project-request/material-consumption-request/${detailId || numericId}`);
       } else if (type.includes("plant") || type.includes("equipment")) {

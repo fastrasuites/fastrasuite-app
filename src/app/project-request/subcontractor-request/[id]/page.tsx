@@ -20,6 +20,7 @@ import {
   useDeleteSubcontractorRequestMutation,
   useSubmitSubcontractorRequestMutation,
 } from "@/api/subcontractorRequestApi";
+import { useGetActivityOptionsQuery } from "@/api/requests/projectRequestApi";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useGetVendorByIdQuery, useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
@@ -48,6 +49,7 @@ export default function SubcontractorRequestDetailsPage() {
   const projectRequest = useMemo(() => (request as any)?.project_request || (request as any) || {}, [request]);
 
   const projectId = (request as any)?.project || projectRequest?.project || detail?.project;
+  const phaseId = (request as any)?.phase || (request as any)?.phase_details?.id || detail?.phase || detail?.phase_details?.id;
   const activityId = (request as any)?.activity || detail?.activity || detail?.task;
 
   const vendorId =
@@ -81,7 +83,37 @@ export default function SubcontractorRequestDetailsPage() {
     { skip: !projectId || isNaN(Number(projectId)) }
   );
 
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(projectId), phase_id: String(phaseId) },
+    { skip: !projectId || !phaseId }
+  );
+  const activityOptionsList = Array.isArray(rawActivityOptions)
+    ? rawActivityOptions
+    : (rawActivityOptions as any)?.results || [];
+  const matchingActivity = activityOptionsList.find(
+    (a: any) => String(a.id) === String(activityId)
+  );
+
+  const approvedBudget = useMemo(() => {
+    if (matchingActivity) {
+      if (matchingActivity.current_budget !== undefined && matchingActivity.current_budget !== null) {
+        return Number(matchingActivity.current_budget);
+      }
+      if (matchingActivity.original_amount !== undefined && matchingActivity.original_amount !== null) {
+        return Number(matchingActivity.original_amount) + Number(matchingActivity.approved_adjustment || 0);
+      }
+    }
+    return 0;
+  }, [matchingActivity]);
+
   const availableBudget = useMemo(() => {
+    if (matchingActivity) {
+      if (matchingActivity.available_budget !== undefined && matchingActivity.available_budget !== null) {
+        return Number(matchingActivity.available_budget);
+      }
+      if (approvedBudget > 0) return approvedBudget;
+    }
+
     const rawBudget = (request as any)?.available_budget ?? detail?.available_budget;
     if (rawBudget !== undefined && rawBudget !== null && rawBudget !== "") {
       const parsed = Number(rawBudget);
@@ -107,7 +139,11 @@ export default function SubcontractorRequestDetailsPage() {
             return Number(act.available_budget);
           if (act.remaining_budget !== undefined && act.remaining_budget !== null)
             return Number(act.remaining_budget);
-          if (act.amount !== undefined && act.amount !== null) return Number(act.amount);
+          if (act.current_budget !== undefined && act.current_budget !== null)
+            return Number(act.current_budget);
+          if (act.amount !== undefined && act.amount !== null) {
+            return Number(act.amount) + Number(act.approved_adjustment || 0);
+          }
         }
       }
     }
@@ -125,8 +161,8 @@ export default function SubcontractorRequestDetailsPage() {
         return Number(projectCosting.financials.budget);
     }
 
-    return 0;
-  }, [request, detail, projectCosting, activityId]);
+    return approvedBudget;
+  }, [matchingActivity, approvedBudget, request, detail, projectCosting, activityId]);
 
   const handleModalClose = () => {
     const isDeleted = statusModal.type === "success" && statusModal.title === "Request Deleted";
@@ -175,17 +211,58 @@ export default function SubcontractorRequestDetailsPage() {
     );
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (confirmOverBudget = false) => {
     try {
       const submitId = Number(projectRequest?.id || (request as any)?.project_request_id || requestId);
-      await submitRequest({ id: submitId, subcontractorRequestId: requestId }).unwrap();
+      const payloadData = confirmOverBudget ? { confirm_over_budget: true } : {};
+      await submitRequest({ id: submitId, subcontractorRequestId: requestId, data: payloadData }).unwrap();
       statusModal.showSuccess(
         "Request Submitted",
         "The subcontractor request has been submitted for approval."
       );
       refetch();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to submit request:", err);
+      const errData = err?.data || err?.response?.data || err?.error?.data || err || {};
+      const isOverBudget =
+        errData?.confirmation_required === true ||
+        errData?.code === "OVER_BUDGET" ||
+        errData?.warning === true;
+
+      if (isOverBudget) {
+        const msg =
+          errData?.confirmation_message ||
+          errData?.message ||
+          "This request is higher than the amount currently available for the selected activity. Do you want to continue?";
+
+        let detailText = "";
+        if (errData?.details) {
+          const d = errData.details;
+          const reqAmt = d.requested_amount ? `₦${Number(d.requested_amount).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+          const availAmt = d.available_budget ? `₦${Number(d.available_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+          const overAmt = d.amount_over_budget ? `₦${Number(d.amount_over_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+
+          const parts: string[] = [];
+          if (reqAmt) parts.push(`Requested: ${reqAmt}`);
+          if (availAmt) parts.push(`Available: ${availAmt}`);
+          if (overAmt) parts.push(`Over Budget: ${overAmt}`);
+          if (parts.length > 0) {
+            detailText = `\n\n• ${parts.join("\n• ")}`;
+          }
+        }
+
+        statusModal.showConfirm(
+          "Over Budget Warning",
+          `${msg}${detailText}`,
+          async () => {
+            await handleSubmit(true);
+          },
+          "Yes, Continue",
+          "No, Cancel"
+        );
+        return;
+      }
+
       statusModal.showError(
         "Submit Failed",
         extractErrorMessage(err, "Failed to submit the request. Please try again.")
@@ -685,6 +762,14 @@ export default function SubcontractorRequestDetailsPage() {
 
           {/* Budget & Cost Summary */}
           <section className="px-5 py-4 space-y-2 bg-white shrink-0">
+            {approvedBudget > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-[14px] font-semibold text-black/80">Approved Budget</span>
+                <span className="text-[14px] font-semibold text-gray-700">
+                  ₦{approvedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <span className="text-[14px] font-semibold text-black/80">Available Budget</span>
               <span className="text-[14px] font-semibold text-black/80">
@@ -732,7 +817,7 @@ export default function SubcontractorRequestDetailsPage() {
                 {canSubmit && (
                   <Button
                     disabled={isSubmitting}
-                    onClick={handleSubmit}
+                    onClick={() => handleSubmit()}
                     className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
                   >
                     <Send size={14} /> Submit for approval

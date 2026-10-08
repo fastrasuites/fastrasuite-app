@@ -12,12 +12,13 @@ import { motion } from "framer-motion";
 import { 
   useGetProjectRequestQuery, 
   useApproveProjectRequestMutation, 
-  useRejectProjectRequestMutation 
+  useRejectProjectRequestMutation,
+  useGetActivityOptionsQuery,
 } from "@/api/requests/projectRequestApi";
 import { useGetProjectCostingProjectsQuery } from "@/api/projectCostingApi";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
-import { extractErrorMessage } from "@/lib/utils";
+import { extractErrorMessage, cn } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useGetUserByIdQuery } from "@/api/settings/usersApi";
 import { useGetVendorByIdQuery, useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
@@ -265,6 +266,14 @@ export default function RequestDetailsPage() {
     );
   }, [detail, request]);
 
+  const milestonesList = React.useMemo(() => {
+    if (Array.isArray((request as any)?.milestones)) return (request as any).milestones;
+    if (Array.isArray(detail?.milestones)) return detail.milestones;
+    if (Array.isArray((request as any)?.milestone_list)) return (request as any).milestone_list;
+    if (Array.isArray(detail?.milestone_list)) return detail.milestone_list;
+    return [];
+  }, [request, detail]);
+
   const specificRefId =
     detail?.reference_id ||
     detail?.request_id ||
@@ -291,13 +300,72 @@ export default function RequestDetailsPage() {
     (typeof detail?.activity === "string" && !detail.activity.includes("-") ? detail.activity : null) || 
     "N/A";
   
-  const availableBudget = Number(
-    detail?.available_budget !== undefined 
-      ? detail.available_budget 
-      : detail?.budget !== undefined 
-      ? detail.budget 
-      : 0
+  const projectId = 
+    request?.project ??
+    detail?.project ??
+    request?.project_details?.id ??
+    detail?.project_details?.id;
+  const phaseId = 
+    detail?.phase_details?.id ??
+    (typeof detail?.phase === "object" ? detail?.phase?.id : detail?.phase) ??
+    detail?.phase_id ??
+    (request as any)?.phase;
+  const activityId = 
+    detail?.activity_details?.id ??
+    (typeof detail?.activity === "object" ? detail?.activity?.id : detail?.activity) ??
+    detail?.activity_id ??
+    (request as any)?.activity;
+
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(projectId), phase_id: phaseId ? String(phaseId) : "" },
+    { skip: !projectId || isNaN(Number(projectId)) || !phaseId }
   );
+
+  const activityOptionsList = React.useMemo(() => {
+    return Array.isArray(rawActivityOptions)
+      ? rawActivityOptions
+      : (rawActivityOptions as any)?.results || [];
+  }, [rawActivityOptions]);
+
+  const matchingActivity = React.useMemo(() => {
+    if (!activityId) return null;
+    return activityOptionsList.find((a: any) => String(a.id) === String(activityId));
+  }, [activityOptionsList, activityId]);
+
+  const approvedBudget = React.useMemo(() => {
+    if (matchingActivity) {
+      if (matchingActivity.current_budget !== undefined && matchingActivity.current_budget !== null) {
+        return Number(matchingActivity.current_budget);
+      }
+      if (matchingActivity.original_amount !== undefined && matchingActivity.original_amount !== null) {
+        return Number(matchingActivity.original_amount || 0) + Number(matchingActivity.approved_adjustment || 0);
+      }
+    }
+    const rawAppr = (request as any)?.approved_budget ?? (detail as any)?.approved_budget ?? (detail as any)?.current_budget;
+    if (rawAppr !== undefined && rawAppr !== null && rawAppr !== "") {
+      const parsed = Number(rawAppr);
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
+    return 0;
+  }, [matchingActivity, request, detail]);
+
+  const availableBudget = React.useMemo(() => {
+    if (matchingActivity) {
+      if (matchingActivity.available_budget !== undefined && matchingActivity.available_budget !== null) {
+        return Number(matchingActivity.available_budget);
+      }
+      if (approvedBudget > 0) return approvedBudget;
+    }
+    const rawBudget =
+      detail?.available_budget ??
+      detail?.budget ??
+      (request as any)?.available_budget;
+    if (rawBudget !== undefined && rawBudget !== null && rawBudget !== "") {
+      const parsed = Number(rawBudget);
+      if (!isNaN(parsed)) return parsed;
+    }
+    return approvedBudget;
+  }, [matchingActivity, approvedBudget, detail, request]);
 
   const getTotalCost = () => {
     if (detail?.project_request?.request_amount !== undefined && Number(detail.project_request.request_amount) > 0) {
@@ -505,11 +573,10 @@ export default function RequestDetailsPage() {
 
               {isSubcontractor && (
                 <>
+                  <DataField label="Subcontractor Name" value={subcontractorName} />
                   <DataField label="Scope of Work" value={detail.scope_of_work || "N/A"} />
-                  <DataField label="Subcontractor Name" value={subcontractorName} fullWidth />
                   <DataField label="Start Date" value={formatDate(detail.start_date)} />
                   <DataField label="End Date" value={formatDate(detail.end_date)} />
-                  <DataField label="Note" value={subcontractorNote} fullWidth />
                 </>
               )}
 
@@ -554,7 +621,10 @@ export default function RequestDetailsPage() {
                 label="Activity" 
                 value={activityName} 
               />
-              {availableBudget > 0 && !isMaterialConsumption && (
+              {approvedBudget > 0 && (
+                <DataField label="Activity Approved Budget" value={formatCurrency(approvedBudget)} />
+              )}
+              {availableBudget > 0 && (
                 <DataField label="Activity Available Budget" value={formatCurrency(availableBudget)} />
               )}
             </div>
@@ -653,10 +723,62 @@ export default function RequestDetailsPage() {
                 <SectionHeader title="Cost Details" />
                 <div className="grid grid-cols-2 gap-y-5 gap-x-4">
                   <DataField label="Contract Value (Estimated)" value={formatCurrency(detail.contract_value)} />
-                  <DataField label="Payment Terms" value={detail.payment_terms || "N/A"} />
-                  <DataField label="Payment Type" value={detail.payment_type ? (detail.payment_type === "milestone" ? "Milestone" : "Lump sum") : "N/A"} />
+                  <DataField label="Payment Type" value={detail.payment_type ? (detail.payment_type === "milestone" || detail.payment_type === "milestone_based" ? "Milestone" : "Lump sum") : "N/A"} />
                   <DataField label="Note" value={subcontractorNote} fullWidth />
                 </div>
+
+                {(detail.payment_type === "milestone" || detail.payment_type === "milestone_based") && milestonesList.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[13px] font-semibold text-gray-700">
+                        Milestone Breakdown ({milestonesList.length})
+                      </span>
+                      <span className="text-[11px] font-medium text-gray-500">
+                        Total: {milestonesList.reduce((s: number, m: any) => s + (Number(m.percentage) || 0), 0)}%
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {milestonesList.map((m: any, idx: number) => {
+                        const pct = Number(m.percentage || 0);
+                        const contractVal = Number(detail.contract_value || 0);
+                        const amount = m.amount ? Number(m.amount) : (pct / 100) * contractVal;
+                        return (
+                          <div
+                            key={m.id || idx}
+                            className="p-3 bg-[#F8FAFC] rounded-lg border border-gray-100 text-xs space-y-1.5"
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="font-semibold text-gray-900">
+                                {idx + 1}. {m.name}
+                              </span>
+                              <span className="font-bold text-[#3B7CED]">
+                                {pct}% ({formatCurrency(amount)})
+                              </span>
+                            </div>
+                            {m.completion_criteria && (
+                              <div className="text-gray-500 text-[11px]">
+                                <span className="font-medium text-gray-700">Criteria: </span>
+                                {m.completion_criteria}
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1.5 pt-0.5">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium",
+                                  m.is_completed
+                                    ? "bg-green-100 text-green-800"
+                                    : "bg-amber-100 text-amber-800"
+                                )}
+                              >
+                                {m.is_completed ? "Completed" : "Pending Completion"}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
@@ -761,6 +883,12 @@ export default function RequestDetailsPage() {
       {request && effectiveStatus === "pending" && (
         <FormActionFooter maxWidth="max-w-4xl" zIndex="z-40" className="px-4 py-4 md:py-6" containerClassName="space-y-4">
           <div className="space-y-1.5">
+            {approvedBudget > 0 && (
+              <div className="flex justify-between items-center text-sm font-semibold text-gray-700">
+                <span>Approved Budget</span>
+                <span>{formatCurrency(approvedBudget)}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center text-sm font-bold text-gray-900">
               <span>Available Budget</span>
               <span>{formatCurrency(availableBudget)}</span>

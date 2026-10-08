@@ -16,6 +16,7 @@ import {
   useDeleteMaterialConsumptionMutation,
   useSubmitMaterialConsumptionRequestMutation,
 } from "@/api/requests/materialConsumptionRequestApi";
+import { useGetActivityOptionsQuery } from "@/api/requests/projectRequestApi";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { FormActionFooter } from "@/components/shared/FormActionFooter";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
@@ -266,6 +267,49 @@ export default function MaterialConsumptionRequestDetailPage() {
     materials.reduce((sum, item) => sum + item.lineTotal, 0) ||
     Number(parentPR?.request_amount || 0);
 
+  const projectId =
+    reqObj.project_details?.id ??
+    reqObj.project ??
+    parentPR?.project_details?.id ??
+    parentPR?.project;
+  const phaseId =
+    reqObj.phase_details?.id ??
+    reqObj.phase ??
+    parentPR?.phase_details?.id ??
+    parentPR?.phase;
+  const activityId =
+    reqObj.activity_details?.id ??
+    reqObj.activity ??
+    parentPR?.activity_details?.id ??
+    parentPR?.activity;
+
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(projectId), phase_id: phaseId },
+    { skip: !projectId || !phaseId }
+  );
+
+  const activityOptionsList = Array.isArray(rawActivityOptions)
+    ? rawActivityOptions
+    : (rawActivityOptions as any)?.results || [];
+
+  const matchingActivity = activityOptionsList.find(
+    (a: any) => String(a.id) === String(activityId)
+  );
+
+  const approvedBudget = matchingActivity
+    ? Number(
+        matchingActivity.current_budget ??
+          (Number(matchingActivity.original_amount || 0) +
+            Number(matchingActivity.approved_adjustment || 0))
+      )
+    : 0;
+
+  const availableBudget = matchingActivity
+    ? Number(
+        matchingActivity.available_budget ??
+          (approvedBudget > 0 ? approvedBudget : 0)
+      )
+    : 0;
 
   const noteText =
     reqObj.notes ||
@@ -426,6 +470,22 @@ export default function MaterialConsumptionRequestDetailPage() {
                   <span className="block text-[13px] text-[#8C9BAE] font-normal mb-0.5">Activity</span>
                   <span className="block text-[14px] font-semibold text-black/80">{activityName}</span>
                 </div>
+                {approvedBudget > 0 && (
+                  <div>
+                    <span className="block text-[13px] text-[#8C9BAE] font-normal mb-0.5">Approved Budget</span>
+                    <span className="block text-[14px] font-semibold text-black/80">
+                      ₦{approvedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
+                {availableBudget > 0 && (
+                  <div>
+                    <span className="block text-[13px] text-[#8C9BAE] font-normal mb-0.5">Available Budget</span>
+                    <span className="block text-[14px] font-semibold text-black/80">
+                      ₦{availableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -467,8 +527,34 @@ export default function MaterialConsumptionRequestDetailPage() {
             </section>
           </main>
 
-          {/* Thick Divider Bar at Bottom */}
+          {/* Thick Divider Bar before Summary */}
           <div className="w-full h-2.5 bg-[#F1F3F6] shrink-0" />
+
+          {/* Budget & Cost Summary */}
+          <section className="px-5 py-4 space-y-2 bg-white shrink-0">
+            {approvedBudget > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-[14px] font-semibold text-black/80">Approved Budget</span>
+                <span className="text-[14px] font-semibold text-gray-700">
+                  ₦{approvedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            {availableBudget > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-[14px] font-semibold text-black/80">Available Budget</span>
+                <span className="text-[14px] font-semibold text-black/80">
+                  ₦{availableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between items-center">
+              <span className="text-[14px] font-semibold text-black/80">Total Cost</span>
+              <span className="text-[14px] font-semibold text-[#3B7CED]">
+                ₦{totalCost.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </section>
 
           {/* Floating Bottom Action Bar for Draft/Editable requests */}
           {(canEdit || canDelete || canSubmit) && (

@@ -13,15 +13,19 @@ const VerifyEmailContent = () => {
 
   const token = searchParams.get("token");
   const tenant = searchParams.get("tenant");
+  const redirectParam = searchParams.get("redirect");
+  const loginUrl = redirectParam
+    ? `/auth/login?redirect=${encodeURIComponent(redirectParam)}`
+    : "/auth/login";
 
   const [countdown, setCountdown] = useState<number | null>(null);
 
   // Redirect if missing params
   useEffect(() => {
     if (!token || !tenant) {
-      router.push("/auth/login");
+      router.push(loginUrl);
     }
-  }, [token, tenant, router]);
+  }, [token, tenant, router, loginUrl]);
 
   // API Call - skip if params are missing
   const { data, error, isLoading, isSuccess, isError } = useVerifyEmailQuery(
@@ -37,7 +41,7 @@ const VerifyEmailContent = () => {
         setCountdown((prev) => {
           if (prev === 1) {
             clearInterval(timer);
-            router.push("/auth/login");
+            router.push(loginUrl);
             return 0;
           }
           return prev ? prev - 1 : 0;
@@ -45,7 +49,7 @@ const VerifyEmailContent = () => {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [isSuccess, router]);
+  }, [isSuccess, router, loginUrl]);
 
   // Handle Error
   useEffect(() => {

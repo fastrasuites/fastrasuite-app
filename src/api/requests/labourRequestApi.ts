@@ -152,8 +152,8 @@ export interface PatchLabourRequestRequest {
 }
 
 export interface SubmitLabourRequestRequest {
-  // Empty interface for submit action - no body required
-  [key: string]: never;
+  confirm_over_budget?: boolean;
+  [key: string]: any;
 }
 export interface ApproveLabourRequest {
   status: "approved";

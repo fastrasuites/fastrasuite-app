@@ -28,10 +28,10 @@ interface ProductItemsTableProps {
 }
 
 const formatCurrency = (value: string) =>
-  new Intl.NumberFormat("en-NG", {
-    style: "decimal",
-    maximumFractionDigits: 0,
-  }).format(parseFloat(value));
+  `₦${new Intl.NumberFormat("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(parseFloat(value) || 0)}`;
 
 const computeRowTotal = (item: PurchaseRequestItem) =>
   item.qty * parseFloat(item.estimated_unit_price);

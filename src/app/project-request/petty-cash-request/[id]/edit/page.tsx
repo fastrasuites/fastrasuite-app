@@ -14,6 +14,7 @@ import {
   useGetPettyCashRequestQuery,
   usePatchPettyCashRequestMutation,
 } from "@/api/requests/pettyCashRequestApi";
+import { useGetActivityOptionsQuery } from "@/api/requests/projectRequestApi";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { PageGuard } from "@/components/auth/PageGuard";
@@ -153,8 +154,32 @@ export default function EditPettyCashRequestPage() {
     return "";
   }, [phaseIdStr, projectCosting, taskIdStr]);
 
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(projectIdStr), phase_id: resolvedPhaseId },
+    { skip: !projectIdStr || isNaN(Number(projectIdStr)) || !resolvedPhaseId }
+  );
+  const activityOptionsList = Array.isArray(rawActivityOptions)
+    ? rawActivityOptions
+    : (rawActivityOptions as any)?.results || [];
+  const matchingActivity = activityOptionsList.find((a: any) => String(a.id) === String(taskIdStr));
+  const activityApprovedBudget =
+    matchingActivity?.current_budget !== undefined && matchingActivity.current_budget !== null
+      ? Number(matchingActivity.current_budget)
+      : matchingActivity?.original_amount !== undefined && matchingActivity.original_amount !== null
+      ? Number(matchingActivity.original_amount || 0) + Number(matchingActivity.approved_adjustment || 0)
+      : 0;
+
+  const defaultApprovedBudget = activityApprovedBudget > 0 ? activityApprovedBudget : 0;
+
   // Available budget
   const defaultAvailableBudget = useMemo(() => {
+    if (matchingActivity?.available_budget !== undefined && matchingActivity.available_budget !== null) {
+      return Number(matchingActivity.available_budget);
+    }
+    if (defaultApprovedBudget > 0) {
+      return defaultApprovedBudget;
+    }
+
     const raw =
       detail?.available_budget ??
       (apiPettyCash as any)?.available_budget;
@@ -175,13 +200,20 @@ export default function EditPettyCashRequestPage() {
           : [];
         const act = acts.find((a: any) => String(a.id || a.activity_id) === taskIdStr);
         if (act) {
-          const b = act.available_budget ?? act.remaining_budget ?? act.amount;
-          if (b !== undefined && b !== null) return Number(b);
+          if (act.available_budget !== undefined && act.available_budget !== null)
+            return Number(act.available_budget);
+          if (act.remaining_budget !== undefined && act.remaining_budget !== null)
+            return Number(act.remaining_budget);
+          if (act.current_budget !== undefined && act.current_budget !== null)
+            return Number(act.current_budget);
+          if (act.amount !== undefined && act.amount !== null) {
+            return Number(act.amount) + Number(act.approved_adjustment || 0);
+          }
         }
       }
     }
     return 0;
-  }, [detail, apiPettyCash, projectCosting, taskIdStr]);
+  }, [matchingActivity, defaultApprovedBudget, detail, apiPettyCash, projectCosting, taskIdStr]);
 
   // Amount requested
   const amountRequestedVal = useMemo(() => {
@@ -281,9 +313,15 @@ export default function EditPettyCashRequestPage() {
 
   const taskOptions = useMemo(() =>
     taskIdStr
-      ? [{ label: taskName || `Activity ${taskIdStr}`, value: taskIdStr, amount: defaultAvailableBudget }]
+      ? [{
+          label: taskName || `Activity ${taskIdStr}`,
+          value: taskIdStr,
+          amount: defaultAvailableBudget,
+          approvedBudget: defaultApprovedBudget,
+          balance: defaultAvailableBudget,
+        }]
       : [],
-    [taskIdStr, taskName, defaultAvailableBudget]);
+    [taskIdStr, taskName, defaultAvailableBudget, defaultApprovedBudget]);
 
   // Request header fields
   const requestId =
@@ -404,6 +442,13 @@ export default function EditPettyCashRequestPage() {
         ],
         renderTop: (data: FormValues, extra?: any) => {
           const isSameTask = String(data.task || "") === String(taskIdStr || "");
+          const approvedBudget =
+            extra?.approvedBudget && Number(extra.approvedBudget) > 0
+              ? Number(extra.approvedBudget)
+              : isSameTask
+              ? defaultApprovedBudget
+              : Number(extra?.approvedBudget || 0);
+
           const availBudget =
             extra?.availableBudget && Number(extra.availableBudget) > 0
               ? Number(extra.availableBudget)
@@ -415,6 +460,14 @@ export default function EditPettyCashRequestPage() {
 
           return (
             <div className="pb-4 mb-4 border-b border-gray-200 space-y-2">
+              {approvedBudget > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-gray-900">Approved Budget</span>
+                  <span className="text-sm font-semibold text-gray-700">
+                    ₦{Number(approvedBudget).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
               {(availBudget > 0 || Boolean(data.task)) && (
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold text-gray-900">Available Budget</span>

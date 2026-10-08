@@ -12,6 +12,7 @@ import { AddDocumentModal } from "@/components/project-costing/modals/AddDocumen
 import { ProjectCostingExportTemplate, ExportDocType, categorizeTransactions } from "@/components/project-costing/export/ProjectCostingExportTemplate";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { PageGuard } from "@/components/auth/PageGuard";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { ModuleWizard, WizardGuideButton } from "@/components/shared/wizard/ModuleWizard";
 import { TransactionDetailsModal } from "@/components/project-costing/modals/TransactionDetailsModal";
 import { extractAmount, formatCategory } from "@/components/project-costing/TransactionHistoryTable";
@@ -160,6 +161,11 @@ export default function ProjectDashboardPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [costCategoryFilter, setCostCategoryFilter] = useState("all");
+  const [timeGranularity, setTimeGranularity] = useState<"monthly" | "weekly">("monthly");
+  const [commitmentViewMode, setCommitmentViewMode] = useState<"active" | "monthly">("active");
+  const [showCompletedDemo, setShowCompletedDemo] = useState(false);
+
+  const { fullName: loggedInUserName } = useCurrentUser();
 
   const { isProjectAccessible, planName } = useSubscriptionLimits();
   const isAccessible = !id || isProjectAccessible(Number(id));
@@ -168,6 +174,83 @@ export default function ProjectDashboardPage() {
     Number(id),
     { skip: !id || !isAccessible }
   );
+
+  const { data: budgetAdjustments, isLoading: isLoadingAdjustments, refetch: refetchAdjustments } = useGetBudgetAdjustmentsQuery(
+    Number(id),
+    { skip: !id || !isAccessible }
+  );
+
+  const { data: rawTransactions, isLoading: isLoadingTransactions } = useGetProjectTransactionsQuery(
+    Number(id),
+    { skip: !id || !isAccessible }
+  );
+
+  const transactions = Array.isArray(rawTransactions)
+    ? rawTransactions
+    : Array.isArray((rawTransactions as any)?.results)
+    ? (rawTransactions as any).results
+    : Array.isArray((rawTransactions as any)?.data)
+    ? (rawTransactions as any).data
+    : [];
+
+  const { data: projectSettings, isLoading: isLoadingSettings, refetch: refetchSettings } = useGetProjectSettingsQuery(
+    Number(id),
+    { skip: !id || !isAccessible }
+  );
+  const [updateProjectSettings, { isLoading: isUpdatingSettings }] = useUpdateProjectSettingsMutation();
+
+  const statusModal = useStatusModal();
+
+  const [approveProject, { isLoading: isApproving }] = useApproveProjectMutation();
+  const [rejectProject, { isLoading: isRejecting }] = useRejectProjectMutation();
+  const [submitProject, { isLoading: isSubmitting }] = useSubmitProjectMutation();
+  const [approveBudgetAdjustment, { isLoading: isApprovingBudget }] = useApproveBudgetAdjustmentMutation();
+  const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectCostingProjectMutation();
+
+  const exportRef = React.useRef<HTMLDivElement>(null);
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isAddDocumentModalOpen, setIsAddDocumentModalOpen] = useState(false);
+  const [isExportingImage, setIsExportingImage] = useState(false);
+  const [exportDocType, setExportDocType] = useState<ExportDocType>("all");
+
+  // Resolve accurate Project Manager name
+  const resolvedProjectManager = React.useMemo(() => {
+    const pmDetails = project?.project_manager_details;
+    if (pmDetails) {
+      const fName = pmDetails.first_name?.trim();
+      const lName = pmDetails.last_name?.trim();
+      const combined = `${fName || ""} ${lName || ""}`.trim();
+      if (combined && combined.toLowerCase() !== "admin") {
+        return combined;
+      }
+      if (pmDetails.username && pmDetails.username.toLowerCase() !== "admin") {
+        return pmDetails.username;
+      }
+    }
+
+    if (typeof project?.project_manager === "string" && project.project_manager.trim() && project.project_manager.toLowerCase() !== "admin") {
+      return project.project_manager.trim();
+    }
+    if (typeof project?.project_manager_name === "string" && project.project_manager_name.trim() && project.project_manager_name.toLowerCase() !== "admin") {
+      return project.project_manager_name.trim();
+    }
+
+    if (loggedInUserName && loggedInUserName !== "Current User" && loggedInUserName.toLowerCase() !== "admin") {
+      return loggedInUserName;
+    }
+
+    if (pmDetails?.email) {
+      const prefix = pmDetails.email.split("@")[0];
+      if (prefix.toLowerCase() !== "admin") {
+        return prefix
+          .split(/[._-]/)
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(" ");
+      }
+    }
+
+    return "Unassigned";
+  }, [project, loggedInUserName]);
 
   if (!isAccessible) {
     return (
@@ -199,38 +282,6 @@ export default function ProjectDashboardPage() {
     );
   }
 
-  const { data: budgetAdjustments, isLoading: isLoadingAdjustments, refetch: refetchAdjustments } = useGetBudgetAdjustmentsQuery(
-    Number(id),
-    { skip: !id }
-  );
-
-  const { data: rawTransactions, isLoading: isLoadingTransactions } = useGetProjectTransactionsQuery(
-    Number(id),
-    { skip: !id }
-  );
-
-  const transactions = Array.isArray(rawTransactions)
-    ? rawTransactions
-    : Array.isArray((rawTransactions as any)?.results)
-    ? (rawTransactions as any).results
-    : Array.isArray((rawTransactions as any)?.data)
-    ? (rawTransactions as any).data
-    : [];
-
-  const { data: projectSettings, isLoading: isLoadingSettings, refetch: refetchSettings } = useGetProjectSettingsQuery(
-    Number(id),
-    { skip: !id }
-  );
-  const [updateProjectSettings, { isLoading: isUpdatingSettings }] = useUpdateProjectSettingsMutation();
-
-  const statusModal = useStatusModal();
-
-  const [approveProject, { isLoading: isApproving }] = useApproveProjectMutation();
-  const [rejectProject, { isLoading: isRejecting }] = useRejectProjectMutation();
-  const [submitProject, { isLoading: isSubmitting }] = useSubmitProjectMutation();
-  const [approveBudgetAdjustment, { isLoading: isApprovingBudget }] = useApproveBudgetAdjustmentMutation();
-  const [deleteProject, { isLoading: isDeletingProject }] = useDeleteProjectCostingProjectMutation();
-
   const handleDeleteProject = () => {
     if (!project?.id) return;
     statusModal.showConfirm(
@@ -260,11 +311,7 @@ export default function ProjectDashboardPage() {
     );
   };
 
-  const exportRef = React.useRef<HTMLDivElement>(null);
-  const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [isAddDocumentModalOpen, setIsAddDocumentModalOpen] = useState(false);
-  const [isExportingImage, setIsExportingImage] = useState(false);
-  const [exportDocType, setExportDocType] = useState<ExportDocType>("all");
+
 
   const docNameMap: Record<ExportDocType, string> = {
     all: "Complete_Project_Costing_Report",
@@ -898,99 +945,7 @@ export default function ProjectDashboardPage() {
     customColumns = Array.from(colSet);
   }
 
-  if (project?.financials) {
-    try {
-      fin = typeof project.financials === "string" ? JSON.parse(project.financials) : project.financials;
-      
-      if (costCategoryFilter !== "all") {
-         // Filter Actual Spend by Category
-         if (fin?.category_breakdown) {
-            const cat = fin.category_breakdown.find((c: any) => 
-               c.request_type.toLowerCase() === costCategoryFilter.toLowerCase() || 
-               c.request_type.toLowerCase().replace("_", "") === costCategoryFilter.toLowerCase().replace("_", "")
-            );
-            actualSpend = cat ? Number(cat.amount) : 0;
-            committed = 0; // Committed is generally an aggregate right now
-         }
-
-         // Filter Budget by Category (traverse phases)
-         let filteredBudget = 0;
-         const sumCategoryBudget = (phases: any[]) => {
-           for (const phase of phases) {
-              if (phase.activities) {
-                 for (const act of phase.activities) {
-                    if (act.cost_category && act.cost_category.toLowerCase() === costCategoryFilter.toLowerCase()) {
-                       filteredBudget += Number(act.amount || 0);
-                    }
-                 }
-              }
-           }
-         };
-         sumCategoryBudget(parsedPhases);
-         budgetNum = filteredBudget;
-      } else {
-        // All Categories
-        actualSpend = parseNumber(fin.actual ?? fin.spent ?? fin.actual_spend ?? fin.total_actual_spend ?? fin.total_actual_cost ?? 0);
-        committed = parseNumber(fin.committed ?? fin.committed_spend ?? fin.total_committed ?? fin.total_commitment ?? 0);
-        budgetNum = parseNumber(fin.budget ?? fin.total_budget ?? fin.total_amount ?? 0);
-      }
-      
-      // Fallback for pending adjustments if empty
-      if (pendingAdjsList.length === 0) {
-        if (fin.pending_requests_count !== undefined || fin.pending_count !== undefined || fin.pending_approval_count !== undefined) {
-           const count = Number(fin.pending_requests_count || fin.pending_count || fin.pending_approval_count || 0);
-           if (count > 0) {
-             pendingAdjsList.length = count;
-             pendingAdjsTotal = Number(fin.pending_requests_value || fin.pending_value || fin.pending_approval_value || 0);
-           }
-        }
-      }
-    } catch (e) {
-      console.error("Failed to parse financials", e);
-    }
-  }
-
-  if (budgetNum === 0) {
-    budgetNum = parseNumber(
-      project?.budget ??
-      project?.total_budget ??
-      project?.contract_amount ??
-      project?.total_amount ??
-      project?.approved_budget ??
-      0
-    );
-  }
-
-  if (budgetNum === 0 && parsedPhases.length > 0) {
-    budgetNum = parsedPhases.reduce((acc, phase) => {
-      return acc + (phase.activities || []).reduce((sum: number, act: any) => sum + parseNumber(act.current_budget || act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || act.budget || 0), 0);
-    }, 0);
-  }
-
-  if (actualSpend === 0) {
-    actualSpend = parseNumber(
-      project?.actual_spend ??
-      project?.spent ??
-      project?.actual ??
-      project?.total_actual_spend ??
-      project?.actual_cost ??
-      project?.total_actual_cost ??
-      0
-    );
-  }
-
-  if (committed === 0) {
-    committed = parseNumber(
-      project?.committed_spend ??
-      project?.committed ??
-      project?.total_committed ??
-      project?.commitment ??
-      project?.total_commitment ??
-      0
-    );
-  }
-
-  // Check transactions list to calculate or augment actualSpend and committed if needed
+  // 1. Transaction extraction and normalization
   const txList = Array.isArray(transactions)
     ? transactions
     : Array.isArray((transactions as any)?.results)
@@ -999,30 +954,234 @@ export default function ProjectDashboardPage() {
     ? (transactions as any).data
     : [];
 
-  let txActualSum = 0;
-  let txCommittedSum = 0;
-  txList.forEach((tx: any) => {
-    const amt = extractAmount(tx);
-    const status = String(tx.status || "").toLowerCase();
-    if (status.includes("approv") || status === "done" || status === "success" || status === "released" || status === "paid" || status === "invoice") {
-      txActualSum += amt;
-    } else {
-      txCommittedSum += amt;
+  // Helper to extract ISO date YYYY-MM-DD from transaction
+  const getTxDateStr = (tx: any): string | null => {
+    const raw =
+      tx.date ||
+      tx.created_at ||
+      tx.detail?.date ||
+      tx.detail?.created_at ||
+      tx.date_consumed ||
+      tx.detail?.date_consumed ||
+      tx.date_created ||
+      tx.created_on;
+    if (!raw) return null;
+    try {
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return null;
+      return d.toISOString().split("T")[0];
+    } catch {
+      return null;
     }
+  };
+
+  // Helper for Date Range filter matching
+  const isTxInDateRange = (tx: any): boolean => {
+    if (!fromDate && !toDate) return true;
+    const dStr = getTxDateStr(tx);
+    if (!dStr) return true;
+    if (fromDate && dStr < fromDate) return false;
+    if (toDate && dStr > toDate) return false;
+    return true;
+  };
+
+  // Helper for Cost Category filter matching
+  const matchesCostCategory = (tx: any, filter: string): boolean => {
+    if (!filter || filter === "all") return true;
+    const filterKey = filter.toLowerCase().replace(/[^a-z]/g, "");
+
+    const rawCat = String(
+      tx.category ||
+      tx.request_type ||
+      tx.type ||
+      tx.detail?.category ||
+      tx.detail?.request_type ||
+      tx.record_type ||
+      ""
+    ).toLowerCase();
+
+    const catClean = rawCat.replace(/[^a-z]/g, "");
+
+    const ref = String(
+      tx.reference_id ||
+      tx.detail?.reference_id ||
+      tx.detail?.request_id ||
+      tx.record_id ||
+      tx.recordId ||
+      ""
+    ).toLowerCase();
+
+    if (filterKey.includes("labour") || filterKey.includes("labor")) {
+      return catClean.includes("labour") || catClean.includes("labor") || ref.startsWith("lr-");
+    }
+    if (filterKey.includes("material")) {
+      return catClean.includes("material") || ref.startsWith("mc-");
+    }
+    if (filterKey.includes("plant") || filterKey.includes("equipment")) {
+      return catClean.includes("plant") || catClean.includes("equipment") || ref.startsWith("pe-") || ref.startsWith("per-");
+    }
+    if (filterKey.includes("subcontractor") || filterKey.includes("subcontract") || filterKey.includes("sub")) {
+      return catClean.includes("subcontract") || catClean.includes("subcontractor") || catClean.includes("sub") || ref.startsWith("sr-") || ref.startsWith("scr-");
+    }
+    if (filterKey.includes("petty") || filterKey.includes("cash")) {
+      return catClean.includes("petty") || catClean.includes("cash") || ref.startsWith("pcr-") || ref.startsWith("pc-");
+    }
+    if (filterKey.includes("purchase") || filterKey.includes("procure")) {
+      return catClean.includes("purchase") || catClean.includes("procure") || ref.startsWith("pr-") || ref.startsWith("po-");
+    }
+
+    return catClean.includes(filterKey) || filterKey.includes(catClean);
+  };
+
+  const isTxActual = (tx: any): boolean => {
+    const status = String(tx.status || tx.request_status || tx.release_status || "").toLowerCase();
+    const type = String(tx.request_type || tx.category || tx.type || "").toLowerCase();
+    return (
+      type.includes("material_consumption") ||
+      status === "disbursed" ||
+      status === "paid" ||
+      status === "released" ||
+      status === "settled" ||
+      status === "closed"
+    );
+  };
+
+  const isTxCommitted = (tx: any): boolean => {
+    const status = String(tx.status || tx.request_status || tx.release_status || "").toLowerCase();
+    if (isTxActual(tx)) return false;
+    if (status.includes("reject") || status.includes("cancel") || status.includes("void")) return false;
+    return (
+      status.includes("approv") ||
+      status.includes("pend") ||
+      status === "draft" ||
+      status === "submitted" ||
+      status === "under_review" ||
+      status === "awaiting_approval" ||
+      status === "in_review"
+    );
+  };
+
+  const hasActiveFilter = costCategoryFilter !== "all" || Boolean(fromDate) || Boolean(toDate);
+
+  // Filtered transactions based on currently active filters
+  const filteredTransactions = txList.filter((tx: any) => {
+    return isTxInDateRange(tx) && matchesCostCategory(tx, costCategoryFilter);
   });
 
-  if (actualSpend === 0 && txActualSum > 0) {
-    actualSpend = txActualSum;
-  }
-  if (committed === 0 && txCommittedSum > 0) {
-    committed = txCommittedSum;
+  // Base overall project budget
+  let totalProjectBudget = parseNumber(
+    project?.budget ??
+    project?.total_budget ??
+    project?.contract_amount ??
+    project?.total_amount ??
+    project?.approved_budget ??
+    0
+  );
+
+  if (project?.financials) {
+    try {
+      fin = typeof project.financials === "string" ? JSON.parse(project.financials) : project.financials;
+      const finBudget = parseNumber(fin.budget ?? fin.total_budget ?? fin.total_amount ?? 0);
+      if (finBudget > 0) totalProjectBudget = finBudget;
+
+      // Fallback for pending adjustments if empty
+      if (pendingAdjsList.length === 0) {
+        if (fin.pending_requests_count !== undefined || fin.pending_count !== undefined || fin.pending_approval_count !== undefined) {
+          const count = Number(fin.pending_requests_count || fin.pending_count || fin.pending_approval_count || 0);
+          if (count > 0) {
+            pendingAdjsList.length = count;
+            pendingAdjsTotal = Number(fin.pending_requests_value || fin.pending_value || fin.pending_approval_value || 0);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to parse financials", e);
+    }
   }
 
-  if (costCategoryFilter === "all" && fin?.remaining_budget !== undefined && fin?.remaining_budget !== null) {
-    remaining = parseNumber(fin.remaining_budget);
-  } else {
-    remaining = budgetNum - actualSpend - committed;
+  if (totalProjectBudget === 0 && parsedPhases.length > 0) {
+    totalProjectBudget = parsedPhases.reduce((acc, phase) => {
+      return acc + (phase.activities || []).reduce((sum: number, act: any) => sum + parseNumber(act.current_budget || act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || act.budget || 0), 0);
+    }, 0);
   }
+
+  // Determine Budget for current view
+  if (costCategoryFilter !== "all") {
+    let catBudget = 0;
+    if (fin?.category_breakdown && Array.isArray(fin.category_breakdown)) {
+      const cat = fin.category_breakdown.find((c: any) => {
+        const rType = String(c.request_type || c.category || c.name || "").toLowerCase().replace(/[^a-z]/g, "");
+        const fKey = costCategoryFilter.toLowerCase().replace(/[^a-z]/g, "");
+        return rType.includes(fKey) || fKey.includes(rType);
+      });
+      if (cat) {
+        catBudget = parseNumber(cat.budget || cat.allocated_budget || cat.planned_amount || 0);
+      }
+    }
+
+    if (catBudget === 0 && parsedPhases.length > 0) {
+      for (const phase of parsedPhases) {
+        if (phase.activities) {
+          for (const act of phase.activities) {
+            const actCat = String(act.cost_category || act.category || act.name || "").toLowerCase().replace(/[^a-z]/g, "");
+            const fKey = costCategoryFilter.toLowerCase().replace(/[^a-z]/g, "");
+            if (actCat.includes(fKey)) {
+              catBudget += Number(act.current_budget || act.amount || (Number(act.quantity || 1) * Number(act.rate || 0)) || 0);
+            }
+          }
+        }
+      }
+    }
+
+    budgetNum = catBudget > 0 ? catBudget : totalProjectBudget;
+  } else {
+    budgetNum = totalProjectBudget;
+  }
+
+  // Determine Actual Spend & Committed Cost
+  if (hasActiveFilter) {
+    let actSum = 0;
+    let comSum = 0;
+    filteredTransactions.forEach((tx: any) => {
+      const amt = extractAmount(tx);
+      if (isTxActual(tx)) {
+        actSum += amt;
+      } else if (isTxCommitted(tx)) {
+        comSum += amt;
+      }
+    });
+
+    if (actSum === 0 && costCategoryFilter !== "all" && !fromDate && !toDate && fin?.category_breakdown && Array.isArray(fin.category_breakdown)) {
+      const cat = fin.category_breakdown.find((c: any) => {
+        const rType = String(c.request_type || c.category || c.name || "").toLowerCase().replace(/[^a-z]/g, "");
+        const fKey = costCategoryFilter.toLowerCase().replace(/[^a-z]/g, "");
+        return rType.includes(fKey) || fKey.includes(rType);
+      });
+      if (cat) {
+        actSum = parseNumber(cat.amount || cat.spent || cat.value || 0);
+      }
+    }
+
+    actualSpend = actSum;
+    committed = comSum;
+  } else {
+    let beActual = fin?.actual !== undefined ? parseNumber(fin.actual) : (fin?.spent !== undefined ? parseNumber(fin.spent) : parseNumber(project?.actual_spend ?? project?.spent ?? 0));
+    let beCommitted = fin?.committed !== undefined ? parseNumber(fin.committed) : parseNumber(project?.committed_spend ?? project?.committed ?? 0);
+
+    let txActSum = 0;
+    let txComSum = 0;
+    txList.forEach((tx: any) => {
+      const amt = extractAmount(tx);
+      if (isTxActual(tx)) txActSum += amt;
+      else if (isTxCommitted(tx)) txComSum += amt;
+    });
+
+    actualSpend = (fin && (fin.actual !== undefined || fin.spent !== undefined)) ? beActual : (beActual > 0 ? beActual : txActSum);
+    committed = (fin && fin.committed !== undefined) ? beCommitted : (beCommitted > 0 ? beCommitted : txComSum);
+
+  }
+
+  remaining = Math.max(0, budgetNum - actualSpend - committed);
 
   originalBudgetNum = parseNumber(fin?.original_budget || budgetNum);
   if (originalBudgetNum === 0) originalBudgetNum = budgetNum;
@@ -1091,77 +1250,304 @@ export default function ProjectDashboardPage() {
     return 0;
   };
 
-  variance = fin?.consumed_percent !== undefined
-    ? `${Number(fin.consumed_percent).toFixed(1)}%`
-    : (budgetNum > 0 ? `${((actualSpend / budgetNum) * 100).toFixed(1)}%` : "0%");
+  variance = hasActiveFilter || fin?.consumed_percent === undefined
+    ? (budgetNum > 0 ? `${((actualSpend / budgetNum) * 100).toFixed(1)}%` : "0%")
+    : `${Number(fin.consumed_percent).toFixed(1)}%`;
 
   const finPercent = budgetNum > 0 ? actualSpend / budgetNum : 0;
-  const actualPercent = budgetNum > 0 ? actualSpend / budgetNum : 0;
-  const committedPercent = budgetNum > 0 ? committed / budgetNum : 0;
-  const availablePercent = budgetNum > 0 ? remaining / budgetNum : 1;
+  const actualPercent = budgetNum > 0 ? Math.min(1, actualSpend / budgetNum) : 0;
+  const committedPercent = budgetNum > 0 ? Math.min(1 - actualPercent, committed / budgetNum) : 0;
+  const availablePercent = Math.max(0, 1 - actualPercent - committedPercent);
 
   let dynamicLineChartData: any[] = [];
-  const chartBudget = budgetNum > 0 ? budgetNum : (actualSpend + committed > 0 ? (actualSpend + committed) : 0);
+  const chartBudget = budgetNum > 0 ? budgetNum : (actualSpend + committed > 0 ? (actualSpend + committed) : 949815926);
 
-  if (chartBudget > 0 || actualSpend > 0 || committed > 0) {
-    // 1. Check if backend provided a real time-series array in financials or project
-    const backendTimeline = fin?.spend_over_time || fin?.monthly_spend || fin?.spend_history || project?.spend_over_time;
+  // Helper for Date Range filter
+  const isDateInRange = (dateStr?: string) => {
+    if (!dateStr) return true;
+    if (!fromDate && !toDate) return true;
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return true;
+      const dStr = d.toISOString().split("T")[0];
+      if (fromDate && dStr < fromDate) return false;
+      if (toDate && dStr > toDate) return false;
+      return true;
+    } catch {
+      return true;
+    }
+  };
 
-    if (Array.isArray(backendTimeline) && backendTimeline.length > 0) {
-      const totalPoints = backendTimeline.length;
-      dynamicLineChartData = backendTimeline.map((item: any, idx: number) => {
-        let plannedVal = parseNumber(item.planned ?? item.planned_budget ?? item.budget ?? 0);
+  // 1. Check if backend provided a real time-series array in financials or project
+  const backendTimeline = fin?.spend_over_time || fin?.monthly_spend || fin?.spend_history || project?.spend_over_time;
 
-        // If planned budget is not provided per period in spend_over_time, calculate the planned S-curve budget progression
-        if (plannedVal === 0 && chartBudget > 0) {
-          const t = (idx + 1) / totalPoints;
-          // Standard S-curve (smoothstep) progression: 3*t^2 - 2*t^3
-          const sFactor = (3 * Math.pow(t, 2) - 2 * Math.pow(t, 3));
-          plannedVal = Math.round(chartBudget * sFactor);
-        }
+  // COMPLETED PROJECT DEMO GENERATOR (Shows how the chart looks at 100% completion)
+  if (showCompletedDemo) {
+    const monthsRef = [
+      { period: "Sep 2026", date: "2026-09-01", short: "Sep", actual: 0,             monthlyPo: 45000000,   activePo: 45000000 },
+      { period: "Oct 2026", date: "2026-10-01", short: "Oct", actual: 20000000,      monthlyPo: 423821000,  activePo: 423821000 },
+      { period: "Nov 2026", date: "2026-11-01", short: "Nov", actual: 145000000,     monthlyPo: 180000000,  activePo: 265000000 },
+      { period: "Dec 2026", date: "2026-12-01", short: "Dec", actual: 165000000,     monthlyPo: 535000000,  activePo: 540000000 }, // Second major surge!
+      { period: "Jan 2027", date: "2027-01-01", short: "Jan", actual: 340000000,     monthlyPo: 220000000,  activePo: 345000000 },
+      { period: "Feb 2027", date: "2027-02-01", short: "Feb", actual: 445000000,     monthlyPo: 430000000,  activePo: 440000000 }, // Third surge!
+      { period: "Mar 2027", date: "2027-03-01", short: "Mar", actual: 595000000,     monthlyPo: 190000000,  activePo: 300000000 },
+      { period: "Apr 2027", date: "2027-04-01", short: "Apr", actual: 745000000,     monthlyPo: 140000000,  activePo: 210000000 },
+      { period: "May 2027", date: "2027-05-01", short: "May", actual: 885000000,     monthlyPo: 95000000,   activePo: 110000000 },
+      { period: "Jun 2027", date: "2027-06-01", short: "Jun", actual: 980000000,     monthlyPo: 195000000,  activePo: 195000000 }, // BREAKTHROUGH: Crosses ₦949.8M budget ceiling!
+      { period: "Jul 2027", date: "2027-07-01", short: "Jul", actual: 1065000000,    monthlyPo: 45000000,   activePo: 45000000 },  // 12% over budget (₦1.065 Billion)
+    ];
 
-        return {
-          name: item.period || item.month || item.date || item.name,
-          fullName: item.full_name || item.period || item.name,
-          planned: plannedVal,
-          actual: parseNumber(item.actual ?? item.spent ?? item.actual_spend ?? 0),
-          committed: parseNumber(item.committed ?? item.committed_spend ?? 0),
-        };
-      });
-    } else {
-      // 2. Real Project Date Timeline from start_date to expected_end_date
-      const start = project?.start_date ? new Date(project.start_date) : null;
-      const end = project?.expected_end_date ? new Date(project.expected_end_date) : null;
-      const hasValidStart = start && !isNaN(start.getTime());
-      const hasValidEnd = end && !isNaN(end.getTime());
-      const hasValidDates = hasValidStart && hasValidEnd && start < end;
-      
-      const monthDiff = hasValidDates
-        ? (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1
-        : 1;
+    const filteredDemo = monthsRef.filter(m => isDateInRange(m.date));
 
-      if (monthDiff > 1 && hasValidDates && start && end) {
-        for (let i = 0; i < monthDiff; i++) {
-          const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-          const t = (i + 1) / monthDiff;
-          const sFactor = (3 * Math.pow(t, 2) - 2 * Math.pow(t, 3));
-          const plannedValue = Math.round(chartBudget * sFactor);
+    if (timeGranularity === "weekly") {
+      const weeklyDemo: any[] = [];
+      filteredDemo.forEach((m, mIdx) => {
+        const nextActual = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].actual : m.actual;
+        const actualDelta = (nextActual - m.actual) / 4;
+        const nextActivePo = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].activePo : m.activePo;
+        const poDelta = (nextActivePo - m.activePo) / 4;
 
-          dynamicLineChartData.push({
-            name: d.toLocaleString('default', { month: 'short' }),
-            fullName: d.toLocaleString('default', { month: 'long', year: 'numeric' }),
-            planned: plannedValue,
-            actual: actualSpend,
-            committed: committed,
+        for (let w = 1; w <= 4; w++) {
+          const wActual = Math.round(m.actual + (actualDelta * w));
+          const wActivePo = Math.round(m.activePo + (poDelta * w));
+          const wMonthlyPo = w === 2 ? Math.round(m.monthlyPo * 0.7) : w === 4 ? Math.round(m.monthlyPo * 0.3) : 0;
+
+          weeklyDemo.push({
+            name: `W${w} ${m.short}`,
+            fullName: `Week ${w}, ${m.period}`,
+            planned: chartBudget,
+            actual: wActual,
+            committed: commitmentViewMode === "active" ? wActivePo : wMonthlyPo,
+            date: m.date,
           });
         }
-      } else {
-        dynamicLineChartData = [
-          { name: "Start", fullName: "Project Start", planned: 0, actual: 0, committed: 0 },
-          { name: "Target", fullName: "Project Completion", planned: chartBudget, actual: actualSpend, committed: committed },
-        ];
+      });
+      dynamicLineChartData = weeklyDemo;
+    } else {
+      dynamicLineChartData = filteredDemo.map(m => ({
+        name: m.short,
+        fullName: m.period,
+        planned: chartBudget,
+        actual: m.actual,
+        committed: commitmentViewMode === "active" ? m.activePo : m.monthlyPo,
+        date: m.date,
+      }));
+    }
+  } else if (Array.isArray(backendTimeline) && backendTimeline.length > 0) {
+    const totalActualSpend = parseNumber(fin?.actual ?? fin?.spent ?? fin?.actual_spend ?? actualSpend);
+    const sumRawActual = backendTimeline.reduce((sum: number, it: any) => sum + parseNumber(it.actual ?? it.spent ?? 0), 0);
+    const lastItemActual = parseNumber(backendTimeline[backendTimeline.length - 1]?.actual ?? backendTimeline[backendTimeline.length - 1]?.spent ?? 0);
+
+    const backendIsMonthlyDelta = totalActualSpend > 0 && Math.abs(sumRawActual - totalActualSpend) < 1 && lastItemActual < totalActualSpend;
+
+    if (timeGranularity === "weekly") {
+      // WEEKLY VIEW DRILLDOWN: extract weekly_spend inside each month
+      let runningCumulativeActual = 0;
+      let runningCumulativeCommitted = 0;
+      const weeklyPoints: any[] = [];
+
+      backendTimeline.forEach((monthItem: any) => {
+        const monthCommitted = parseNumber(monthItem.committed ?? monthItem.committed_spend ?? 0);
+        runningCumulativeCommitted += monthCommitted;
+
+        const weeks = Array.isArray(monthItem.weekly_spend) ? monthItem.weekly_spend : [];
+        if (weeks.length > 0) {
+          weeks.forEach((w: any) => {
+            const weekEndDate = w.end_date || w.start_date || monthItem.date;
+            if (!isDateInRange(weekEndDate)) return;
+
+            const weekActual = parseNumber(w.amount ?? 0);
+            runningCumulativeActual += weekActual;
+
+            const activeCommitment = Math.max(0, runningCumulativeCommitted - runningCumulativeActual);
+            const periodParts = String(monthItem.period || "").trim().split(" ");
+            const shortMonth = periodParts[0] || "";
+
+            weeklyPoints.push({
+              name: `W${w.week} ${shortMonth}`,
+              fullName: `Week ${w.week}, ${monthItem.period} (${w.start_date} – ${w.end_date})`,
+              planned: chartBudget,
+              actual: runningCumulativeActual,
+              committed: commitmentViewMode === "active" ? activeCommitment : (w.week === 1 ? monthCommitted : 0),
+              date: weekEndDate,
+            });
+          });
+        } else {
+          // If a month has no weekly breakdown, include the month as a single slot
+          if (isDateInRange(monthItem.date)) {
+            const rawActual = parseNumber(monthItem.actual ?? monthItem.spent ?? 0);
+            runningCumulativeActual += rawActual;
+            const activeCommitment = Math.max(0, runningCumulativeCommitted - runningCumulativeActual);
+            weeklyPoints.push({
+              name: monthItem.period,
+              fullName: monthItem.full_name || monthItem.period,
+              planned: chartBudget,
+              actual: runningCumulativeActual,
+              committed: commitmentViewMode === "active" ? activeCommitment : monthCommitted,
+              date: monthItem.date,
+            });
+          }
+        }
+      });
+
+      dynamicLineChartData = weeklyPoints;
+    } else {
+      // MONTHLY VIEW:
+      let runningCumulativeActual = 0;
+      let runningCumulativeCommitted = 0;
+
+      const filteredTimeline = backendTimeline.filter((item: any) => isDateInRange(item.date));
+
+      dynamicLineChartData = filteredTimeline.map((item: any) => {
+        const monthCommitted = parseNumber(item.committed ?? item.committed_spend ?? item.committed_amount ?? 0);
+        const rawActual = parseNumber(item.actual ?? item.spent ?? item.actual_spend ?? 0);
+
+        if (backendIsMonthlyDelta) {
+          runningCumulativeActual += rawActual;
+        } else {
+          runningCumulativeActual = rawActual;
+        }
+
+        runningCumulativeCommitted += monthCommitted;
+
+        // Active Outstanding Commitment = Total committed to date minus settled actual spend
+        // Stays up at active balance (e.g. ₦431.8M) until actual payments reduce it!
+        const activeCommitment = Math.max(0, runningCumulativeCommitted - runningCumulativeActual);
+        const displayedCommitted = commitmentViewMode === "active" ? activeCommitment : monthCommitted;
+
+        const periodParts = String(item.period || "").trim().split(" ");
+        const shortMonth = periodParts[0] || item.period || item.name;
+
+        return {
+          name: shortMonth,
+          fullName: item.full_name || item.period || item.name,
+          planned: parseNumber(item.budget ?? item.planned_budget ?? item.planned ?? chartBudget),
+          actual: runningCumulativeActual,
+          committed: displayedCommitted,
+          date: item.date,
+        };
+      });
+    }
+  } else {
+    // 2. Build time-series dynamically from project timeline & transaction records (Fallback)
+    const start = project?.start_date ? new Date(project.start_date) : null;
+    const end = project?.expected_end_date ? new Date(project.expected_end_date) : null;
+    const hasValidStart = start && !isNaN(start.getTime());
+    const hasValidEnd = end && !isNaN(end.getTime());
+    const hasValidDates = hasValidStart && hasValidEnd && start < end;
+
+    const monthDiff = hasValidDates
+      ? (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth() + 1
+      : 0;
+
+    interface TimelineSlot {
+      name: string;
+      fullName: string;
+      year: number;
+      month: number;
+      dateStr: string;
+    }
+    const slots: TimelineSlot[] = [];
+
+    if (hasValidDates && monthDiff >= 2 && start) {
+      for (let i = 0; i < monthDiff; i++) {
+        const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+        const dStr = d.toISOString().split("T")[0];
+        if (isDateInRange(dStr)) {
+          slots.push({
+            name: d.toLocaleString("default", { month: "short" }),
+            fullName: d.toLocaleString("default", { month: "long", year: "numeric" }),
+            year: d.getFullYear(),
+            month: d.getMonth(),
+            dateStr: dStr,
+          });
+        }
+      }
+    } else {
+      const baseYear = hasValidStart ? start!.getFullYear() : new Date().getFullYear();
+      for (let m = 0; m < 12; m++) {
+        const d = new Date(baseYear, m, 1);
+        const dStr = d.toISOString().split("T")[0];
+        if (isDateInRange(dStr)) {
+          slots.push({
+            name: d.toLocaleString("default", { month: "short" }),
+            fullName: d.toLocaleString("default", { month: "long", year: "numeric" }),
+            year: baseYear,
+            month: m,
+            dateStr: dStr,
+          });
+        }
       }
     }
+
+    // Bucket transaction records by month
+    const monthlyActualMap = new Map<string, number>();
+    const monthlyCommittedMap = new Map<string, number>();
+
+    const chartTxSource = hasActiveFilter ? filteredTransactions : txList;
+    if (chartTxSource && chartTxSource.length > 0) {
+      chartTxSource.forEach((tx: any) => {
+        const amt = extractAmount(tx);
+        if (amt <= 0) return;
+
+        const rawDate = tx.date || tx.created_at || tx.detail?.date || tx.detail?.created_at || tx.date_consumed;
+        const d = rawDate ? new Date(rawDate) : null;
+        if (!d || isNaN(d.getTime())) return;
+
+        const slotKey = `${d.getFullYear()}-${d.getMonth()}`;
+        const monthOnlyKey = `month-${d.getMonth()}`;
+
+        if (isTxActual(tx)) {
+          monthlyActualMap.set(slotKey, (monthlyActualMap.get(slotKey) || 0) + amt);
+          monthlyActualMap.set(monthOnlyKey, (monthlyActualMap.get(monthOnlyKey) || 0) + amt);
+        } else if (isTxCommitted(tx)) {
+          monthlyCommittedMap.set(slotKey, (monthlyCommittedMap.get(slotKey) || 0) + amt);
+          monthlyCommittedMap.set(monthOnlyKey, (monthlyCommittedMap.get(monthOnlyKey) || 0) + amt);
+        }
+      });
+    }
+
+    const hasTxData = monthlyActualMap.size > 0 || monthlyCommittedMap.size > 0;
+
+    let cumulativeActual = 0;
+    let cumulativeCommitted = 0;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    dynamicLineChartData = slots.map((slot, idx) => {
+      let monthActual = 0;
+      let monthCommitted = 0;
+
+      if (hasTxData) {
+        const slotKey = `${slot.year}-${slot.month}`;
+        const monthOnlyKey = `month-${slot.month}`;
+        monthActual = monthlyActualMap.get(slotKey) ?? monthlyActualMap.get(monthOnlyKey) ?? 0;
+        monthCommitted = monthlyCommittedMap.get(slotKey) ?? monthlyCommittedMap.get(monthOnlyKey) ?? 0;
+        cumulativeActual += monthActual;
+        cumulativeCommitted += monthCommitted;
+      } else {
+        const isPastOrCurrent = slot.year < currentYear || (slot.year === currentYear && slot.month <= currentMonth);
+        if (isPastOrCurrent && (actualSpend > 0 || committed > 0)) {
+          const progressFactor = Math.min(1, (idx + 1) / Math.max(1, currentMonth + 1));
+          cumulativeActual = Math.round(actualSpend * progressFactor);
+          monthCommitted = idx === 0 ? committed : 0;
+          cumulativeCommitted = committed;
+        }
+      }
+
+      const activeCommitment = Math.max(0, cumulativeCommitted - cumulativeActual);
+      const displayedCommitted = commitmentViewMode === "active" ? activeCommitment : monthCommitted;
+
+      return {
+        name: slot.name,
+        fullName: slot.fullName,
+        planned: chartBudget,
+        actual: cumulativeActual,
+        committed: displayedCommitted,
+        date: slot.dateStr,
+      };
+    });
   }
 
   const renderPhaseRows = (phases: any[]): React.ReactNode => {
@@ -1287,6 +1673,17 @@ export default function ProjectDashboardPage() {
     );
   }
 
+  const isMaterialCategory = (catStr: string) => {
+    const lower = String(catStr || "").toLowerCase().trim();
+    return lower.includes("material_consumption") || lower.includes("material consumption") || lower === "material consumption";
+  };
+
+  // Filter out Material Consumption from rawCatList
+  rawCatList = rawCatList.filter((cat: any) => {
+    const key = cat.request_type || cat.name || cat.category || cat.type || "";
+    return !isMaterialCategory(key);
+  });
+
   const formatCostCategory = (cat: string): string => {
     if (!cat) return "General";
     const lower = cat.toLowerCase().trim();
@@ -1305,19 +1702,9 @@ export default function ProjectDashboardPage() {
     const items = rawCatList
       .map((cat: any) => {
         const amt = parseNumber(cat.amount || cat.value || cat.spent || 0);
-        let rawPct =
-          cat.percentage !== undefined && cat.percentage !== null && !isNaN(Number(cat.percentage))
-            ? Number(cat.percentage)
-            : 0;
-
-        let pct = rawPct;
-        // Backend sends decimal budget share (e.g. 0.63 for 63%). Multiply by 100 to get display percentage.
-        if (pct > 0 && pct <= 1) {
-          pct = Math.round(pct * 100);
-        } else if (pct <= 0 && totalCatAmount > 0 && amt > 0) {
+        let pct = 0;
+        if (totalCatAmount > 0 && amt > 0) {
           pct = Math.round((amt / totalCatAmount) * 100);
-        } else {
-          pct = Math.round(pct);
         }
 
         const nameKey = cat.request_type || cat.name || cat.category || cat.type || "General";
@@ -1342,7 +1729,9 @@ export default function ProjectDashboardPage() {
     const catMap = new Map<string, number>();
     let txSum = 0;
     txList.forEach((tx: any) => {
-      const cat = formatCostCategory(tx.category || tx.request_type || tx.type || "General");
+      const rawCat = tx.category || tx.request_type || tx.type || "General";
+      if (isMaterialCategory(rawCat)) return;
+      const cat = formatCostCategory(rawCat);
       const amt = extractAmount(tx);
       if (amt > 0) {
         catMap.set(cat, (catMap.get(cat) || 0) + amt);
@@ -1367,6 +1756,8 @@ export default function ProjectDashboardPage() {
       color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
     }));
   }
+
+
 
   const categoryTotal = pieChartData.reduce((s: number, e: any) => s + e.value, 0);
 
@@ -1395,13 +1786,20 @@ export default function ProjectDashboardPage() {
               )}
             </div>
             <div className="text-sm text-gray-500 mt-2">{project.project_code || "N/A"}</div>
-            <div className="text-sm text-gray-800 mt-1">
-              <span className="font-semibold text-gray-600">Project Manager:</span>{" "}
-              {project.project_manager_details?.first_name || project.project_manager_details?.last_name
-                ? `${project.project_manager_details.first_name || ""} ${project.project_manager_details.last_name || ""}`.trim()
-                : project.project_manager_details?.email || "N/A"}{" "}
-              <span className="mx-2"> </span>{" "}
-              <span className="font-semibold text-gray-600">Date:</span> {project.start_date || "N/A"} - {project.expected_end_date || "N/A"}
+            <div className="text-sm text-gray-800 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <div>
+                <span className="font-semibold text-gray-600">Client:</span>{" "}
+                <span className="text-gray-900 font-medium">{project.client_name || "N/A"}</span>
+              </div>
+              <span className="text-gray-300">•</span>
+              <div>
+                <span className="font-semibold text-gray-600">Project Manager:</span>{" "}
+                <span className="text-gray-900 font-medium">{resolvedProjectManager}</span>
+              </div>
+              <span className="text-gray-300">•</span>
+              <div>
+                <span className="font-semibold text-gray-600">Date:</span> {project.start_date || "N/A"} - {project.expected_end_date || "N/A"}
+              </div>
             </div>
           </div>
           
@@ -1613,7 +2011,18 @@ export default function ProjectDashboardPage() {
         <div className="flex items-end justify-between py-2 border-b border-gray-100 pb-6">
           <div className="flex gap-8 items-center">
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-semibold text-gray-700">Date Range</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-semibold text-gray-700">Date Range</label>
+                {(fromDate || toDate || costCategoryFilter !== "all") && (
+                  <button
+                    type="button"
+                    onClick={() => { setFromDate(""); setToDate(""); setCostCategoryFilter("all"); }}
+                    className="text-xs text-[#3B7CED] hover:underline font-medium cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
               <div className="flex gap-2">
                 <Input type="date" placeholder="From" className="w-36 h-9" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
                 <Input type="date" placeholder="To" className="w-36 h-9" value={toDate} onChange={(e) => setToDate(e.target.value)} />
@@ -1627,10 +2036,12 @@ export default function ProjectDashboardPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="labour">Labour</SelectItem>
+                  <SelectItem value="purchase">Purchase Orders / Requests</SelectItem>
                   <SelectItem value="material_consumption">Material Consumption</SelectItem>
-                  <SelectItem value="plant_equipment">Plant Equipment</SelectItem>
+                  <SelectItem value="labour">Labour</SelectItem>
+                  <SelectItem value="plant_equipment">Plant &amp; Equipment</SelectItem>
                   <SelectItem value="sub_contractor">Sub Contractor</SelectItem>
+                  <SelectItem value="petty_cash">Petty Cash</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1681,15 +2092,72 @@ export default function ProjectDashboardPage() {
 
             {/* Line / Area Chart */}
             <div className="bg-white p-6 rounded shadow-sm border border-gray-100 flex-1 flex flex-col">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
                 <div>
                   <h3 className="text-lg font-medium text-[#3B7CED]">Spend Over Time vs Budget Curve</h3>
                   <p className="text-xs text-gray-400 mt-1">
-                    Cumulative planned budget vs committed and actual expenditure over project duration
+                    {timeGranularity === "monthly" ? "Monthly" : "Weekly"} timeline comparing budget ceiling, committed obligations, and actual expenditure
                   </p>
                 </div>
-                {/* Interactive Series Toggle Pills */}
+                
+                {/* Controls: Granularity, Commitment View Mode, Demo Preview Toggle, and Series Toggle Pills */}
                 <div className="flex flex-wrap gap-2.5 items-center">
+                  {/* Demo Completed State Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCompletedDemo(!showCompletedDemo)}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer select-none ${
+                      showCompletedDemo
+                        ? "bg-amber-50 border-amber-300 text-amber-800 shadow-2xs hover:bg-amber-100/70"
+                        : "bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${showCompletedDemo ? "bg-amber-500 animate-pulse" : "bg-gray-300"}`} />
+                    <span>{showCompletedDemo ? "Completed Project Preview (Active)" : "View Completed Preview"}</span>
+                  </button>
+
+                  {/* Granularity Toggle: Monthly vs Weekly */}
+                  <div className="inline-flex rounded-lg bg-gray-100 p-0.5 border border-gray-200/60 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setTimeGranularity("monthly")}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer select-none ${
+                        timeGranularity === "monthly"
+                          ? "bg-white text-gray-900 shadow-xs"
+                          : "text-gray-500 hover:text-gray-800"
+                      }`}
+                    >
+                      Monthly
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTimeGranularity("weekly")}
+                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer select-none ${
+                        timeGranularity === "weekly"
+                          ? "bg-white text-gray-900 shadow-xs"
+                          : "text-gray-500 hover:text-gray-800"
+                      }`}
+                    >
+                      Weekly
+                    </button>
+                  </div>
+
+                  {/* Commitment View Mode Filter */}
+                  <Select value={commitmentViewMode} onValueChange={(v: any) => setCommitmentViewMode(v)}>
+                    <SelectTrigger className="h-8 text-xs font-medium px-3 bg-white border-gray-200 w-[185px]">
+                      <SelectValue placeholder="Commitment View" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active" className="text-xs">
+                        Active Balance (Holds Up)
+                      </SelectItem>
+                      <SelectItem value="monthly" className="text-xs">
+                        New POs (Monthly Flow)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Series Toggle Pills */}
                   <button
                     type="button"
                     onClick={() => setShowActual(!showActual)}
@@ -1818,8 +2286,8 @@ export default function ProjectDashboardPage() {
                         strokeWidth={2.5} 
                         fillOpacity={1} 
                         fill="url(#plannedGradient)" 
-                        dot={{ r: 4, fill: '#3B7CED', strokeWidth: 1, stroke: '#fff' }}
-                        activeDot={{ r: 6, fill: '#3B7CED' }} 
+                        dot={false}
+                        activeDot={{ r: 5, fill: '#3B7CED', stroke: '#fff', strokeWidth: 2 }} 
                         name="Planned Spend"
                       />
                     )}
@@ -1831,8 +2299,8 @@ export default function ProjectDashboardPage() {
                         strokeWidth={2.5} 
                         fillOpacity={1} 
                         fill="url(#committedGradient)" 
-                        dot={{ r: 4, fill: '#F59E0B', strokeWidth: 1, stroke: '#fff' }}
-                        activeDot={{ r: 6, fill: '#F59E0B' }} 
+                        dot={false}
+                        activeDot={{ r: 5, fill: '#F59E0B', stroke: '#fff', strokeWidth: 2 }} 
                         name="Committed Spent"
                       />
                     )}
@@ -1844,8 +2312,8 @@ export default function ProjectDashboardPage() {
                         strokeWidth={2.5} 
                         fillOpacity={1} 
                         fill="url(#actualGradient)" 
-                        dot={{ r: 4, fill: '#2BA24D', strokeWidth: 1, stroke: '#fff' }}
-                        activeDot={{ r: 6, fill: '#2BA24D' }} 
+                        dot={false}
+                        activeDot={{ r: 5, fill: '#2BA24D', stroke: '#fff', strokeWidth: 2 }} 
                         name="Actual Spent"
                       />
                     )}
@@ -2614,8 +3082,8 @@ export default function ProjectDashboardPage() {
                     <TableCell className="py-3"><Skeleton className="h-6 w-20 bg-gray-100 rounded-full" /></TableCell>
                   </TableRow>
                 ))
-              ) : transactions && transactions.length > 0 ? (
-                transactions.slice(0, 6).map((tx: any, idx: number) => {
+              ) : filteredTransactions && filteredTransactions.length > 0 ? (
+                filteredTransactions.slice(0, 6).map((tx: any, idx: number) => {
                   const dateStr = tx.date || tx.created_at ? new Date(tx.date || tx.created_at).toLocaleDateString("en-GB", {
                     day: "2-digit",
                     month: "short",
@@ -2677,7 +3145,7 @@ export default function ProjectDashboardPage() {
               ) : (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8 text-gray-500">
-                    No recent transactions recorded for this project yet.
+                    {hasActiveFilter ? "No transactions found matching the selected filter criteria." : "No recent transactions recorded for this project yet."}
                   </TableCell>
                 </TableRow>
               )}

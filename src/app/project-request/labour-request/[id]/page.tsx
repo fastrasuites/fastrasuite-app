@@ -22,6 +22,7 @@ import {
   useDeleteLabourRequestMutation,
   useSubmitLabourRequestMutation,
 } from "@/api/requests/labourRequestApi";
+import { useGetActivityOptionsQuery } from "@/api/requests/projectRequestApi";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 
@@ -103,7 +104,46 @@ export default function LabourRequestDetailPage() {
     { skip: !projectId || isNaN(Number(projectId)) }
   );
 
+  const phaseId = useMemo(() => {
+    const raw =
+      detail?.phase_details?.id ||
+      (typeof detail?.phase === "object" ? detail.phase?.id : detail?.phase) ||
+      (reqObj as any)?.phase_details?.id ||
+      (reqObj as any)?.phase;
+    return raw ? String(raw) : "";
+  }, [detail, reqObj]);
+
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(projectId), phase_id: phaseId },
+    { skip: !projectId || !phaseId }
+  );
+  const activityOptionsList = Array.isArray(rawActivityOptions)
+    ? rawActivityOptions
+    : (rawActivityOptions as any)?.results || [];
+  const matchingActivity = activityOptionsList.find(
+    (a: any) => String(a.id) === String(activityId)
+  );
+
+  const approvedBudget = useMemo(() => {
+    if (matchingActivity) {
+      if (matchingActivity.current_budget !== undefined && matchingActivity.current_budget !== null) {
+        return Number(matchingActivity.current_budget);
+      }
+      if (matchingActivity.original_amount !== undefined && matchingActivity.original_amount !== null) {
+        return Number(matchingActivity.original_amount) + Number(matchingActivity.approved_adjustment || 0);
+      }
+    }
+    return 0;
+  }, [matchingActivity]);
+
   const availableBudget = useMemo(() => {
+    if (matchingActivity) {
+      if (matchingActivity.available_budget !== undefined && matchingActivity.available_budget !== null) {
+        return Number(matchingActivity.available_budget);
+      }
+      if (approvedBudget > 0) return approvedBudget;
+    }
+
     // 1. Direct available_budget from detail or reqObj
     if (
       detail?.available_budget !== undefined &&
@@ -120,9 +160,7 @@ export default function LabourRequestDetailPage() {
       return Number(reqObj.available_budget);
     }
 
-    if (!projectCosting) return 5000000;
-
-    if (activityId) {
+    if (projectCosting && activityId) {
       const phasesArr = Array.isArray(projectCosting.phases)
         ? projectCosting.phases
         : Array.isArray((projectCosting as any).phase_list)
@@ -141,12 +179,16 @@ export default function LabourRequestDetailPage() {
             return Number(act.available_budget);
           if (act.remaining_budget !== undefined && act.remaining_budget !== null)
             return Number(act.remaining_budget);
-          if (act.amount !== undefined && act.amount !== null) return Number(act.amount);
+          if (act.current_budget !== undefined && act.current_budget !== null)
+            return Number(act.current_budget);
+          if (act.amount !== undefined && act.amount !== null) {
+            return Number(act.amount) + Number(act.approved_adjustment || 0);
+          }
         }
       }
     }
 
-    if (projectCosting.financials) {
+    if (projectCosting?.financials) {
       if (
         projectCosting.financials.remaining_budget !== undefined &&
         projectCosting.financials.remaining_budget !== null
@@ -159,8 +201,8 @@ export default function LabourRequestDetailPage() {
         return Number(projectCosting.financials.budget);
     }
 
-    return 5000000;
-  }, [detail, reqObj, projectCosting, activityId]);
+    return approvedBudget;
+  }, [matchingActivity, approvedBudget, detail, reqObj, projectCosting, activityId]);
 
   const handleEdit = () => {
     router.push(`/project-request/labour-request/edit/${id}`);
@@ -201,17 +243,58 @@ export default function LabourRequestDetailPage() {
     );
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (confirmOverBudget = false) => {
     try {
       const submitId = reqObj?.id || projectRequest?.id || id;
-      await submitRequest({ id: submitId, data: {} }).unwrap();
+      const payloadData = confirmOverBudget ? { confirm_over_budget: true } : {};
+      await submitRequest({ id: submitId, data: payloadData }).unwrap();
       statusModal.showSuccess(
         "Request Submitted",
         "The labour request has been submitted for approval."
       );
       refetch();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to submit request:", err);
+      const errData = err?.data || err?.response?.data || err?.error?.data || err || {};
+      const isOverBudget =
+        errData?.confirmation_required === true ||
+        errData?.code === "OVER_BUDGET" ||
+        errData?.warning === true;
+
+      if (isOverBudget) {
+        const msg =
+          errData?.confirmation_message ||
+          errData?.message ||
+          "This request is higher than the amount currently available for the selected activity. Do you want to continue?";
+
+        let detailText = "";
+        if (errData?.details) {
+          const d = errData.details;
+          const reqAmt = d.requested_amount ? `₦${Number(d.requested_amount).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+          const availAmt = d.available_budget ? `₦${Number(d.available_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+          const overAmt = d.amount_over_budget ? `₦${Number(d.amount_over_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
+
+          const parts: string[] = [];
+          if (reqAmt) parts.push(`Requested: ${reqAmt}`);
+          if (availAmt) parts.push(`Available: ${availAmt}`);
+          if (overAmt) parts.push(`Over Budget: ${overAmt}`);
+          if (parts.length > 0) {
+            detailText = `\n\n• ${parts.join("\n• ")}`;
+          }
+        }
+
+        statusModal.showConfirm(
+          "Over Budget Warning",
+          `${msg}${detailText}`,
+          async () => {
+            await handleSubmit(true);
+          },
+          "Yes, Continue",
+          "No, Cancel"
+        );
+        return;
+      }
+
       statusModal.showError(
         "Submit Failed",
         extractErrorMessage(err, "Failed to submit the request. Please try again.")
@@ -556,7 +639,7 @@ export default function LabourRequestDetailPage() {
                     Estimated Daily Rate
                   </span>
                   <span className="block text-[14px] font-semibold text-black/80">
-                    N{dailyRateNumber.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₦{dailyRateNumber.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -574,16 +657,24 @@ export default function LabourRequestDetailPage() {
 
           {/* Budget & Cost Summary */}
           <section className="px-5 py-4 space-y-2 bg-white shrink-0">
+            {approvedBudget > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-[14px] font-semibold text-black/80">Approved Budget</span>
+                <span className="text-[14px] font-semibold text-gray-700">
+                  ₦{approvedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
             <div className="flex justify-between items-center">
               <span className="text-[14px] font-semibold text-black/80">Available Budget</span>
               <span className="text-[14px] font-semibold text-black/80">
-                N{availableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ₦{availableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-[14px] font-semibold text-black/80">Total Cost</span>
-              <span className="text-[14px] font-semibold text-[#3B82F6]">
-                N{calculatedCost.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <span className="text-[14px] font-semibold text-[#3B7CED]">
+                ₦{calculatedCost.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </section>
@@ -621,7 +712,7 @@ export default function LabourRequestDetailPage() {
                 {canSubmit && (
                   <Button
                     disabled={isSubmitting}
-                    onClick={handleSubmit}
+                    onClick={() => handleSubmit()}
                     className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
                   >
                     <Send size={14} /> Submit

@@ -24,6 +24,7 @@ import {
   useGetPlantEquipmentRequestQuery,
   useUpdatePlantEquipmentRequestMutation 
 } from "@/api/requests/plantEquipmentRequestApi";
+import { useGetActivityOptionsQuery } from "@/api/requests/projectRequestApi";
 import { useCurrentUserName } from "@/hooks/useCurrentUser";
 import { motion, AnimatePresence } from "framer-motion";
 import { StatusModal } from "@/components/shared/StatusModal";
@@ -243,9 +244,44 @@ export default function EditPlantEquipmentRequestPage() {
     return tasks.find((t: any) => String(t.id) === selectedTaskId);
   }, [tasks, selectedTaskId]);
 
+  // Permission-safe activity options query
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(selectedProjectId), phase_id: selectedPhaseId },
+    { skip: !selectedProjectId || !selectedPhaseId }
+  );
+  const activityOptionsList = useMemo(() => {
+    return Array.isArray(rawActivityOptions)
+      ? rawActivityOptions
+      : (rawActivityOptions as any)?.results || [];
+  }, [rawActivityOptions]);
+
+  const selectedActivityOption = useMemo(() => {
+    return activityOptionsList.find((a: any) => String(a.id) === String(selectedTaskId));
+  }, [activityOptionsList, selectedTaskId]);
+
+  const selectedActivityApprovedBudget = useMemo(() => {
+    if (selectedActivityOption) {
+      if (selectedActivityOption.current_budget !== undefined && selectedActivityOption.current_budget !== null) {
+        return Number(selectedActivityOption.current_budget);
+      }
+      if (selectedActivityOption.original_amount !== undefined && selectedActivityOption.original_amount !== null) {
+        return Number(selectedActivityOption.original_amount) + Number(selectedActivityOption.approved_adjustment || 0);
+      }
+    }
+    if (selectedActivity) {
+      if (selectedActivity.current_budget !== undefined && selectedActivity.current_budget !== null) {
+        return Number(selectedActivity.current_budget);
+      }
+      if (selectedActivity.amount !== undefined && selectedActivity.amount !== null) {
+        return Number(selectedActivity.amount) + Number(selectedActivity.approved_adjustment || 0);
+      }
+    }
+    return 0;
+  }, [selectedActivityOption, selectedActivity]);
+
   const selectedCostCode = selectedActivity?.cost_code || selectedActivity?.code || "CC-04";
 
-  // Budget query
+  // Fallback budget query
   const { data: budgetData, isLoading: isBudgetLoading } = useGetAvailableBudgetQuery(
     {
       project_id: Number(selectedProjectId),
@@ -256,15 +292,18 @@ export default function EditPlantEquipmentRequestPage() {
   );
 
   let availableBudget = 0;
-  if (selectedActivity) {
-    const actBudget = Number(selectedActivity.amount ?? 0);
-    if (actBudget > 0) {
-      availableBudget = actBudget;
+  if (selectedActivityOption?.available_budget !== undefined && selectedActivityOption?.available_budget !== null) {
+    availableBudget = Number(selectedActivityOption.available_budget);
+  } else if (selectedActivity) {
+    if (selectedActivity.available_budget !== undefined && selectedActivity.available_budget !== null) {
+      availableBudget = Number(selectedActivity.available_budget);
+    } else if (selectedActivityApprovedBudget > 0) {
+      availableBudget = selectedActivityApprovedBudget;
     } else if (budgetData?.available_budget !== undefined && budgetData?.available_budget !== null) {
       availableBudget = Number(budgetData.available_budget);
     }
-  } else {
-    availableBudget = budgetData?.available_budget ? Number(budgetData.available_budget) : 0;
+  } else if (budgetData?.available_budget !== undefined && budgetData?.available_budget !== null) {
+    availableBudget = Number(budgetData.available_budget);
   }
 
   // Calculations
@@ -598,24 +637,54 @@ export default function EditPlantEquipmentRequestPage() {
                       No activities available
                     </div>
                   ) : (
-                    tasks.map((t: any) => (
-                      <SelectItem
-                        key={t.id}
-                        value={String(t.id)}
-                        className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
-                      >
-                        <span className="flex items-center justify-between gap-3 w-full min-w-0">
-                          <span className="font-medium text-gray-800 truncate min-w-0">
-                            {t.name}
+                    tasks.map((t: any) => {
+                      const match = activityOptionsList.find((a: any) => String(a.id) === String(t.id));
+                      const taskApprovedBudget = match
+                        ? Number(match.current_budget ?? (Number(match.original_amount || 0) + Number(match.approved_adjustment || 0)))
+                        : t.current_budget !== undefined && t.current_budget !== null
+                        ? Number(t.current_budget)
+                        : t.amount !== undefined && t.amount !== null
+                        ? Number(t.amount) + Number(t.approved_adjustment || 0)
+                        : 0;
+
+                      const taskBalance = match?.available_budget !== undefined && match?.available_budget !== null
+                        ? Number(match.available_budget)
+                        : t.available_budget !== undefined && t.available_budget !== null
+                        ? Number(t.available_budget)
+                        : taskApprovedBudget > 0
+                        ? taskApprovedBudget
+                        : Number(t.amount || 0);
+
+                      return (
+                        <SelectItem
+                          key={t.id}
+                          value={String(t.id)}
+                          className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
+                        >
+                          <span className="flex items-center justify-between gap-3 w-full min-w-0">
+                            <span className="font-medium text-gray-800 truncate min-w-0">
+                              {t.name}
+                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                              {taskApprovedBudget > 0 && (
+                                <span className="font-semibold text-xs text-gray-600 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 shrink-0">
+                                  Budget: ₦{taskApprovedBudget.toLocaleString("en-NG", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </span>
+                              )}
+                              <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0">
+                                Bal: ₦{taskBalance.toLocaleString("en-NG", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </span>
+                            </div>
                           </span>
-                          <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                            ₦{Number(t.amount || 0).toLocaleString("en-NG", {
-                              minimumFractionDigits: 2,
-                            })}
-                          </span>
-                        </span>
-                      </SelectItem>
-                    ))
+                        </SelectItem>
+                      );
+                    })
                   )}
                 </SelectContent>
               </Select>
@@ -624,7 +693,19 @@ export default function EditPlantEquipmentRequestPage() {
             {/* Available Budget Section */}
             {selectedTaskId && (
               <div className="pt-4 mt-4 border-t border-gray-100 space-y-3">
-               
+                {selectedActivityApprovedBudget > 0 && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-700">
+                      Approved Budget
+                    </span>
+                    <span className="text-sm font-semibold text-gray-700">
+                      ₦{selectedActivityApprovedBudget.toLocaleString("en-NG", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold text-gray-900">
                     Available Budget
@@ -668,10 +749,26 @@ export default function EditPlantEquipmentRequestPage() {
 
         {/* Summaries Card */}
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-none space-y-3 text-xs">
-          <div className="flex justify-between py-1">
+          {selectedActivityApprovedBudget > 0 && (
+            <div className="flex justify-between py-1">
+              <span className="text-gray-700 font-semibold">Approved Budget</span>
+              <span className="font-semibold text-gray-700 text-sm">
+                ₦{selectedActivityApprovedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          )}
+          {availableBudget > 0 && (
+            <div className="flex justify-between py-1">
+              <span className="text-gray-700 font-semibold">Available Budget</span>
+              <span className="font-semibold text-gray-700 text-sm">
+                ₦{availableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          )}
+          <div className="flex justify-between py-1 border-t border-gray-100 pt-2">
             <span className="text-gray-900 font-bold">Total Cost</span>
             <span className="font-extrabold text-[#3B7CED] text-sm">
-              N{totalCost.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              ₦{totalCost.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
         </div>

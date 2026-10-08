@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useLoginMutation } from "@/api/authApi";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
+import type { RootState } from "@/lib/store/store";
 import { setAuthData, setIsAdmin } from "@/lib/store/authSlice";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -42,8 +43,58 @@ const LoginPage: NextPage = () => {
   
   // For redirect handling and reading session timeout reasons
   const searchParams = useSearchParams();
+  const auth = useSelector((state: RootState) => state.auth);
   const reason = searchParams?.get("reason");
-  const redirectPath = searchParams?.get("redirect") || "/";
+  const planParam = searchParams?.get("plan");
+  const cycleParam = searchParams?.get("cycle") || searchParams?.get("billing");
+  const redirectQuery = searchParams?.get("redirect");
+
+  // Save selected plan to localStorage so if they click register or verify email, it's remembered
+  useEffect(() => {
+    if (planParam) {
+      try {
+        localStorage.setItem(
+          "fastra_intended_subscription",
+          JSON.stringify({
+            plan: planParam,
+            cycle: cycleParam || "monthly",
+            action: "checkout",
+            timestamp: Date.now(),
+          })
+        );
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
+  }, [planParam, cycleParam]);
+
+  // Fallback to localStorage saved plan intent if user confirmed email or came without redirect param
+  let effectiveRedirect =
+    redirectQuery ||
+    (planParam
+      ? `/settings/billing?plan=${planParam}&cycle=${cycleParam || "monthly"}&action=checkout`
+      : "/");
+
+  if (effectiveRedirect === "/" && typeof window !== "undefined") {
+    try {
+      const saved = localStorage.getItem("fastra_intended_subscription");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.plan) {
+          effectiveRedirect = `/settings/billing?plan=${parsed.plan}&cycle=${parsed.cycle || "monthly"}&action=checkout`;
+        }
+      }
+    } catch (e) {
+      // ignore storage errors
+    }
+  }
+
+  // If already authenticated, redirect immediately
+  useEffect(() => {
+    if (auth?.access_token) {
+      router.replace(effectiveRedirect !== "/" ? effectiveRedirect : "/settings/billing");
+    }
+  }, [auth?.access_token, router, effectiveRedirect]);
 
   const {
     register,
@@ -164,7 +215,7 @@ const LoginPage: NextPage = () => {
       setSubmittedId(result.user.username || "success");
       
       // Redirect to the originally requested page or dashboard
-      router.push(redirectPath);
+      router.push(effectiveRedirect);
     } catch (err) {
       const errorData = err as { data?: { detail?: string } };
       const errDetail = errorData?.data?.detail || "Failed to login. Please try again.";
@@ -238,6 +289,17 @@ const LoginPage: NextPage = () => {
             </div>
           )}
           
+          {planParam && (
+            <div className="mb-4 p-3 bg-blue-50/90 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#3B7CED] animate-pulse" />
+                <span>
+                  Selected Plan: <strong className="capitalize">{planParam}</strong> ({cycleParam === "annually" || cycleParam === "yearly" ? "Yearly" : "Monthly"})
+                </span>
+              </div>
+            </div>
+          )}
+
           <h2 className="text-xl font-semibold text-gray-900 mb-2 text-center">
             Login
           </h2>
@@ -330,7 +392,13 @@ const LoginPage: NextPage = () => {
 
                 <div className="text-center mt-6">
                   <Link
-                    href="/auth/register"
+                    href={
+                      effectiveRedirect !== "/"
+                        ? `/auth/register?redirect=${encodeURIComponent(effectiveRedirect)}${
+                            planParam ? `&plan=${planParam}&cycle=${cycleParam || "monthly"}` : ""
+                          }`
+                        : "/auth/register"
+                    }
                     className="text-sky-600 hover:underline text-sm cursor-pointer"
                   >
                     Don&apos;t have an account?

@@ -436,14 +436,26 @@ export function RequestForm<T extends Record<string, any>>({
   const activityOptionsList = Array.isArray(rawActivityOptions)
     ? rawActivityOptions
     : (rawActivityOptions as any)?.results || [];
-  const activitySelectOptions = activityOptionsList.map((act: any) => ({
-    label:
-      act.serial_number !== undefined && act.serial_number !== null
-        ? `${act.serial_number} - ${act.name}`
-        : act.name,
-    value: String(act.id),
-    amount: act.available_budget ?? act.current_budget ?? act.original_amount,
-  }));
+  const activitySelectOptions = activityOptionsList.map((act: any) => {
+    const approvedBudget =
+      act.current_budget !== undefined && act.current_budget !== null
+        ? Number(act.current_budget)
+        : Number(act.original_amount || 0) + Number(act.approved_adjustment || 0);
+    const balance =
+      act.available_budget !== undefined && act.available_budget !== null
+        ? Number(act.available_budget)
+        : approvedBudget;
+    return {
+      label:
+        act.serial_number !== undefined && act.serial_number !== null
+          ? `${act.serial_number} - ${act.name}`
+          : act.name,
+      value: String(act.id),
+      amount: balance,
+      approvedBudget,
+      balance,
+    };
+  });
 
   const budgetCostCode = config.budgetConfig?.costCode || (config as any).costCode || "";
   const { data: budgetData } = useGetAvailableBudgetQuery(
@@ -456,12 +468,19 @@ export function RequestForm<T extends Record<string, any>>({
   );
 
   const selectedActivity = activityOptionsList.find((a: any) => String(a.id) === String(taskVal));
+  const approvedBudgetAmount =
+    selectedActivity?.current_budget !== undefined && selectedActivity.current_budget !== null
+      ? Number(selectedActivity.current_budget)
+      : selectedActivity?.original_amount !== undefined && selectedActivity.original_amount !== null
+      ? Number(selectedActivity.original_amount || 0) + Number(selectedActivity.approved_adjustment || 0)
+      : 0;
+
   const fallbackBudget = Number((config as any)?.defaultBudget) || 0;
   const availableBudgetAmount =
     selectedActivity?.available_budget !== undefined && selectedActivity.available_budget !== null
       ? Number(selectedActivity.available_budget)
-      : selectedActivity?.current_budget !== undefined && selectedActivity.current_budget !== null
-      ? Number(selectedActivity.current_budget)
+      : approvedBudgetAmount > 0
+      ? approvedBudgetAmount
       : budgetData?.available_budget !== undefined && budgetData.available_budget !== null
       ? Number(budgetData.available_budget)
       : fallbackBudget;
@@ -627,6 +646,7 @@ export function RequestForm<T extends Record<string, any>>({
               {/* Custom section top renderer */}
               {section.renderTop &&
                 section.renderTop(currentValues, {
+                  approvedBudget: approvedBudgetAmount,
                   availableBudget: availableBudgetAmount,
                   costCode: selectedCostCode,
                   projectedCost: projectedCost || 0,
@@ -764,7 +784,25 @@ export function RequestForm<T extends Record<string, any>>({
                                         value={opt.value}
                                         className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
                                       >
-                                        {opt.amount !== undefined ? (
+                                        {(opt as any).approvedBudget !== undefined ? (
+                                          <span className="flex items-center justify-between gap-3 w-full min-w-0">
+                                            <span className="font-medium text-gray-800 truncate min-w-0">
+                                              {opt.label}
+                                            </span>
+                                            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                                              <span className="font-medium text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                                Budget: ₦{Number((opt as any).approvedBudget || 0).toLocaleString("en-NG", {
+                                                  minimumFractionDigits: 2,
+                                                })}
+                                              </span>
+                                              <span className="font-semibold text-[11px] text-[#3B7CED] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                                Bal: ₦{Number((opt as any).balance || 0).toLocaleString("en-NG", {
+                                                  minimumFractionDigits: 2,
+                                                })}
+                                              </span>
+                                            </div>
+                                          </span>
+                                        ) : opt.amount !== undefined ? (
                                           <span className="flex items-center justify-between gap-3 w-full min-w-0">
                                             <span className="font-medium text-gray-800 truncate min-w-0">
                                               {opt.label}
@@ -918,17 +956,20 @@ export function RequestForm<T extends Record<string, any>>({
                     (f) => f.name === "task" || f.name === "wbsElement",
                   )) && (
                   <div className="pt-4 mt-4 border-t border-gray-200 space-y-3">
-                    {!section.hideCostCode &&
-                      !config.hideCostCode &&
-                      !config.title?.toLowerCase().includes("petty cash") &&
-                      !config.title?.toLowerCase().includes("subcontractor") && (
-                        <div className="flex justify-between items-center">
-                       
-                          <span className="text-sm text-gray-600 font-medium">
-                            {selectedCostCode}
-                          </span>
-                        </div>
-                      )}
+                    {approvedBudgetAmount > 0 && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm font-semibold text-gray-900">
+                          Approved Budget
+                        </span>
+                        <span className="text-sm font-semibold text-gray-700">
+                          ₦
+                          {approvedBudgetAmount.toLocaleString("en-NG", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-semibold text-gray-900">
                         Available Budget

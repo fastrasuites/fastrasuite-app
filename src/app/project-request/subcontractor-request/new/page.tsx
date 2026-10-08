@@ -231,9 +231,18 @@ export default function NewSubcontractorRequestPage() {
           },
         ],
         renderTop: (data: FormValues, extra?: any) => {
+          const approvedBudget = extra?.approvedBudget || 0;
           const availBudget = extra?.availableBudget || 0;
           return (
             <div className="pb-4 mb-4 border-b border-gray-200 space-y-2">
+              {approvedBudget > 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-gray-900">Approved Budget</span>
+                  <span className="text-sm font-semibold text-gray-700">
+                    ₦{Number(approvedBudget).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              )}
               {availBudget > 0 && (
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold text-gray-900">Available Budget</span>

@@ -230,6 +230,28 @@ export default function EditPurchaseRequestPage() {
     return tasks.find((t: any) => String(t.id) === selectedTaskId);
   }, [tasks, selectedTaskId]);
 
+  const approvedBudget = useMemo(() => {
+    if (selectedTaskObj) {
+      if (selectedTaskObj.current_budget !== undefined && selectedTaskObj.current_budget !== null) {
+        return Number(selectedTaskObj.current_budget);
+      }
+      if (selectedTaskObj.original_amount !== undefined && selectedTaskObj.original_amount !== null) {
+        const orig = Number(selectedTaskObj.original_amount);
+        const adj = Number(selectedTaskObj.approved_adjustment || 0);
+        return orig + adj;
+      }
+    }
+    if (selectedPhaseObj) {
+      if (selectedPhaseObj.current_budget !== undefined && selectedPhaseObj.current_budget !== null) {
+        return Number(selectedPhaseObj.current_budget);
+      }
+      if (selectedPhaseObj.original_amount !== undefined && selectedPhaseObj.original_amount !== null) {
+        return Number(selectedPhaseObj.original_amount);
+      }
+    }
+    return 0;
+  }, [selectedTaskObj, selectedPhaseObj]);
+
   const availableBudget = useMemo(() => {
     if (selectedTaskObj) {
       if (selectedTaskObj.available_budget !== undefined && selectedTaskObj.available_budget !== null) {
@@ -253,8 +275,11 @@ export default function EditPurchaseRequestPage() {
     if (budgetData?.available_budget !== undefined && Number(budgetData.available_budget) > 0) {
       return Number(budgetData.available_budget);
     }
+    if (requestData?.available_budget !== undefined && Number(requestData.available_budget) > 0) {
+      return Number(requestData.available_budget);
+    }
     return 0;
-  }, [selectedTaskObj, selectedPhaseObj, budgetData]);
+  }, [selectedTaskObj, selectedPhaseObj, budgetData, requestData]);
 
   // Auto-fill site location when current project is loaded or changes
   useEffect(() => {
@@ -839,7 +864,8 @@ export default function EditPurchaseRequestPage() {
                     </div>
                   ) : (
                     tasks.map((t: any) => {
-                      const taskBudget = t.available_budget ?? t.current_budget ?? t.original_amount;
+                      const taskApprovedBudget = t.current_budget ?? (t.original_amount !== undefined ? Number(t.original_amount) + Number(t.approved_adjustment || 0) : undefined);
+                      const taskBalance = t.available_budget !== undefined && t.available_budget !== null ? Number(t.available_budget) : taskApprovedBudget;
                       return (
                         <SelectItem
                           key={t.id}
@@ -852,13 +878,22 @@ export default function EditPurchaseRequestPage() {
                                 ? `${t.serial_number} - ${t.name}`
                                 : t.name}
                             </span>
-                            {taskBudget !== undefined && taskBudget !== null && (
-                              <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                                ₦{Number(taskBudget).toLocaleString("en-NG", {
-                                  minimumFractionDigits: 2,
-                                })}
-                              </span>
-                            )}
+                            <span className="flex items-center gap-1.5 shrink-0 ml-auto">
+                              {taskApprovedBudget !== undefined && taskApprovedBudget !== null && (
+                                <span className="font-medium text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                  Budget: ₦{Number(taskApprovedBudget).toLocaleString("en-NG", {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                </span>
+                              )}
+                              {taskBalance !== undefined && taskBalance !== null && (
+                                <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                  Bal: ₦{Number(taskBalance).toLocaleString("en-NG", {
+                                    minimumFractionDigits: 2,
+                                  })}
+                                </span>
+                              )}
+                            </span>
                           </span>
                         </SelectItem>
                       );
@@ -868,16 +903,27 @@ export default function EditPurchaseRequestPage() {
               </Select>
             </div>
 
-            <div className="flex justify-between items-center py-2 border-t border-gray-100">
-              <span className="text-xs font-semibold text-gray-900">
-                Available Budget
-              </span>
-              <span className="text-xs font-semibold text-[#3B7CED]">
-                ₦
-                {availableBudget.toLocaleString("en-NG", {
-                  minimumFractionDigits: 2,
-                })}
-              </span>
+            <div className="space-y-1.5 py-2 border-t border-gray-100">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-medium text-gray-600">
+                  Approved Budget
+                </span>
+                <span className="text-xs font-semibold text-gray-900">
+                  ₦{approvedBudget.toLocaleString("en-NG", {
+                    minimumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-semibold text-gray-900">
+                  Available Balance
+                </span>
+                <span className="text-xs font-bold text-[#3B7CED]">
+                  ₦{availableBudget.toLocaleString("en-NG", {
+                    minimumFractionDigits: 2,
+                  })}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -961,8 +1007,7 @@ export default function EditPurchaseRequestPage() {
                         {item.quantity} QTY
                       </span>
                       <span className="text-xs font-bold text-[#3B7CED]">
-                        ₦
-                        {(item.quantity * item.unitCost).toLocaleString("en-NG", {
+                        ₦{(item.quantity * item.unitCost).toLocaleString("en-NG", {
                           minimumFractionDigits: 2,
                         })}
                       </span>
@@ -991,14 +1036,24 @@ export default function EditPurchaseRequestPage() {
         </div>
 
         {/* Cost Summary Section */}
-        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-xs space-y-4">
+        <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-xs space-y-3">
           <div className="flex justify-between items-center py-1">
-            <span className="text-xs font-semibold text-gray-500">
-              Available Budget
+            <span className="text-xs font-medium text-gray-600">
+              Approved Budget
             </span>
-            <span className="text-xs font-semibold text-gray-500">
-              ₦
-              {availableBudget.toLocaleString("en-NG", {
+            <span className="text-xs font-semibold text-gray-800">
+              ₦{approvedBudget.toLocaleString("en-NG", {
+                minimumFractionDigits: 2,
+              })}
+            </span>
+          </div>
+
+          <div className="flex justify-between items-center py-1 border-t border-gray-50">
+            <span className="text-xs font-semibold text-gray-900">
+              Available Balance
+            </span>
+            <span className="text-xs font-bold text-gray-900">
+              ₦{availableBudget.toLocaleString("en-NG", {
                 minimumFractionDigits: 2,
               })}
             </span>
@@ -1245,17 +1300,22 @@ function ItemEditForm({
 
         <div className="space-y-1.5">
           <Label className="text-xs font-semibold text-gray-700">
-            Estimated unit cost
+            Estimated unit cost (₦)
           </Label>
-          <Input
-            type="number"
-            placeholder="Enter cost"
-            value={item.unitCost || ""}
-            onChange={(e) =>
-              onUpdate({ unitCost: Math.max(0, Number(e.target.value || 0)) })
-            }
-            className="h-11 border-gray-200 focus:ring-[#3B7CED]/20"
-          />
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium pointer-events-none">
+              ₦
+            </span>
+            <Input
+              type="number"
+              placeholder="0.00"
+              value={item.unitCost || ""}
+              onChange={(e) =>
+                onUpdate({ unitCost: Math.max(0, Number(e.target.value || 0)) })
+              }
+              className="h-11 pl-8 border-gray-200 focus:ring-[#3B7CED]/20"
+            />
+          </div>
         </div>
       </div>
 

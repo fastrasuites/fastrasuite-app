@@ -331,6 +331,35 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
     }, 0);
   }, [productLines]);
 
+  const selectedActivity = useMemo(() => {
+    return activities.find((a: any) => String(a.id) === String(wbsElement));
+  }, [activities, wbsElement]);
+
+  const selectedActivityApprovedBudget = useMemo(() => {
+    if (!selectedActivity) return 0;
+    if (selectedActivity.current_budget !== undefined && selectedActivity.current_budget !== null) {
+      return Number(selectedActivity.current_budget);
+    }
+    if (selectedActivity.original_amount !== undefined && selectedActivity.original_amount !== null) {
+      return Number(selectedActivity.original_amount || 0) + Number(selectedActivity.approved_adjustment || 0);
+    }
+    if (selectedActivity.amount !== undefined && selectedActivity.amount !== null) {
+      return Number(selectedActivity.amount) + Number(selectedActivity.approved_adjustment || 0);
+    }
+    return 0;
+  }, [selectedActivity]);
+
+  const selectedActivityAvailableBudget = useMemo(() => {
+    if (!selectedActivity) return 0;
+    if (selectedActivity.available_budget !== undefined && selectedActivity.available_budget !== null) {
+      return Number(selectedActivity.available_budget);
+    }
+    if (selectedActivityApprovedBudget > 0) {
+      return selectedActivityApprovedBudget;
+    }
+    return Number(selectedActivity.amount || 0);
+  }, [selectedActivity, selectedActivityApprovedBudget]);
+
   const successRedirectId = React.useRef<number | null>(null);
 
   const onSubmit = async (data: FormValues) => {
@@ -640,13 +669,33 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                       <FormControl>
                         <NativeSelect value={field.value} onChange={field.onChange} disabled={!phaseId || activities.length === 0} className={form.formState.errors.wbsElement ? "border-red-500 focus:ring-red-500/20" : ""}>
                           <option value="" disabled>{!phaseId ? "Select a phase first" : "Select an activity"}</option>
-                          {activities.map((a) => (
-                            <option key={a.id} value={String(a.id)}>
-                              {a.serial_number !== undefined && a.serial_number !== null
-                                ? `${a.serial_number} - ${a.name}`
-                                : a.name}
-                            </option>
-                          ))}
+                          {activities.map((a: any) => {
+                            const approvedBudget =
+                              a.current_budget !== undefined && a.current_budget !== null
+                                ? Number(a.current_budget)
+                                : a.original_amount !== undefined && a.original_amount !== null
+                                ? Number(a.original_amount || 0) + Number(a.approved_adjustment || 0)
+                                : a.amount !== undefined && a.amount !== null
+                                ? Number(a.amount) + Number(a.approved_adjustment || 0)
+                                : 0;
+                            const balance =
+                              a.available_budget !== undefined && a.available_budget !== null
+                                ? Number(a.available_budget)
+                                : approvedBudget > 0
+                                ? approvedBudget
+                                : Number(a.amount || 0);
+                            const nameText = a.serial_number !== undefined && a.serial_number !== null
+                              ? `${a.serial_number} - ${a.name}`
+                              : a.name;
+                            const budgetBadge = approvedBudget > 0
+                              ? ` (Budget: ₦${approvedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Bal: ₦${balance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                              : ` (Bal: ₦${balance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+                            return (
+                              <option key={a.id} value={String(a.id)}>
+                                {nameText}{budgetBadge}
+                              </option>
+                            );
+                          })}
                         </NativeSelect>
                       </FormControl>
                     ) : (
@@ -662,21 +711,80 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent className="max-h-72">
-                          {activities.map((a: any) => (
-                            <SelectItem
-                              key={a.id}
-                              value={String(a.id)}
-                              className="py-2.5 cursor-pointer"
-                            >
-                              <span className="font-medium text-gray-800 truncate">
-                                {a.serial_number !== undefined && a.serial_number !== null
-                                  ? `${a.serial_number} - ${a.name}`
-                                  : a.name}
-                              </span>
-                            </SelectItem>
-                          ))}
+                          {activities.map((a: any) => {
+                            const approvedBudget =
+                              a.current_budget !== undefined && a.current_budget !== null
+                                ? Number(a.current_budget)
+                                : a.original_amount !== undefined && a.original_amount !== null
+                                ? Number(a.original_amount || 0) + Number(a.approved_adjustment || 0)
+                                : a.amount !== undefined && a.amount !== null
+                                ? Number(a.amount) + Number(a.approved_adjustment || 0)
+                                : 0;
+                            const balance =
+                              a.available_budget !== undefined && a.available_budget !== null
+                                ? Number(a.available_budget)
+                                : approvedBudget > 0
+                                ? approvedBudget
+                                : Number(a.amount || 0);
+
+                            return (
+                              <SelectItem
+                                key={a.id}
+                                value={String(a.id)}
+                                className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
+                              >
+                                <span className="flex items-center justify-between gap-3 w-full min-w-0">
+                                  <span className="font-medium text-gray-800 truncate min-w-0">
+                                    {a.serial_number !== undefined && a.serial_number !== null
+                                      ? `${a.serial_number} - ${a.name}`
+                                      : a.name}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                                    {approvedBudget > 0 && (
+                                      <span className="font-semibold text-xs text-gray-600 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 shrink-0">
+                                        Budget: ₦{approvedBudget.toLocaleString("en-NG", {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
+                                      </span>
+                                    )}
+                                    <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0">
+                                      Bal: ₦{balance.toLocaleString("en-NG", {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                  </div>
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
+                    )}
+                    {wbsElement && selectedActivity && (
+                      <div className="pt-2 mt-2 border-t border-gray-100 flex flex-col gap-1.5 text-xs">
+                        {selectedActivityApprovedBudget > 0 && (
+                          <div className="flex justify-between items-center text-gray-600">
+                            <span className="font-medium">Approved Budget:</span>
+                            <span className="font-semibold text-gray-800">
+                              ₦{selectedActivityApprovedBudget.toLocaleString("en-NG", {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-gray-600">
+                          <span className="font-medium">Available Budget:</span>
+                          <span className="font-bold text-[#3B7CED]">
+                            ₦{selectedActivityAvailableBudget.toLocaleString("en-NG", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        </div>
+                      </div>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -1064,7 +1172,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                         <div className="col-span-2 flex justify-between items-center bg-[#F8FAFC] px-3.5 py-2 rounded-md border border-gray-100 text-xs">
                           <span className="text-gray-500 font-medium">Item Total Cost:</span>
                           <span className="font-bold text-[#3B7CED]">
-                            ₦{((Number(currentLine?.quantity) || 0) * (Number(currentLine?.unitCost) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                            ₦{((Number(currentLine?.quantity) || 0) * (Number(currentLine?.unitCost) || 0)).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
                       </div>
@@ -1111,12 +1219,32 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
           </div>
 
           <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-xs space-y-4">
-            <div className="flex justify-between items-center py-1">
+            {selectedActivityApprovedBudget > 0 && (
+              <div className="flex justify-between items-center py-1">
+                <span className="text-xs font-semibold text-gray-700">
+                  Approved Budget
+                </span>
+                <span className="text-sm font-semibold text-gray-800">
+                  ₦{selectedActivityApprovedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            {selectedActivityAvailableBudget > 0 && (
+              <div className="flex justify-between items-center py-1">
+                <span className="text-xs font-semibold text-gray-700">
+                  Available Budget
+                </span>
+                <span className="text-sm font-semibold text-gray-800">
+                  ₦{selectedActivityAvailableBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between items-center py-1 border-t border-gray-100 pt-2">
               <span className="text-xs font-semibold text-gray-700">
                 Total Material Cost
               </span>
               <span className="text-sm font-bold text-[#3B7CED]">
-                ₦{totalRequestCost.toLocaleString("en-NG", { minimumFractionDigits: 2 })}
+                ₦{totalRequestCost.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
 
