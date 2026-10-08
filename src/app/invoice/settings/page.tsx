@@ -141,10 +141,10 @@ function SettingsPageContent() {
         <div className="mt-6">
           {activeTab === "accounting" && <AccountingSettingsTab />}
           {activeTab === "bank-accounts" && <CompanyBankAccountsTab />}
-          {activeTab === "request-mappings" && <RequestAccountMappingsTab />}
+          {activeTab === "vendor" && <VendorTab />}
           {activeTab === "currencies" && <CurrenciesTab />}
           {activeTab === "payment-terms" && <PaymentTermsTab />}
-          {activeTab === "vendor" && <VendorTab />}
+          {activeTab === "request-mappings" && <RequestAccountMappingsTab />}
         </div>
       </div>
     </PageGuard>
@@ -153,9 +153,12 @@ function SettingsPageContent() {
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Loading settings...</div>}>
+    <Suspense
+      fallback={
+        <div className="p-6 text-sm text-gray-500">Loading settings...</div>
+      }
+    >
       <SettingsPageContent />
     </Suspense>
   );
 }
-

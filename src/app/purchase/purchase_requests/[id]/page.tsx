@@ -25,6 +25,11 @@ import { useState } from "react";
 import { useSelector } from "react-redux";
 import { RootState } from "@/lib/store/store";
 
+type ApiErrorData = {
+  detail?: string;
+  message?: string;
+};
+
 const Page = () => {
   const params = useParams();
   const router = useRouter();
@@ -48,9 +53,9 @@ const Page = () => {
   const requesterName = isOwnRequest
     ? "YOU"
     : purchaseRequest?.requester_details?.user?.first_name &&
-      purchaseRequest?.requester_details?.user?.last_name
-    ? `${purchaseRequest?.requester_details.user.first_name} ${purchaseRequest?.requester_details.user.last_name}`
-    : "Unknown Requester";
+        purchaseRequest?.requester_details?.user?.last_name
+      ? `${purchaseRequest?.requester_details.user.first_name} ${purchaseRequest?.requester_details.user.last_name}`
+      : "Unknown Requester";
 
   // Notification state
   const [notification, setNotification] = useState<{
@@ -90,8 +95,8 @@ const Page = () => {
   if (error) {
     const errorMessage =
       "data" in error
-        ? error.data?.detail ||
-          error.data?.message ||
+        ? (error.data as ApiErrorData)?.detail ||
+          (error.data as ApiErrorData)?.message ||
           "Unable to load purchase request details"
         : "Unable to load purchase request details";
     return (
@@ -156,7 +161,7 @@ const Page = () => {
 
   // Action handlers
   const handleStatusUpdate = async (
-    newStatus: "approved" | "rejected" | "pending"
+    newStatus: "approved" | "rejected" | "pending",
   ) => {
     try {
       await updateStatus({
@@ -196,7 +201,7 @@ const Page = () => {
   const handleConvertToRFQ = async () => {
     try {
       router.push(
-        `/purchase/request_for_quotations/convert_to_rfq?from_pr=${purchaseRequestId}`
+        `/purchase/request_for_quotations/convert_to_rfq?from_pr=${purchaseRequestId}`,
       );
     } catch (error) {
       console.error("Failed to convert to RFQ:", error);

@@ -233,8 +233,8 @@ export default function ConvertToPOPlantEquipmentModal({
     : "—";
 
   const referenceId =
-    detailsData?.project_request?.reference_id ||
     detailsData?.reference_id ||
+    detailsData?.project_request?.reference_id ||
     request?.id ||
     "—";
 
@@ -318,7 +318,8 @@ export default function ConvertToPOPlantEquipmentModal({
       source_type: "plant_and_equipment",
     };
 
-    console.log("Convert Plant & Equipment to PO – final payload →", payload);
+    if (process.env.NODE_ENV === "development")
+      console.log("Convert Plant & Equipment to PO – final payload →", payload);
 
     try {
       await onIssuePO(payload);
@@ -614,7 +615,7 @@ export default function ConvertToPOPlantEquipmentModal({
               <p className="mt-0.5 text-blue-800">
                 {returnDateAdded ? (
                   <>
-                    No return date was set on the request. The PO will use{" "}
+                    The PO will use{" "}
                     <strong>{formatDisplayDate(returnDate)}</strong>.
                   </>
                 ) : (
@@ -652,7 +653,7 @@ export default function ConvertToPOPlantEquipmentModal({
               }
             />
           )}
-          <InfoCard label="Originating Request" value={referenceId} />
+          {/* <InfoCard label="Originating Request" value={referenceId} /> */}
         </div>
       </div>
 

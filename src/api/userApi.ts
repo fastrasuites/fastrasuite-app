@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
 
 // Define types for requests and responses
 export interface User {
@@ -46,7 +47,9 @@ export interface Permission {
 
 export const userApi = createApi({
   reducerPath: "userApi",
-  baseQuery: fetchBaseQuery({ baseUrl: process.env.NEXT_PUBLIC_API_URL }),
+  // baseQuery: fetchBaseQuery({ baseUrl: process.env.NEXT_PUBLIC_API_URL }),
+  baseQuery: createTenantBaseQuery(),
+  refetchOnMountOrArgChange: true,
   endpoints: (builder) => ({
     getUsers: builder.query<User[], { ordering?: string; search?: string }>({
       query: (params) => ({
@@ -71,7 +74,7 @@ export const userApi = createApi({
           method: "PUT",
           body: data,
         }),
-      }
+      },
     ),
     patchUser: builder.mutation<User, { id: number; data: PatchUserRequest }>({
       query: ({ id, data }) => ({
