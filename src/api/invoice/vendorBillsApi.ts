@@ -84,6 +84,7 @@ export interface VendorBill {
   vendor_name: string;
   bill_number: string;
   source_type: VendorBillSourceType;
+  source_type_display: string;
   amount: string;
   due_date: string | null;
   document: string | null;
