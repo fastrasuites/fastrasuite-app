@@ -666,14 +666,6 @@ export default function EditPlantEquipmentRequestPage() {
                               {t.name}
                             </span>
                             <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                              {taskApprovedBudget > 0 && (
-                                <span className="font-semibold text-xs text-gray-600 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 shrink-0">
-                                  Budget: ₦{taskApprovedBudget.toLocaleString("en-NG", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </span>
-                              )}
                               <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0">
                                 Bal: ₦{taskBalance.toLocaleString("en-NG", {
                                   minimumFractionDigits: 2,
@@ -693,19 +685,7 @@ export default function EditPlantEquipmentRequestPage() {
             {/* Available Budget Section */}
             {selectedTaskId && (
               <div className="pt-4 mt-4 border-t border-gray-100 space-y-3">
-                {selectedActivityApprovedBudget > 0 && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm font-semibold text-gray-700">
-                      Approved Budget
-                    </span>
-                    <span className="text-sm font-semibold text-gray-700">
-                      ₦{selectedActivityApprovedBudget.toLocaleString("en-NG", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
-                )}
+
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-semibold text-gray-900">
                     Available Budget
@@ -749,14 +729,7 @@ export default function EditPlantEquipmentRequestPage() {
 
         {/* Summaries Card */}
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-none space-y-3 text-xs">
-          {selectedActivityApprovedBudget > 0 && (
-            <div className="flex justify-between py-1">
-              <span className="text-gray-700 font-semibold">Approved Budget</span>
-              <span className="font-semibold text-gray-700 text-sm">
-                ₦{selectedActivityApprovedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-          )}
+
           {availableBudget > 0 && (
             <div className="flex justify-between py-1">
               <span className="text-gray-700 font-semibold">Available Budget</span>

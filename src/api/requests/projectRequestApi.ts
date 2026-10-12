@@ -44,6 +44,7 @@ export interface GetProjectRequestsParams {
 export interface ApproveProjectRequest {
   status?: "approved";
   approval_notes?: string;
+  confirm_over_budget?: boolean;
 }
 
 export interface RejectProjectRequest {

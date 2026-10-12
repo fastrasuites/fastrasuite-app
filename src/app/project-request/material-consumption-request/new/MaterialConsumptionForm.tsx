@@ -687,9 +687,9 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                             const nameText = a.serial_number !== undefined && a.serial_number !== null
                               ? `${a.serial_number} - ${a.name}`
                               : a.name;
-                            const budgetBadge = approvedBudget > 0
-                              ? ` (Budget: ₦${approvedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Bal: ₦${balance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
-                              : ` (Bal: ₦${balance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+                            const budgetBadge = balance !== undefined && balance !== null
+                              ? ` (Bal: ₦${balance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+                              : "";
                             return (
                               <option key={a.id} value={String(a.id)}>
                                 {nameText}{budgetBadge}
@@ -740,14 +740,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                                       : a.name}
                                   </span>
                                   <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                                    {approvedBudget > 0 && (
-                                      <span className="font-semibold text-xs text-gray-600 bg-gray-50 px-2 py-0.5 rounded border border-gray-200 shrink-0">
-                                        Budget: ₦{approvedBudget.toLocaleString("en-NG", {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        })}
-                                      </span>
-                                    )}
+
                                     <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0">
                                       Bal: ₦{balance.toLocaleString("en-NG", {
                                         minimumFractionDigits: 2,
@@ -764,17 +757,6 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                     )}
                     {wbsElement && selectedActivity && (
                       <div className="pt-2 mt-2 border-t border-gray-100 flex flex-col gap-1.5 text-xs">
-                        {selectedActivityApprovedBudget > 0 && (
-                          <div className="flex justify-between items-center text-gray-600">
-                            <span className="font-medium">Approved Budget:</span>
-                            <span className="font-semibold text-gray-800">
-                              ₦{selectedActivityApprovedBudget.toLocaleString("en-NG", {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
-                          </div>
-                        )}
                         <div className="flex justify-between items-center text-gray-600">
                           <span className="font-medium">Available Budget:</span>
                           <span className="font-bold text-[#3B7CED]">
@@ -1219,16 +1201,7 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
           </div>
 
           <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-xs space-y-4">
-            {selectedActivityApprovedBudget > 0 && (
-              <div className="flex justify-between items-center py-1">
-                <span className="text-xs font-semibold text-gray-700">
-                  Approved Budget
-                </span>
-                <span className="text-sm font-semibold text-gray-800">
-                  ₦{selectedActivityApprovedBudget.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-            )}
+
             {selectedActivityAvailableBudget > 0 && (
               <div className="flex justify-between items-center py-1">
                 <span className="text-xs font-semibold text-gray-700">

@@ -773,13 +773,6 @@ export default function NewPurchaseRequestPage() {
                                 : t.name}
                             </span>
                             <span className="flex items-center gap-1.5 shrink-0 ml-auto">
-                              {taskApprovedBudget !== undefined && taskApprovedBudget !== null && (
-                                <span className="font-medium text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
-                                  Budget: ₦{Number(taskApprovedBudget).toLocaleString("en-NG", {
-                                    minimumFractionDigits: 2,
-                                  })}
-                                </span>
-                              )}
                               {taskBalance !== undefined && taskBalance !== null && (
                                 <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
                                   Bal: ₦{Number(taskBalance).toLocaleString("en-NG", {
@@ -797,20 +790,10 @@ export default function NewPurchaseRequestPage() {
               </Select>
             </div>
 
-            <div className="space-y-1.5 py-2 border-t border-gray-100">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-gray-600">
-                  Approved Budget
-                </span>
-                <span className="text-xs font-semibold text-gray-900">
-                  ₦{approvedBudget.toLocaleString("en-NG", {
-                    minimumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
+            <div className="py-2 border-t border-gray-100">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-semibold text-gray-900">
-                  Available Balance
+                  Available Budget
                 </span>
                 <span className="text-xs font-bold text-[#3B7CED]">
                   ₦{availableBudget.toLocaleString("en-NG", {
@@ -932,19 +915,8 @@ export default function NewPurchaseRequestPage() {
         {/* Cost Summary Section */}
         <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-xs space-y-3">
           <div className="flex justify-between items-center py-1">
-            <span className="text-xs font-medium text-gray-600">
-              Approved Budget
-            </span>
-            <span className="text-xs font-semibold text-gray-800">
-              ₦{approvedBudget.toLocaleString("en-NG", {
-                minimumFractionDigits: 2,
-              })}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-center py-1 border-t border-gray-50">
             <span className="text-xs font-semibold text-gray-900">
-              Available Balance
+              Available Budget
             </span>
             <span className="text-xs font-bold text-gray-900">
               ₦{availableBudget.toLocaleString("en-NG", {

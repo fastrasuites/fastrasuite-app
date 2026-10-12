@@ -790,11 +790,6 @@ export function RequestForm<T extends Record<string, any>>({
                                               {opt.label}
                                             </span>
                                             <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                                              <span className="font-medium text-[11px] text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
-                                                Budget: ₦{Number((opt as any).approvedBudget || 0).toLocaleString("en-NG", {
-                                                  minimumFractionDigits: 2,
-                                                })}
-                                              </span>
                                               <span className="font-semibold text-[11px] text-[#3B7CED] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
                                                 Bal: ₦{Number((opt as any).balance || 0).toLocaleString("en-NG", {
                                                   minimumFractionDigits: 2,
@@ -956,20 +951,6 @@ export function RequestForm<T extends Record<string, any>>({
                     (f) => f.name === "task" || f.name === "wbsElement",
                   )) && (
                   <div className="pt-4 mt-4 border-t border-gray-200 space-y-3">
-                    {approvedBudgetAmount > 0 && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-semibold text-gray-900">
-                          Approved Budget
-                        </span>
-                        <span className="text-sm font-semibold text-gray-700">
-                          ₦
-                          {approvedBudgetAmount.toLocaleString("en-NG", {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                      </div>
-                    )}
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-semibold text-gray-900">
                         Available Budget

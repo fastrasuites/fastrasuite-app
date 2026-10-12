@@ -71,6 +71,7 @@ import {
   useSubmitProjectMutation,
   useDeleteProjectCostingProjectMutation,
   useGetBudgetAdjustmentsQuery,
+  useGetPendingRequestsSummaryQuery,
   useApproveBudgetAdjustmentMutation,
   useGetProjectTransactionsQuery,
   useAddProjectDocumentMutation,
@@ -179,6 +180,19 @@ export default function ProjectDashboardPage() {
     Number(id),
     { skip: !id || !isAccessible }
   );
+
+  const { data: pendingRequestsSummary, isLoading: isLoadingPendingSummary } = useGetPendingRequestsSummaryQuery(
+    Number(id),
+    { skip: !id || !isAccessible }
+  );
+  const summaryPendingCount: number | null =
+    pendingRequestsSummary?.total_pending_requests !== undefined
+      ? Number(pendingRequestsSummary.total_pending_requests)
+      : null;
+  const summaryPendingValue: number | null =
+    pendingRequestsSummary?.total_pending_value !== undefined
+      ? Number(pendingRequestsSummary.total_pending_value)
+      : null;
 
   const { data: rawTransactions, isLoading: isLoadingTransactions } = useGetProjectTransactionsQuery(
     Number(id),
@@ -1550,6 +1564,18 @@ export default function ProjectDashboardPage() {
     });
   }
 
+  // Stop committed/actual lines at the current month (budget line continues)
+  if (!showCompletedDemo) {
+    const nowRef = new Date();
+    const currentKey = nowRef.getFullYear() * 12 + nowRef.getMonth();
+    dynamicLineChartData = dynamicLineChartData.map((pt: any) => {
+      const d = new Date(pt.date);
+      if (!pt.date || isNaN(d.getTime())) return pt;
+      const key = d.getFullYear() * 12 + d.getMonth();
+      return key > currentKey ? { ...pt, committed: null, actual: null } : pt;
+    });
+  }
+
   const renderPhaseRows = (phases: any[]): React.ReactNode => {
     if (!phases || !Array.isArray(phases)) return null;
     let serialCounter = 1;
@@ -2092,129 +2118,53 @@ export default function ProjectDashboardPage() {
 
             {/* Line / Area Chart */}
             <div className="bg-white p-6 rounded shadow-sm border border-gray-100 flex-1 flex flex-col">
-              <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
-                <div>
-                  <h3 className="text-lg font-medium text-[#3B7CED]">Spend Over Time vs Budget Curve</h3>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {timeGranularity === "monthly" ? "Monthly" : "Weekly"} timeline comparing budget ceiling, committed obligations, and actual expenditure
-                  </p>
-                </div>
-                
-                {/* Controls: Granularity, Commitment View Mode, Demo Preview Toggle, and Series Toggle Pills */}
-                <div className="flex flex-wrap gap-2.5 items-center">
-                  {/* Demo Completed State Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => setShowCompletedDemo(!showCompletedDemo)}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer select-none ${
-                      showCompletedDemo
-                        ? "bg-amber-50 border-amber-300 text-amber-800 shadow-2xs hover:bg-amber-100/70"
-                        : "bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${showCompletedDemo ? "bg-amber-500 animate-pulse" : "bg-gray-300"}`} />
-                    <span>{showCompletedDemo ? "Completed Project Preview (Active)" : "View Completed Preview"}</span>
-                  </button>
-
+              <div className="flex flex-col gap-4 mb-6">
+                <div className="flex items-center justify-between gap-4">
+                  <h3 className="text-lg font-medium text-[#3B7CED] whitespace-nowrap shrink-0">Spend Over Time vs Budget Curve</h3>
                   {/* Granularity Toggle: Monthly vs Weekly */}
-                  <div className="inline-flex rounded-lg bg-gray-100 p-0.5 border border-gray-200/60 shadow-2xs">
-                    <button
-                      type="button"
-                      onClick={() => setTimeGranularity("monthly")}
-                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer select-none ${
-                        timeGranularity === "monthly"
-                          ? "bg-white text-gray-900 shadow-xs"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Monthly
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTimeGranularity("weekly")}
-                      className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer select-none ${
-                        timeGranularity === "weekly"
-                          ? "bg-white text-gray-900 shadow-xs"
-                          : "text-gray-500 hover:text-gray-800"
-                      }`}
-                    >
-                      Weekly
-                    </button>
+                  <div className="inline-flex rounded-lg bg-gray-100 p-0.5 border border-gray-200/60">
+                    {(["monthly", "weekly"] as const).map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setTimeGranularity(g)}
+                        className={`px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer select-none capitalize ${
+                          timeGranularity === g
+                            ? "bg-white text-gray-900 shadow-xs"
+                            : "text-gray-500 hover:text-gray-800"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
                   </div>
+                </div>
 
-                  {/* Commitment View Mode Filter */}
-                  <Select value={commitmentViewMode} onValueChange={(v: any) => setCommitmentViewMode(v)}>
-                    <SelectTrigger className="h-8 text-xs font-medium px-3 bg-white border-gray-200 w-[185px]">
-                      <SelectValue placeholder="Commitment View" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active" className="text-xs">
-                        Active Balance (Holds Up)
-                      </SelectItem>
-                      <SelectItem value="monthly" className="text-xs">
-                        New POs (Monthly Flow)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  {/* Series Toggle Pills */}
-                  <button
-                    type="button"
-                    onClick={() => setShowActual(!showActual)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${
-                      showActual
-                        ? "bg-[#EBF7EE] border-[#2BA24D]/40 text-[#1E8E3E] shadow-sm shadow-[#2BA24D]/10"
-                        : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 opacity-60"
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full transition-transform ${showActual ? "bg-[#2BA24D] scale-110" : "bg-gray-300"}`} />
-                    <span>Actual Spent</span>
-                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
-                      showActual ? "bg-[#2BA24D] text-white" : "bg-gray-200 text-gray-400"
-                    }`}>
-                      {showActual ? "✓" : "–"}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowCommitted(!showCommitted)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${
-                      showCommitted
-                        ? "bg-[#FEF7EC] border-[#F59E0B]/40 text-[#B45309] shadow-sm shadow-[#F59E0B]/10"
-                        : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 opacity-60"
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full transition-transform ${showCommitted ? "bg-[#F59E0B] scale-110" : "bg-gray-300"}`} />
-                    <span>Committed Amount</span>
-                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
-                      showCommitted ? "bg-[#F59E0B] text-white" : "bg-gray-200 text-gray-400"
-                    }`}>
-                      {showCommitted ? "✓" : "–"}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setShowPlanned(!showPlanned)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer select-none ${
-                      showPlanned
-                        ? "bg-[#EFF6FF] border-[#3B7CED]/40 text-[#1D4ED8] shadow-sm shadow-[#3B7CED]/10"
-                        : "bg-gray-50 border-gray-200 text-gray-400 hover:bg-gray-100 hover:text-gray-600 opacity-60"
-                    }`}
-                  >
-                    <span className={`w-2 h-2 rounded-full transition-transform ${showPlanned ? "bg-[#3B7CED] scale-110" : "bg-gray-300"}`} />
-                    <span>Project Budget</span>
-                    <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors ${
-                      showPlanned ? "bg-[#3B7CED] text-white" : "bg-gray-200 text-gray-400"
-                    }`}>
-                      {showPlanned ? "✓" : "–"}
-                    </span>
-                  </button>
+                {/* Series Checkboxes */}
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  {[
+                    { label: "Actual Spend", checked: showActual, onChange: setShowActual, color: "#2BA24D" },
+                    { label: "Committed Amount", checked: showCommitted, onChange: setShowCommitted, color: "#F59E0B" },
+                    { label: "Project Budget", checked: showPlanned, onChange: setShowPlanned, color: "#3B7CED" },
+                  ].map((s) => (
+                    <label
+                      key={s.label}
+                      className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 cursor-pointer select-none"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={s.checked}
+                        onChange={(e) => s.onChange(e.target.checked)}
+                        className="w-4 h-4 cursor-pointer"
+                        style={{ accentColor: s.color }}
+                      />
+                      {s.label}
+                    </label>
+                  ))}
                 </div>
               </div>
-              <div className="w-full h-[340px] min-h-[340px] relative">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="w-full flex-1 min-h-[340px] relative">
+                <ResponsiveContainer width="100%" height="100%" className="absolute inset-0">
                   <AreaChart data={dynamicLineChartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
                     <defs>
                       <linearGradient id="plannedGradient" x1="0" y1="0" x2="0" y2="1">
@@ -2230,7 +2180,7 @@ export default function ProjectDashboardPage() {
                         <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.0}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F0F3F6" />
+                    <CartesianGrid strokeDasharray="4 4" vertical={true} stroke="#E5E7EB" />
                     <XAxis 
                       dataKey="name" 
                       axisLine={{ stroke: '#E5E7EB' }} 
@@ -2381,11 +2331,15 @@ export default function ProjectDashboardPage() {
               <div className="flex flex-col gap-4">
                 <div>
                   <div className="text-sm text-gray-500 mb-1">Awaiting Approval</div>
-                  <div className="text-2xl font-bold text-gray-800">{pendingAdjsList.length}</div>
+                  <div className="text-2xl font-bold text-gray-800">
+                    {isLoadingPendingSummary ? "-" : (summaryPendingCount ?? pendingAdjsList.length)}
+                  </div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-500 mb-1">Total Value</div>
-                  <div className="text-2xl font-bold text-gray-800">₦{pendingAdjsTotal.toLocaleString()}</div>
+                  <div className="text-2xl font-bold text-gray-800">
+                    {isLoadingPendingSummary ? "-" : `₦${(summaryPendingValue ?? pendingAdjsTotal).toLocaleString()}`}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2968,14 +2922,36 @@ export default function ProjectDashboardPage() {
                         <span className="text-xs text-gray-500 mt-1">Added: {new Date(doc.created_at).toLocaleDateString()}</span>
                       )}
                     </div>
-                    <a
-                      href={doc.file || doc.file_url || doc.url || doc.document || "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1.5 bg-white border border-gray-200 rounded text-xs text-[#3B7CED] hover:bg-blue-50 shrink-0 font-medium"
-                    >
-                      View
-                    </a>
+                    {(() => {
+                      const fileUrl: string = doc.file || doc.file_url || doc.url || doc.document || "#";
+                      const isOfficeDoc = /\.(pptx?|docx?|xlsx?)(\?.*)?$/i.test(fileUrl);
+                      const viewUrl = isOfficeDoc
+                        ? `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`
+                        : fileUrl;
+                      return (
+                        <div className="flex items-center gap-2 shrink-0">
+                          <a
+                            href={viewUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 bg-white border border-gray-200 rounded text-xs text-[#3B7CED] hover:bg-blue-50 font-medium"
+                          >
+                            View
+                          </a>
+                          {isOfficeDoc && (
+                            <a
+                              href={fileUrl}
+                              download
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-600 hover:bg-gray-50 font-medium"
+                            >
+                              Download
+                            </a>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )) : (
                   <div className="text-sm text-gray-700">

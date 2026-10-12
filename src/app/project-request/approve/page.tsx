@@ -112,7 +112,7 @@ export default function ApproveRequestPage() {
     return request.reference_id || (request.id ? `REQ-${request.id}` : "N/A");
   };
 
-  const handleApprove = async (id: number) => {
+  const handleApprove = async (id: number, confirmOverBudget = false) => {
     const request = apiRequests.find((r: any) => r.id === id);
     const displayId = getRequestReferenceId(request);
 
@@ -120,7 +120,8 @@ export default function ApproveRequestPage() {
     setRemovedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
 
     try {
-      await approveRequest({ id }).unwrap();
+      const payloadData = confirmOverBudget ? { confirm_over_budget: true } : {};
+      await approveRequest({ id, data: payloadData }).unwrap();
       statusModal.showSuccess(
         "Request Approved",
         `Project request ${displayId} has been successfully approved.`
@@ -130,6 +131,27 @@ export default function ApproveRequestPage() {
     } catch (err: any) {
       // Revert if error
       setRemovedIds((prev) => prev.filter((item) => item !== id));
+      console.error("Approve Error:", err);
+      const errData = err?.data || err?.response?.data || err?.error?.data || err || {};
+      const isOverBudget =
+        errData?.confirmation_required === true ||
+        errData?.code === "OVER_BUDGET" ||
+        errData?.warning === true;
+
+      if (isOverBudget) {
+        statusModal.showConfirm(
+          "Over Budget",
+          "This request exceeds the available budget. Do you want to proceed with approval?",
+          async () => {
+            await handleApprove(id, true);
+          },
+          "Yes, Approve",
+          "Cancel",
+          "primary"
+        );
+        return;
+      }
+
       const errMsg = extractErrorMessage(err, "An error occurred while approving the request.");
       statusModal.showError("Approval Failed", errMsg);
     }
@@ -325,8 +347,11 @@ export default function ApproveRequestPage() {
         type={statusModal.type}
         title={statusModal.title}
         message={statusModal.message}
-        actionText="Done"
-        onAction={handleModalClose}
+        actionText={statusModal.actionText || "Done"}
+        onAction={statusModal.onAction || handleModalClose}
+        secondaryText={statusModal.secondaryText}
+        onSecondary={statusModal.onSecondary}
+        actionVariant={statusModal.actionVariant}
       />
     </motion.div>
   );

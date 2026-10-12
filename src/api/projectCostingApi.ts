@@ -406,6 +406,14 @@ export const projectCostingApi = createApi({
       query: (id) => `/project-costing/projects/${id}/budget_adjustments/`,
       providesTags: (result, error, id) => [{ type: "BudgetAdjustments", id }],
     }),
+    getPendingRequestsSummary: builder.query<any, number | string>({
+      query: (id) =>
+        `/project-costing/projects/${id}/pending-requests/summary/`,
+      providesTags: (result, error, id) => [
+        { type: "BudgetAdjustments", id: Number(id) },
+        { type: "ProjectCosting", id: Number(id) },
+      ],
+    }),
     // Project Settings
     getProjectSettings: builder.query<any, number>({
       query: (id) => `/project-costing/projects/${id}/project_settings/`,
@@ -503,6 +511,7 @@ export const {
   useRejectBudgetAdjustmentMutation,
   useSubmitBudgetAdjustmentMutation,
   useGetBudgetAdjustmentsQuery,
+  useGetPendingRequestsSummaryQuery,
   useGetProjectSettingsQuery,
   useUpdateProjectSettingsMutation,
   useCreateActualCostMutation,

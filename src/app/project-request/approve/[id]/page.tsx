@@ -427,10 +427,11 @@ export default function RequestDetailsPage() {
     }
   };
 
-  const handleApprove = async () => {
+  const handleApprove = async (confirmOverBudget = false) => {
     const displayRequestId = mainRequestId;
     try {
-      await approveRequest({ id: numericId }).unwrap();
+      const payloadData = confirmOverBudget ? { confirm_over_budget: true } : {};
+      await approveRequest({ id: numericId, data: payloadData }).unwrap();
       setLocalStatus("approved");
       statusModal.showSuccess(
         "Request Approved",
@@ -439,6 +440,26 @@ export default function RequestDetailsPage() {
       refetch();
     } catch (err: any) {
       console.error("Approve Error:", err);
+      const errData = err?.data || err?.response?.data || err?.error?.data || err || {};
+      const isOverBudget =
+        errData?.confirmation_required === true ||
+        errData?.code === "OVER_BUDGET" ||
+        errData?.warning === true;
+
+      if (isOverBudget) {
+        statusModal.showConfirm(
+          "Over Budget",
+          "This request exceeds the available budget. Do you want to proceed with approval?",
+          async () => {
+            await handleApprove(true);
+          },
+          "Yes, Approve",
+          "Cancel",
+          "primary"
+        );
+        return;
+      }
+
       const errMsg = extractErrorMessage(err, "An error occurred while approving the request.");
       statusModal.showError("Approval Failed", errMsg);
     }
@@ -928,9 +949,11 @@ export default function RequestDetailsPage() {
         type={statusModal.type}
         title={statusModal.title}
         message={statusModal.message}
-        actionText="Back to List"
-        onAction={handleModalClose}
-        showCloseButton={false}
+        actionText={statusModal.actionText || "Back to List"}
+        onAction={statusModal.onAction || handleModalClose}
+        secondaryText={statusModal.secondaryText}
+        onSecondary={statusModal.onSecondary}
+        actionVariant={statusModal.actionVariant}
       />
     </motion.div>
   );
