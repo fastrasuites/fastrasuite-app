@@ -11,7 +11,6 @@ import {
   CreditCard,
   User,
   Calendar,
-  Hash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import BankSelectModal from "@/components/invoice/payment-queue/BankSelectModal";
@@ -59,7 +58,6 @@ const sourceTypeBadgeStyles: Record<string, string> = {
   PROJECT_PO: "bg-blue-100 text-blue-800",
   PLANT_AND_EQUIPMENT: "bg-orange-100 text-orange-800",
   PETTY_CASH: "bg-amber-100 text-amber-800",
-  // fallback
   default: "bg-gray-100 text-gray-700",
 };
 
@@ -105,9 +103,6 @@ const formatDateTime = (value?: string | null) => {
   }
 };
 
-/**
- * Safely turn any API error payload into a human-readable string.
- */
 const extractErrorMessage = (
   err: any,
   fallback = "An unexpected error occurred",
@@ -142,10 +137,6 @@ const extractErrorMessage = (
 
 const isDev = process.env.NODE_ENV === "development";
 
-/* -------------------------------------------------------------------------- */
-/*                                 Skeleton                                   */
-/* -------------------------------------------------------------------------- */
-
 function DetailSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
@@ -175,10 +166,6 @@ function DetailSkeleton() {
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*                              Info Field                                    */
-/* -------------------------------------------------------------------------- */
-
 function InfoField({
   label,
   value,
@@ -200,10 +187,6 @@ function InfoField({
     </div>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/*                                   Page                                     */
-/* -------------------------------------------------------------------------- */
 
 export default function PaymentQueueDetailPage() {
   const router = useRouter();
@@ -246,8 +229,6 @@ export default function PaymentQueueDetailPage() {
   const isActionLoading =
     isApproving || isRejecting || isPaying || isSubmitting || isCancelling;
 
-  /* ----------------------------- Status helpers ---------------------------- */
-
   const currentStatus = (localStatus || invoice?.status || "").toLowerCase();
 
   const showSubmit = currentStatus === "draft";
@@ -260,8 +241,6 @@ export default function PaymentQueueDetailPage() {
   const isReadOnlyStatus = ["paid", "rejected", "cancelled"].includes(
     currentStatus,
   );
-
-  /* ----------------------------- Optimistic UI ----------------------------- */
 
   const optimisticUpdate = (newStatus: string) => {
     setActionPending(true);
@@ -278,8 +257,6 @@ export default function PaymentQueueDetailPage() {
     setLocalStatus(newStatus);
     await refetch();
   };
-
-  /* ------------------------------- Handlers -------------------------------- */
 
   const handleSubmit = async () => {
     if (!invoice) return;
@@ -390,10 +367,12 @@ export default function PaymentQueueDetailPage() {
 
   const handlePayBill = () => setShowBankModal(true);
 
-  const handleConfirmPayment = async (bankId: string | null) => {
+  const handleConfirmPayment = async (
+    bankId: string | null,
+    amountToPay: number,
+  ) => {
     if (!invoice) return;
 
-    // Resolve bank: modal selection, or fall back to bill's existing bank
     const resolvedBankId = bankId
       ? Number(bankId)
       : invoice.company_bank_account != null
@@ -405,13 +384,30 @@ export default function PaymentQueueDetailPage() {
       return;
     }
 
+    if (!Number.isFinite(amountToPay) || amountToPay <= 0) {
+      showToast("Enter a valid amount to pay", "error");
+      return;
+    }
+
     const billNumber = invoice.bill_number || String(invoice.id);
-    optimisticUpdate("paid");
+    const balanceNum = Number(invoice.balance ?? invoice.amount ?? 0);
+    // Soft guard (modal already validates); still protect API
+    if (balanceNum > 0 && amountToPay > balanceNum + 0.001) {
+      showToast(
+        `Amount cannot exceed the outstanding balance (${formatCurrency(balanceNum)})`,
+        "error",
+      );
+      return;
+    }
+
+    const willFullyPay =
+      balanceNum > 0 && Math.abs(amountToPay - balanceNum) < 0.005;
+    optimisticUpdate(willFullyPay ? "paid" : "partial");
 
     try {
       const payload = {
-        amount: invoice.balance || invoice.amount || "0",
-        company_bank_account: resolvedBankId, // always send, even if unchanged
+        amount: String(amountToPay),
+        company_bank_account: resolvedBankId,
       };
 
       await payVendorBill({
@@ -419,10 +415,15 @@ export default function PaymentQueueDetailPage() {
         data: payload as unknown as CreateVendorBillRequest,
       }).unwrap();
 
-      await finalizeStatusChange("paid");
+      await finalizeStatusChange(willFullyPay ? "paid" : "partial");
       setShowBankModal(false);
       setShowSuccessModal(true);
-      showToast(`Bill ${billNumber} paid successfully`, "success");
+      showToast(
+        willFullyPay
+          ? `Bill ${billNumber} paid successfully`
+          : `Partial payment recorded for ${billNumber}`,
+        "success",
+      );
     } catch (err: any) {
       if (isDev) console.error("[payment-queue] pay failed", err);
       if (err?.status === 409) refetch();
@@ -444,9 +445,7 @@ export default function PaymentQueueDetailPage() {
     router.push("/invoice/payment-queue");
   };
 
-  /* --------------------------- Derived display data ------------------------ */
-
-  const inv = invoice as any; // richer response shape from backend
+  const inv = invoice as any;
 
   const vendorName =
     inv?.vendor_details?.vendor_name || inv?.vendor_name || "—";
@@ -476,9 +475,10 @@ export default function PaymentQueueDetailPage() {
   const wbsName =
     inv?.source_details?.activity?.name ||
     inv?.source_details?.project_purchase_order?.wbs_element?.name;
-  const requestRef = inv?.source_details?.project_request?.reference_id;
-  const poNumber = inv?.source_details?.project_purchase_order?.po_number;
-  const sourceTypeDisplay = inv?.source_type_display || inv?.source_type || "—";
+  const sourceTypeDisplay =
+    inv?.source_type_display === "Project Purchase Order"
+      ? "Purchase Order"
+      : inv?.source_type_display || inv?.source_type || "—";
 
   const approvedByName = inv?.approved_by_details
     ? `${inv.approved_by_details.first_name || ""} ${
@@ -490,8 +490,6 @@ export default function PaymentQueueDetailPage() {
   const isOverdue = daysUntilDue !== null && daysUntilDue < 0;
 
   const documentUrl = inv?.document_url || inv?.document;
-
-  /* -------------------------------- Render -------------------------------- */
 
   return (
     <PageGuard module="invoice" entitlement="view_accounts_payable_queue">
@@ -505,7 +503,6 @@ export default function PaymentQueueDetailPage() {
           />
         </div>
         <div className="max-w-7xl mx-auto">
-          {/* Breadcrumb */}
           <nav className="flex items-center gap-2 text-sm text-gray-500 mb-6">
             <button
               type="button"
@@ -539,7 +536,6 @@ export default function PaymentQueueDetailPage() {
             </div>
           ) : (
             <>
-              {/* Header */}
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
                 <div>
                   <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900">
@@ -572,7 +568,6 @@ export default function PaymentQueueDetailPage() {
                   )}
                 </div>
               </div>
-              {/* Read-only banner */}
               {isReadOnlyStatus && (
                 <div
                   className={`mb-6 p-4 rounded-xl border text-sm font-medium ${
@@ -586,10 +581,8 @@ export default function PaymentQueueDetailPage() {
                   further actions are available.
                 </div>
               )}
-              {/* Main card */}
               <div className="bg-white rounded border border-gray-200 shadow-sm overflow-hidden">
                 <div className="p-5 sm:p-6 space-y-8">
-                  {/* Summary amounts */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <div className="rounded-lg bg-gray-50 p-4">
                       <div className="text-xs text-gray-500 mb-1">Amount</div>
@@ -628,7 +621,6 @@ export default function PaymentQueueDetailPage() {
                       </div>
                     </div>
                   </div>
-                  {/* Vendor & Source */}
                   <div>
                     <h2 className="text-sm font-semibold text-blue-500 mb-4 flex items-center gap-2">
                       <Building2 className="w-4 h-4 text-gray-400" />
@@ -672,32 +664,6 @@ export default function PaymentQueueDetailPage() {
                         }
                         icon={<CreditCard className="w-3.5 h-3.5" />}
                       />
-                      <InfoField
-                        label="Source Type"
-                        value={
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getSourceTypeBadgeClass(
-                              inv?.source_type || inv?.source_type_display,
-                            )}`}
-                          >
-                            {sourceTypeDisplay}
-                          </span>
-                        }
-                      />
-                      {poNumber && (
-                        <InfoField
-                          label="Reference Number"
-                          value={poNumber}
-                          icon={""}
-                        />
-                      )}
-                      {requestRef && (
-                        <InfoField
-                          label="Request Reference"
-                          value={requestRef}
-                          icon={""}
-                        />
-                      )}
                       {(projectName || projectCode) && (
                         <InfoField
                           label="Project"
@@ -711,7 +677,6 @@ export default function PaymentQueueDetailPage() {
                       )}
                     </div>
                   </div>
-                  {/* Dates & Payment meta */}
                   <div>
                     <h2 className="text-sm font-semibold text-blue-500 mb-4 flex items-center gap-2">
                       <Calendar className="w-4 h-4 text-gray-400" />
@@ -752,7 +717,6 @@ export default function PaymentQueueDetailPage() {
                       )}
                     </div>
                   </div>
-                  {/* Document */}
                   <div>
                     <h2 className="text-sm font-semibold text-blue-500 mb-3 flex items-center gap-2">
                       <FileText className="w-4 h-4 text-gray-400" />
@@ -805,33 +769,22 @@ export default function PaymentQueueDetailPage() {
                       </div>
                     )}
                   </div>
-                  {/* Line items */}
+                  {/* Line items — Qty Received removed */}
                   <div>
                     <h2 className="text-sm font-semibold text-blue-500 mb-3">
                       Cost Items
                     </h2>
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="overflow-x-auto">
-                        <table
-                          className={`w-full ${
-                            inv?.source_type === "PROJECT_PO"
-                              ? "min-w-[600px]"
-                              : "min-w-[520px]"
-                          }`}
-                        >
+                        <table className="w-full min-w-[520px]">
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Description
                               </th>
                               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Qty
+                                Quantity
                               </th>
-                              {inv?.source_type === "PROJECT_PO" && (
-                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                  Qty Received
-                                </th>
-                              )}
                               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Unit Price
                               </th>
@@ -844,9 +797,7 @@ export default function PaymentQueueDetailPage() {
                             {(inv.lines || []).length === 0 ? (
                               <tr>
                                 <td
-                                  colSpan={
-                                    inv?.source_type === "PROJECT_PO" ? 5 : 4
-                                  }
+                                  colSpan={4}
                                   className="px-4 py-8 text-center text-sm text-gray-500"
                                 >
                                   No line items
@@ -867,11 +818,6 @@ export default function PaymentQueueDetailPage() {
                                   line.source?.product?.product_name ||
                                   line.source?.name ||
                                   "—";
-
-                                const quantityReceived =
-                                  line.source?.quantity_received ??
-                                  line.quantity_received ??
-                                  null;
 
                                 const needsTruncate = description.length > 52;
                                 const displayDescription = needsTruncate
@@ -898,13 +844,6 @@ export default function PaymentQueueDetailPage() {
                                     <td className="px-4 py-3 text-sm text-gray-700 text-right">
                                       {line.quantity ?? "—"}
                                     </td>
-                                    {inv?.source_type === "PROJECT_PO" && (
-                                      <td className="px-4 py-3 text-sm text-gray-700 text-right">
-                                        {quantityReceived != null
-                                          ? quantityReceived
-                                          : "—"}
-                                      </td>
-                                    )}
                                     <td className="px-4 py-3 text-sm text-gray-700 text-right">
                                       {line.unit_price
                                         ? formatCurrency(line.unit_price)
@@ -921,12 +860,10 @@ export default function PaymentQueueDetailPage() {
                           <tfoot>
                             <tr className="bg-gray-50 border-t border-gray-200">
                               <td
-                                colSpan={
-                                  inv?.source_type === "PROJECT_PO" ? 4 : 3
-                                }
+                                colSpan={3}
                                 className="px-4 py-3 text-sm font-semibold text-gray-900"
                               >
-                                Grand Total
+                                Total
                               </td>
                               <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">
                                 {formatCurrency(inv.amount)}
@@ -939,7 +876,6 @@ export default function PaymentQueueDetailPage() {
                   </div>
                 </div>
               </div>
-              {/* Action buttons */}
               <div className="flex flex-wrap items-center justify-end gap-3 mt-6">
                 {!isReadOnlyStatus && (
                   <>
@@ -1043,7 +979,6 @@ export default function PaymentQueueDetailPage() {
               </div>
             </>
           )}
-          {/* Modals */}
           <BankSelectModal
             isOpen={showBankModal}
             onClose={() => setShowBankModal(false)}
@@ -1052,6 +987,8 @@ export default function PaymentQueueDetailPage() {
             currentBankLabel={
               invoice?.company_bank_account_details?.bank_name ?? undefined
             }
+            totalAmount={invoice?.amount}
+            balance={invoice?.balance ?? invoice?.amount}
           />
           <SuccessModal
             isOpen={showSuccessModal}
