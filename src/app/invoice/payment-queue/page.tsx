@@ -607,9 +607,14 @@ export default function PaymentQueuePage() {
                       </td>
                     </tr>
                   ) : (
-                    paginated.map((inv) => {
+                    paginated.map((inv: VendorBill) => {
                       const days = getDaysUntilDue(inv.due_date);
                       const isOverdue = days !== null && days < 0;
+                      const sourceTypeDisplay =
+                        inv.source_type_display === "Project Purchase Order"
+                          ? "Purchase Order"
+                          : inv.source_type_display || inv.source_type || "—";
+
                       return (
                         <tr
                           key={inv.id}
@@ -628,9 +633,7 @@ export default function PaymentQueuePage() {
                               inv?.vendor_details?.vendor_name}
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {(inv as any).source_type_display ||
-                              inv.source_type ||
-                              "—"}
+                            {sourceTypeDisplay}
                           </td>
                           <td className="px-5 py-4 whitespace-nowrap text-sm text-gray-600">
                             {inv.invoice_date || "—"}

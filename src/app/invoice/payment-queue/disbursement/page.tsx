@@ -58,9 +58,7 @@ const statusStyles: Record<string, string> = {
 
 function statusLabel(status?: string | null) {
   if (!status) return "—";
-  return status
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function MethodBadge({ method }: { method?: string | null }) {
@@ -404,7 +402,7 @@ export default function DisbursementsListPage() {
                               href={`/invoice/payment-queue/disbursement/${d.id}`}
                               className="inline-flex items-center rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-blue-700"
                             >
-                              Pay
+                              {d.status === "paid" ? "View" : "Pay"}
                             </Link>
                           </td>
                         </tr>
@@ -437,9 +435,7 @@ export default function DisbursementsListPage() {
                   <button
                     type="button"
                     disabled={page >= totalPages}
-                    onClick={() =>
-                      setPage((p) => Math.min(totalPages, p + 1))
-                    }
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     className="rounded-md border border-gray-200 p-1.5 hover:bg-white disabled:opacity-40"
                   >
                     <ChevronRight className="h-4 w-4" />

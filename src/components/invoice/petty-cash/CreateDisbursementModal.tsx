@@ -557,7 +557,7 @@ export default function CreateDisbursementModal({
               <p className="text-sm text-gray-500 mt-0.5">
                 Petty Cash Request ·{" "}
                 <TruncateWithTooltip
-                  text={String(referenceId)}
+                  text={String(pettyCashRef)}
                   maxLength={32}
                 />
               </p>
@@ -637,7 +637,7 @@ export default function CreateDisbursementModal({
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-start gap-4 mb-6 pb-5 border-b border-gray-100">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4 mb-5">
                   <div className="shrink-0">
                     <p className="text-xs text-gray-500 mb-1">Request type</p>
                     <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
