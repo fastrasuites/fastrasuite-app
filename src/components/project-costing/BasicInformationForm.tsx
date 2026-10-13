@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import Link from "next/link";
+import { useSelector } from "react-redux";
+import { RootState } from "@/lib/store/store";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -9,8 +12,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useGetActiveLocationsQuery } from "@/api/inventory/locationApi";
+import { useGetTenantUsersQuery } from "@/api/settings/tenantUserApi";
 import { CreateLocationModal } from "./modals/CreateLocationModal";
-import { Loader2, Plus, MapPin } from "lucide-react";
+import { Loader2, Plus, MapPin, RefreshCw } from "lucide-react";
 
 interface BasicInformationFormProps {
   name: string;
@@ -27,6 +31,9 @@ interface BasicInformationFormProps {
   setDescription: (val: string) => void;
   siteLocation: string;
   setSiteLocation: (val: string) => void;
+  projectManager?: string;
+  setProjectManager?: (val: string) => void;
+  autoFillCurrentUser?: boolean;
 }
 
 export function BasicInformationForm({
@@ -44,6 +51,9 @@ export function BasicInformationForm({
   setDescription,
   siteLocation,
   setSiteLocation,
+  projectManager = "",
+  setProjectManager,
+  autoFillCurrentUser = false,
 }: BasicInformationFormProps) {
   const {
     data: activeLocations,
@@ -52,6 +62,86 @@ export function BasicInformationForm({
   } = useGetActiveLocationsQuery();
 
   const [isCreateLocationOpen, setIsCreateLocationOpen] = useState(false);
+
+  // Redux auth state for auto-filling current user
+  const authUser = useSelector((state: RootState) => state.auth.user);
+  const tenantUserId = useSelector((state: RootState) => state.auth.tenant_user_id);
+
+  // Tenant users query for Project Manager
+  const {
+    data: tenantUsers,
+    isLoading: isLoadingUsers,
+    refetch: refetchUsers,
+  } = useGetTenantUsersQuery({});
+
+  const [isRefreshingUsers, setIsRefreshingUsers] = useState(false);
+
+  const handleRefreshUsers = async () => {
+    setIsRefreshingUsers(true);
+    try {
+      await refetchUsers();
+    } finally {
+      setIsRefreshingUsers(false);
+    }
+  };
+
+  const userOptions = React.useMemo(() => {
+    if (!tenantUsers || !Array.isArray(tenantUsers)) return [];
+    return tenantUsers
+      .filter((tu: any) => {
+        if (!tu) return false;
+        if (
+          tu.is_hidden ||
+          tu.is_active === false ||
+          tu.status?.toLowerCase() === "archived" ||
+          tu.status?.toLowerCase() === "hidden"
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .map((tu: any) => {
+        const id = tu.id || tu.user_id;
+        const firstName = tu.user?.first_name || tu.first_name || "";
+        const lastName = tu.user?.last_name || tu.last_name || "";
+        const email = tu.user?.email || tu.email || "";
+        const username = tu.user?.username || tu.username || "";
+        const fullName = `${firstName} ${lastName}`.trim();
+        const displayName = fullName || username || email || `User #${id}`;
+        const role = tu.company_role_details?.name;
+        return {
+          id: String(id),
+          value: String(id),
+          label: displayName,
+          email,
+          role,
+          tu,
+        };
+      })
+      .filter((opt) => !!opt.value);
+  }, [tenantUsers]);
+
+  // Auto-fill logged-in user on initial load if configured (e.g. on new project page)
+  const hasAutoFilledRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!autoFillCurrentUser || !setProjectManager || hasAutoFilledRef.current) return;
+    if (projectManager) {
+      hasAutoFilledRef.current = true;
+      return;
+    }
+    if (userOptions.length > 0) {
+      const match = userOptions.find((u) => {
+        if (tenantUserId && u.value === String(tenantUserId)) return true;
+        if (authUser?.id && (u.value === String(authUser.id) || u.tu?.user_id === authUser.id)) return true;
+        if (authUser?.email && u.email && u.email.toLowerCase() === authUser.email.toLowerCase()) return true;
+        return false;
+      });
+      if (match) {
+        setProjectManager(match.value);
+        hasAutoFilledRef.current = true;
+      }
+    }
+  }, [autoFillCurrentUser, projectManager, setProjectManager, userOptions, tenantUserId, authUser]);
 
   const internalLocations = React.useMemo(() => {
     if (!activeLocations || !Array.isArray(activeLocations)) return [];
@@ -188,6 +278,84 @@ export function BasicInformationForm({
                 internalLocations.map((loc: any) => (
                   <SelectItem key={loc.id} value={loc.id}>
                     {loc.location_name || loc.name || loc.id}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-gray-700 font-medium">Project Manager</Label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleRefreshUsers}
+                disabled={isLoadingUsers || isRefreshingUsers}
+                title="Refresh user list"
+                className="text-gray-400 hover:text-[#3B7CED] transition-colors p-0.5 cursor-pointer"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${
+                    isLoadingUsers || isRefreshingUsers ? "animate-spin text-[#3B7CED]" : ""
+                  }`}
+                />
+              </button>
+              <Link
+                href="/settings/users/newUser"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-[#3B7CED] hover:underline flex items-center gap-0.5 font-medium cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add User</span>
+              </Link>
+            </div>
+          </div>
+
+          <Select
+            value={projectManager || ""}
+            onValueChange={(val) => {
+              if (setProjectManager) {
+                setProjectManager(val === "unassigned" ? "" : val);
+              }
+            }}
+          >
+            <SelectTrigger className="bg-white border-gray-300 rounded text-gray-700 h-10">
+              {isLoadingUsers ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                  <span className="text-gray-400">Loading users...</span>
+                </div>
+              ) : (
+                <SelectValue placeholder="Select Project Manager" />
+              )}
+            </SelectTrigger>
+            <SelectContent className="max-h-60">
+              <SelectItem value="unassigned">
+                <span className="text-gray-400 italic">Unassigned (None)</span>
+              </SelectItem>
+              {projectManager && !userOptions.some((opt) => opt.value === projectManager) && (
+                <SelectItem value={projectManager}>
+                  Project Manager #{projectManager}
+                </SelectItem>
+              )}
+              {userOptions.length === 0 && !isLoadingUsers ? (
+                <div className="p-3 text-center text-xs text-gray-500">
+                  No active users found. (Click &apos;Add User&apos; to create)
+                </div>
+              ) : (
+                userOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <div className="flex items-center justify-between gap-3 w-full">
+                      <span className="font-medium text-gray-800">{opt.label}</span>
+                      {opt.role && (
+                        <span className="text-[11px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
+                          {opt.role}
+                        </span>
+                      )}
+                    </div>
                   </SelectItem>
                 ))
               )}

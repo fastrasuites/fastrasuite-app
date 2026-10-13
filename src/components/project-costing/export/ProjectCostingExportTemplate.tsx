@@ -1,4 +1,5 @@
 import React from "react";
+import { format } from "date-fns";
 import {
   Table,
   TableBody,
@@ -32,7 +33,7 @@ import {
 } from "lucide-react";
 import { ProjectCostingProject } from "@/types/projectCosting";
 
-export type ExportDocType = "all" | "costing" | "wbs" | "po" | "bills" | "disbursements" | "ledger";
+export type ExportDocType = "all" | "costing" | "wbs" | "po" | "bills" | "disbursements" | "ledger" | "executive";
 
 export const formatCurrency = (amount: number | string) => {
   const num = Number(amount);
@@ -305,6 +306,29 @@ interface ExportTemplateProps {
   docType?: ExportDocType;
 }
 
+const formatDisplayDate = (dateStr?: string) => {
+  if (!dateStr) return "";
+  try {
+    const raw = String(dateStr).trim();
+    const parts = raw.split("T")[0].split("-");
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        return format(new Date(year, month, day), "MMM dd, yyyy");
+      }
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return format(d, "MMM dd, yyyy");
+    }
+    return raw;
+  } catch {
+    return dateStr || "";
+  }
+};
+
 export const ProjectCostingExportTemplate = ({
   project,
   transactions = [],
@@ -474,7 +498,10 @@ export const ProjectCostingExportTemplate = ({
             <span className="font-semibold text-gray-500">Project Manager:</span>{" "}
             {pmNameStr}{" "}
             <span className="mx-2 text-gray-300">|</span>{" "}
-            <span className="font-semibold text-gray-500">Duration:</span> {(project as any)?.start_date || "-"} to {(project as any)?.expected_end_date || "-"}
+            <span className="font-semibold text-gray-500">Duration:</span>{" "}
+            {(project as any)?.start_date && (project as any)?.expected_end_date
+              ? `${formatDisplayDate((project as any).start_date)} to ${formatDisplayDate((project as any).expected_end_date)}`
+              : (formatDisplayDate((project as any)?.start_date || (project as any)?.expected_end_date) || "-")}
           </div>
         </div>
       </div>

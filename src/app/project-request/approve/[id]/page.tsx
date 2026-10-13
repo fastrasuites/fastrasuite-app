@@ -430,7 +430,7 @@ export default function RequestDetailsPage() {
   const handleApprove = async (confirmOverBudget = false) => {
     const displayRequestId = mainRequestId;
     try {
-      const payloadData = confirmOverBudget ? { confirm_over_budget: true } : {};
+      const payloadData = confirmOverBudget === true ? { confirm_over_budget: true } : {};
       await approveRequest({ id: numericId, data: payloadData }).unwrap();
       setLocalStatus("approved");
       statusModal.showSuccess(
@@ -934,7 +934,7 @@ export default function RequestDetailsPage() {
               <Button 
                 className="flex-1 bg-[#22c55e] hover:bg-[#16a34a] text-white h-12 text-base font-semibold border-none"
                 disabled={isApproving || isRejecting}
-                onClick={handleApprove}
+                onClick={() => handleApprove()}
               >
                 {isApproving ? "Approving..." : "Approve"}
               </Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AddBudgetAdjustmentModal } from "@/components/project-costing/modals/AddBudgetAdjustmentModal";
 import { AddDocumentModal } from "@/components/project-costing/modals/AddDocumentModal";
 import { ProjectCostingExportTemplate, ExportDocType, categorizeTransactions } from "@/components/project-costing/export/ProjectCostingExportTemplate";
+import { ExecutiveProjectReportTemplate } from "@/components/project-costing/export/ExecutiveProjectReportTemplate";
+import { useGetCompanyQuery } from "@/api/settings/companyApi";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/lib/store/store";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -133,6 +138,40 @@ const parseNumber = (val: any): number => {
   return isNaN(num) ? 0 : num;
 };
 
+const formatDisplayDate = (dateStr?: string) => {
+  if (!dateStr) return "";
+  try {
+    const raw = String(dateStr).trim();
+    const parts = raw.split("T")[0].split("-");
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        return format(new Date(year, month, day), "MMM dd, yyyy");
+      }
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      return format(d, "MMM dd, yyyy");
+    }
+    return raw;
+  } catch {
+    return dateStr || "";
+  }
+};
+
+const formatProjectDateRange = (startDate?: string, endDate?: string) => {
+  const start = formatDisplayDate(startDate);
+  const end = formatDisplayDate(endDate);
+  if (start && end) {
+    return `${start} – ${end}`;
+  }
+  if (start) return start;
+  if (end) return end;
+  return "N/A";
+};
+
 export default function ProjectDashboardPage() {
   const router = useRouter();
   const params = useParams();
@@ -226,6 +265,15 @@ export default function ProjectDashboardPage() {
   const [isAddDocumentModalOpen, setIsAddDocumentModalOpen] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
   const [exportDocType, setExportDocType] = useState<ExportDocType>("all");
+
+  const tenant_company_name = useSelector((state: RootState) => (state.auth as any)?.tenant_company_name);
+  const { data: companyData } = useGetCompanyQuery();
+  const companyName = tenant_company_name || (companyData as any)?.name || "Prorad Health Center";
+  const companyAddress = companyData?.street_address
+    ? [companyData.street_address, companyData.city, companyData.state, companyData.country].filter(Boolean).join(", ")
+    : "Level 1, 12 Sample St, Sydney NSW 2000";
+  const companyPhone = companyData?.phone || "+234 801 234 5679";
+  const companyLogo = companyData?.logo || "";
 
   // Resolve accurate Project Manager name
   const resolvedProjectManager = React.useMemo(() => {
@@ -335,6 +383,7 @@ export default function ProjectDashboardPage() {
     bills: "Vendor_Bills_and_Invoices",
     disbursements: "Disbursements_Schedule",
     ledger: "Project_Account_Ledger",
+    executive: "Project_Costing_Report",
   };
 
   const handleExportPdf = async (targetDocType: ExportDocType = "all") => {
@@ -347,11 +396,13 @@ export default function ProjectDashboardPage() {
       if (!exportRef.current) return;
       const element = exportRef.current;
       
-      const pdf = new jsPDF("l", "mm", "a4");
-      const margin = 10; // 10mm margin
-      const usableWidth = 297 - (margin * 2); // 277mm A4 width (landscape)
-      const pageHeight = 210; // 210mm A4 height (landscape)
-      const usableHeight = pageHeight - (margin * 2); // 190mm
+      const isPortrait = targetDocType === "executive";
+      const pdf = new jsPDF(isPortrait ? "p" : "l", "mm", "a4");
+      const margin = isPortrait ? 6 : 10;
+      const pageWidth = isPortrait ? 210 : 297;
+      const pageHeight = isPortrait ? 297 : 210;
+      const usableWidth = pageWidth - (margin * 2);
+      const usableHeight = pageHeight - (margin * 2);
 
       const sectionElements = Array.from(element.querySelectorAll<HTMLElement>("[data-export-section='true']"));
 
@@ -394,12 +445,12 @@ export default function ProjectDashboardPage() {
         }
       } else {
         // Single document export
-        const canvasWidth = element.clientWidth || 1400;
+        const canvasWidth = element.clientWidth || (isPortrait ? 820 : 1400);
         const canvasHeight = element.clientHeight;
         const imgData = await toJpeg(element, {
           cacheBust: true,
-          pixelRatio: 1.5,
-          quality: 0.9,
+          pixelRatio: 2,
+          quality: 0.95,
           backgroundColor: '#ffffff'
         });
 
@@ -434,7 +485,7 @@ export default function ProjectDashboardPage() {
     setIsExportingImage(true);
     setExportDocType(targetDocType);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await new Promise((resolve) => setTimeout(resolve, 400));
 
       if (!exportRef.current) return;
       const element = exportRef.current;
@@ -1824,7 +1875,10 @@ export default function ProjectDashboardPage() {
               </div>
               <span className="text-gray-300">•</span>
               <div>
-                <span className="font-semibold text-gray-600">Date:</span> {project.start_date || "N/A"} - {project.expected_end_date || "N/A"}
+                <span className="font-semibold text-gray-600">Date:</span>{" "}
+                <span className="text-gray-900 font-medium">
+                  {formatProjectDateRange(project.start_date, project.expected_end_date)}
+                </span>
               </div>
             </div>
           </div>
@@ -1840,6 +1894,35 @@ export default function ProjectDashboardPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80 rounded-xl shadow-xl border-gray-200 p-2 max-h-[85vh] overflow-y-auto">
+                  {/* Executive Report Template */}
+                  <DropdownMenuLabel className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
+                    Executive Report
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem 
+                    onClick={() => handleExportPdf("executive")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-emerald-50 focus:bg-emerald-50"
+                  >
+                    <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <span className="font-semibold text-xs text-gray-900">Project Costing Report (PDF)</span>
+                      <span className="text-[10px] text-gray-500">Executive portrait summary with charts & revisions</span>
+                    </div>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => handleExportImage("executive")} 
+                    disabled={isExportingPdf || isExportingImage} 
+                    className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-emerald-50 focus:bg-emerald-50"
+                  >
+                    <ImageIcon className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <div className="flex flex-col flex-1 min-w-0">
+                      <span className="font-semibold text-xs text-gray-900">Project Costing Report (PNG)</span>
+                      <span className="text-[10px] text-gray-500">High-resolution executive image export</span>
+                    </div>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator className="my-1.5" />
+
                   {/* Master Reports */}
                   <DropdownMenuLabel className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
                     Complete Master Report
@@ -3187,19 +3270,38 @@ export default function ProjectDashboardPage() {
             zIndex: -9999,
           }}
         >
-          <div ref={exportRef} style={{ width: "1400px" }}>
-            <ProjectCostingExportTemplate 
-              project={project} 
-              transactions={transactions}
-              parsedPhases={parsedPhases}
-              customColumns={customColumns}
-              budgetNum={budgetNum}
-              actualSpend={actualSpend}
-              committedSpend={committed}
-              lineChartData={dynamicLineChartData}
-              pieChartData={pieChartData}
-              docType={exportDocType}
-            />
+          <div ref={exportRef} style={{ width: exportDocType === "executive" ? "820px" : "1400px" }}>
+            {exportDocType === "executive" ? (
+              <ExecutiveProjectReportTemplate
+                project={project}
+                transactions={transactions}
+                parsedPhases={parsedPhases}
+                budgetAdjustments={budgetAdjustments}
+                budgetNum={budgetNum}
+                actualSpend={actualSpend}
+                committedSpend={committed}
+                lineChartData={dynamicLineChartData}
+                pieChartData={pieChartData}
+                companyName={companyName}
+                companyAddress={companyAddress}
+                companyPhone={companyPhone}
+                companyLogo={companyLogo}
+                projectManagerName={resolvedProjectManager}
+              />
+            ) : (
+              <ProjectCostingExportTemplate 
+                project={project} 
+                transactions={transactions}
+                parsedPhases={parsedPhases}
+                customColumns={customColumns}
+                budgetNum={budgetNum}
+                actualSpend={actualSpend}
+                committedSpend={committed}
+                lineChartData={dynamicLineChartData}
+                pieChartData={pieChartData}
+                docType={exportDocType}
+              />
+            )}
           </div>
         </div>
       )}

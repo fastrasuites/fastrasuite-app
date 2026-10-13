@@ -38,6 +38,7 @@ export default function NewProjectPage() {
   const [expectedEndDate, setExpectedEndDate] = useState("");
   const [description, setDescription] = useState("");
   const [siteLocation, setSiteLocation] = useState("");
+  const [projectManager, setProjectManager] = useState("");
 
   // WBS Table States
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -370,6 +371,7 @@ export default function NewProjectPage() {
         expected_end_date: expectedEndDate || new Date().toISOString().split("T")[0],
         description,
         site_location: siteLocation,
+        ...(projectManager ? { project_manager: parseInt(projectManager, 10) || projectManager } : {}),
         phases: phasesPayload,
       } as any;
 
@@ -524,6 +526,9 @@ export default function NewProjectPage() {
             setDescription={setDescription}
             siteLocation={siteLocation}
             setSiteLocation={setSiteLocation}
+            projectManager={projectManager}
+            setProjectManager={setProjectManager}
+            autoFillCurrentUser={true}
           />
         </div>
 

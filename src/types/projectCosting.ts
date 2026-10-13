@@ -43,6 +43,7 @@ export interface CreateProjectCostingProjectRequest {
   expected_end_date: string;
   description: string;
   site_location: string;
+  project_manager?: string | number | null;
   phases?: Phase[];
 }
 
@@ -55,6 +56,8 @@ export interface UpdateProjectCostingProjectRequest {
   start_date?: string;
   expected_end_date?: string;
   description?: string;
+  site_location?: string;
+  project_manager?: string | number | null;
 }
 
 export interface CreateAddPhaseActivityRequest {

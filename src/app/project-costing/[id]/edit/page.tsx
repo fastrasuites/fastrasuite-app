@@ -57,6 +57,7 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
   const [expectedEndDate, setExpectedEndDate] = useState("");
   const [description, setDescription] = useState("");
   const [siteLocation, setSiteLocation] = useState("");
+  const [projectManager, setProjectManager] = useState("");
 
   // WBS Table States
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -138,6 +139,13 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
       setExpectedEndDate(project.expected_end_date || "");
       setDescription(project.description || "");
       setSiteLocation(project.site_location || "");
+      if (project.project_manager) {
+        setProjectManager(String(project.project_manager));
+      } else if (project.project_manager_details?.id) {
+        setProjectManager(String(project.project_manager_details.id));
+      } else {
+        setProjectManager("");
+      }
 
       // Parse phases
       if (project.phases) {
@@ -457,6 +465,7 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
         expected_end_date: expectedEndDate || new Date().toISOString().split("T")[0],
         description,
         site_location: siteLocation,
+        project_manager: projectManager ? (parseInt(projectManager, 10) || projectManager) : null,
       };
 
       await patchProject({ id: projectId, body: projectPayload }).unwrap();
@@ -766,6 +775,8 @@ export default function EditProjectPage({ params }: EditProjectPageProps) {
               setDescription={setDescription}
               siteLocation={siteLocation}
               setSiteLocation={setSiteLocation}
+              projectManager={projectManager}
+              setProjectManager={setProjectManager}
             />
           </div>
 
