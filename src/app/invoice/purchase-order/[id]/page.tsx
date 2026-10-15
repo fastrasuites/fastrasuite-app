@@ -521,11 +521,11 @@ export default function PurchaseOrderDetailPage() {
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px]">
+          <table className="w-full min-w-160">
             <thead className="border-b border-gray-200 bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Product / Description
+                  ITEM
                 </th>
                 {!isPlantAndEquipment && (
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -554,7 +554,7 @@ export default function PurchaseOrderDetailPage() {
                   key={line.id}
                   className="transition-colors hover:bg-gray-50/80"
                 >
-                  <td className="px-4 py-3 text-sm text-gray-900 max-w-[260px]">
+                  <td className="px-4 py-3 text-sm text-gray-900 max-w-65">
                     <span
                       className="block truncate"
                       title={
