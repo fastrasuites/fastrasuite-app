@@ -780,7 +780,7 @@ export default function PaymentQueueDetailPage() {
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                Description
+                                Item
                               </th>
                               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Quantity
@@ -813,9 +813,9 @@ export default function PaymentQueueDetailPage() {
                                     : qty * price;
 
                                 const description =
-                                  line.description ||
                                   line.source?.item_name ||
                                   line.source?.product?.product_name ||
+                                  line.description ||
                                   line.source?.name ||
                                   "—";
 

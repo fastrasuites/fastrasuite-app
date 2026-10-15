@@ -604,7 +604,7 @@ export default function DisbursementDetailPage() {
               ← Disbursements
             </button>
             <span className="text-gray-300">›</span>
-            <span className="max-w-[180px] truncate font-medium text-gray-800">
+            <span className="max-w-45 truncate font-medium text-gray-800">
               {d?.reference_number || "Detail"}
             </span>
           </nav>
@@ -622,9 +622,7 @@ export default function DisbursementDetailPage() {
                   <h1 className="text-2xl font-semibold text-gray-900">
                     {d.reference_number || `DIS-${d.id}`}
                   </h1>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Petty Cash Disbursement
-                  </p>
+                  <p className="mt-1 text-sm text-gray-500">Disbursement</p>
                 </div>
                 <span
                   className={`inline-flex self-start rounded-full px-3 py-1.5 text-sm font-medium ${
