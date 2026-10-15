@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSelector } from "react-redux";
+import type { RootState } from "@/lib/store/store";
 import {
   Download,
   ExternalLink,
@@ -12,7 +14,21 @@ import {
   FileText,
   X,
   AlertTriangle,
+  ChevronDown,
+  ImageIcon,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { toJpeg, toPng } from "html-to-image";
+import jsPDF from "jspdf";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ToastNotification } from "@/components/shared/ToastNotification";
 import {
   useGetDisbursementByIdQuery,
@@ -23,8 +39,11 @@ import {
   usePayDisbursementMutation,
   useDeleteDisbursementMutation,
 } from "@/api/invoice/disbursementApi";
+import { useGetCompanyQuery } from "@/api/settings/companyApi";
+import { useGetPettyCashRequestQuery } from "@/api/requests/pettyCashRequestApi";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { DisbursementDocumentTemplate } from "@/components/invoice/export/DisbursementDocumentTemplate";
 
 const formatCurrency = (amount: number | string) =>
   new Intl.NumberFormat("en-NG", {
@@ -368,11 +387,214 @@ export default function DisbursementDetailPage() {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [rejectOpen, setRejectOpen] = useState(false);
 
+  const { data: companyData } = useGetCompanyQuery();
+  const { data: pcrData } = useGetPettyCashRequestQuery(
+    (d?.petty_cash_request as number) || 0,
+    { skip: !d?.petty_cash_request }
+  );
+
+  const user = useSelector((state: RootState) => (state as any).auth?.user);
+  const tenant_company_name =
+    useSelector((state: RootState) => (state as any).auth?.tenant_company_name) ||
+    user?.company_name ||
+    user?.tenant_name;
+
+  const companyName =
+    tenant_company_name ||
+    (companyData as any)?.name ||
+    (companyData as any)?.company_name ||
+    "FastraSuite";
+  const companyAddress = companyData?.street_address
+    ? [companyData.street_address, companyData.city, companyData.state, companyData.country]
+        .filter(Boolean)
+        .join(", ")
+    : (companyData as any)?.address || "";
+  const companyPhone = companyData?.phone || "";
+  const companyLogo = companyData?.logo || "";
+
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"pdf" | "png" | null>(null);
+  const [exportStatusText, setExportStatusText] = useState("Export");
+  const exportContainerRef = useRef<HTMLDivElement>(null);
+
   const [toast, setToast] = useState<{
     show: boolean;
     message: string;
     type: "success" | "error";
   }>({ show: false, message: "", type: "success" });
+
+  const captureElementToDataUrl = async (
+    el: HTMLElement,
+    format: "jpeg" | "png" = "jpeg",
+  ): Promise<string> => {
+    const blankPlaceholder =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAEDEB1CQAAAElFTkSuQmCC";
+
+    const width = el.offsetWidth || 820;
+    const height = el.offsetHeight || 1160;
+
+    try {
+      const options = {
+        width,
+        height,
+        canvasWidth: width * 2,
+        canvasHeight: height * 2,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        skipFonts: true,
+        fontEmbedCSS: "",
+        cacheBust: false,
+        imagePlaceholder: blankPlaceholder,
+        style: {
+          transform: "none",
+          position: "relative",
+          top: "0px",
+          left: "0px",
+          right: "auto",
+          bottom: "auto",
+          opacity: "1",
+          visibility: "visible",
+          display: "block",
+        },
+        onImageErrorHandler: (err: any) => {
+          console.warn("Handled image load failure in export capture:", err);
+        },
+      };
+
+      if (format === "png") {
+        return await toPng(el, options);
+      } else {
+        return await toJpeg(el, { ...options, quality: 0.95 });
+      }
+    } catch (primaryErr) {
+      console.warn("Primary html-to-image capture encountered an issue, running fallback:", primaryErr);
+      try {
+        const html2canvas = (await import("html2canvas")).default;
+        const canvas = await html2canvas(el, {
+          scale: 2,
+          backgroundColor: "#ffffff",
+          useCORS: true,
+          logging: false,
+          allowTaint: true,
+          scrollX: 0,
+          scrollY: 0,
+          x: 0,
+          y: 0,
+          width,
+          height,
+          windowWidth: width,
+          windowHeight: height,
+        });
+        return canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", 0.95);
+      } catch (fallbackErr: any) {
+        console.error("html2canvas fallback also failed:", fallbackErr);
+        throw new Error(
+          fallbackErr?.message ||
+            (primaryErr instanceof Error ? primaryErr.message : "Document rendering failed. Please retry.")
+        );
+      }
+    }
+  };
+
+  const handleExportDisbursement = async (format: "pdf" | "png" = "pdf") => {
+    if (isExporting || !d) return;
+
+    setIsExporting(true);
+    setExportFormat(format);
+    setExportStatusText("Preparing...");
+
+    try {
+      setExportStatusText(format === "pdf" ? "Generating PDF..." : "Capturing visual...");
+
+      let element: HTMLElement | null = null;
+      for (let i = 0; i < 15; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        element = exportContainerRef.current;
+        if (element && element.offsetHeight > 200) {
+          break;
+        }
+      }
+
+      if (!element || element.offsetHeight < 100) {
+        throw new Error("Document template could not be rendered for export.");
+      }
+
+      const cleanRef = (
+        d.reference_number || `DIS-${d.id || "document"}`
+      ).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+      if (format === "png") {
+        const dataUrl = await captureElementToDataUrl(element, "png");
+        setExportStatusText("Downloading...");
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        link.download = `${cleanRef}_Petty_Cash_Disbursement.png`;
+        link.click();
+        showToast(
+          `Disbursement ${d.reference_number || d.id} downloaded as an image.`,
+          "success",
+        );
+      } else {
+        const dataUrl = await captureElementToDataUrl(element, "jpeg");
+        setExportStatusText("Formatting PDF...");
+
+        const pdf = new jsPDF("p", "mm", "a4");
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const margin = 6;
+        const usableWidth = pageWidth - margin * 2;
+        const usableHeight = pageHeight - margin * 2;
+
+        const elWidth = element.offsetWidth || 820;
+        const elHeight = element.offsetHeight || 1160;
+
+        let finalWidth = usableWidth;
+        let finalHeight = (elHeight * usableWidth) / elWidth;
+
+        if (finalHeight > usableHeight && finalHeight <= usableHeight * 1.15) {
+          const scale = usableHeight / finalHeight;
+          finalWidth = finalWidth * scale;
+          finalHeight = usableHeight;
+          const xOffset = margin + (usableWidth - finalWidth) / 2;
+          pdf.addImage(dataUrl, "JPEG", xOffset, margin, finalWidth, finalHeight);
+        } else if (finalHeight > usableHeight) {
+          let position = margin;
+          let remainingHeight = finalHeight;
+
+          while (remainingHeight > 0) {
+            pdf.addImage(dataUrl, "JPEG", margin, position, finalWidth, finalHeight);
+            remainingHeight -= usableHeight;
+            position -= usableHeight;
+            if (remainingHeight > 0) {
+              pdf.addPage();
+            }
+          }
+        } else {
+          pdf.addImage(dataUrl, "JPEG", margin, margin, finalWidth, finalHeight);
+        }
+
+        setExportStatusText("Downloading...");
+        pdf.save(`${cleanRef}_Petty_Cash_Disbursement.pdf`);
+        showToast(
+          `Disbursement ${d.reference_number || d.id} downloaded as a PDF.`,
+          "success",
+        );
+      }
+    } catch (err: any) {
+      console.error("Disbursement export error:", err);
+      const errorMsg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+          ? err
+          : "Failed to export disbursement.";
+      showToast(errorMsg, "error");
+    } finally {
+      setIsExporting(false);
+      setExportFormat(null);
+      setExportStatusText("Export");
+    }
+  };
 
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ show: true, message, type });
@@ -626,13 +848,116 @@ export default function DisbursementDetailPage() {
                     Petty Cash Disbursement
                   </p>
                 </div>
-                <span
-                  className={`inline-flex self-start rounded-full px-3 py-1.5 text-sm font-medium ${
-                    statusStyles[currentStatus] || "bg-gray-100 text-gray-700"
-                  }`}
-                >
-                  {statusLabel(currentStatus)}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Export Disbursement Dropdown with Animated Loading UI */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        disabled={isExporting}
+                        className={cn(
+                          "relative overflow-hidden h-9 px-3.5 text-xs font-semibold rounded-lg border-gray-300 bg-white hover:bg-gray-50 text-gray-700 shadow-xs transition-all",
+                          isExporting &&
+                            "border-blue-300 bg-blue-50/60 text-blue-700 pointer-events-none",
+                        )}
+                        aria-label="Export petty cash disbursement"
+                      >
+                        <AnimatePresence mode="wait">
+                          {isExporting ? (
+                            <motion.div
+                              key="exporting"
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.95 }}
+                              transition={{ duration: 0.15 }}
+                              className="flex items-center gap-2"
+                            >
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
+                              <span className="font-semibold text-blue-700 text-xs tracking-tight">
+                                {exportStatusText}
+                              </span>
+                            </motion.div>
+                          ) : (
+                            <motion.div
+                              key="idle"
+                              initial={{ opacity: 0, y: 1 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -1 }}
+                              transition={{ duration: 0.15 }}
+                              className="flex items-center gap-1.5"
+                            >
+                              <Download className="w-3.5 h-3.5 text-gray-500 shrink-0" />
+                              <span>Export</span>
+                              <ChevronDown className="w-3 h-3 opacity-60 shrink-0 ml-0.5" />
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                        {/* Hairline animated progress bar */}
+                        {isExporting && (
+                          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-100 overflow-hidden">
+                            <motion.div
+                              initial={{ x: "-100%" }}
+                              animate={{ x: "100%" }}
+                              transition={{
+                                repeat: Infinity,
+                                duration: 1.15,
+                                ease: "easeInOut",
+                              }}
+                              className="h-full w-2/5 bg-blue-600 rounded-full"
+                            />
+                          </div>
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="w-52 rounded-xl shadow-xl border-gray-200 p-1.5"
+                    >
+                      <DropdownMenuLabel className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
+                        Export Options
+                      </DropdownMenuLabel>
+                      <DropdownMenuItem
+                        onClick={() => handleExportDisbursement("pdf")}
+                        disabled={isExporting}
+                        className="flex items-center gap-2.5 cursor-pointer px-2.5 py-2 rounded-lg hover:bg-blue-50 focus:bg-blue-50 text-xs font-medium text-gray-700"
+                      >
+                        <FileText className="w-4 h-4 text-rose-600 shrink-0" />
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-gray-900">
+                            Export as PDF
+                          </span>
+                          <span className="text-[10px] text-gray-400">
+                            Printable disbursement voucher
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => handleExportDisbursement("png")}
+                        disabled={isExporting}
+                        className="flex items-center gap-2.5 cursor-pointer px-2.5 py-2 rounded-lg hover:bg-blue-50 focus:bg-blue-50 text-xs font-medium text-gray-700"
+                      >
+                        <ImageIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-gray-900">
+                            Export as Image
+                          </span>
+                          <span className="text-[10px] text-gray-400">
+                            High-resolution PNG
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <span
+                    className={`inline-flex self-start rounded-full px-3 py-1.5 text-sm font-medium ${
+                      statusStyles[currentStatus] || "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    {statusLabel(currentStatus)}
+                  </span>
+                </div>
               </div>
 
               {isReadOnly && (
@@ -941,6 +1266,45 @@ export default function DisbursementDetailPage() {
               </div>
             </>
           )}
+        </div>
+
+        {/* Off-screen document container for high-fidelity export capture */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "820px",
+            height: "0px",
+            overflow: "visible",
+            pointerEvents: "none",
+            zIndex: -9999,
+          }}
+        >
+          <div
+            ref={exportContainerRef}
+            style={{
+              position: "relative",
+              top: 0,
+              left: 0,
+              width: "820px",
+              minHeight: "1160px",
+              backgroundColor: "#ffffff",
+              boxSizing: "border-box",
+            }}
+          >
+            {d && (
+              <DisbursementDocumentTemplate
+                disbursement={d}
+                pettyCashRequest={pcrData}
+                companyName={companyName}
+                companyAddress={companyAddress}
+                companyPhone={companyPhone}
+                companyLogo={companyLogo}
+              />
+            )}
+          </div>
         </div>
       </div>
     </PageGuard>

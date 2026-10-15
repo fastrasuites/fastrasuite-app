@@ -32,6 +32,7 @@ import {
   Clock
 } from "lucide-react";
 import { ProjectCostingProject } from "@/types/projectCosting";
+import { FASTRASUITE_LOGO_BASE64 } from "./ExecutiveProjectReportTemplate";
 
 export type ExportDocType = "all" | "costing" | "wbs" | "po" | "bills" | "disbursements" | "ledger" | "executive";
 
@@ -475,7 +476,7 @@ export const ProjectCostingExportTemplate = ({
     <div className="flex justify-between items-start bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
       <div className="flex items-center gap-6">
         <div className="h-14 w-auto flex-shrink-0 border-r border-gray-200 pr-6">
-          <img src="/fastraLogo.png" alt="Fastra Suite Logo" className="h-full object-contain" />
+          <img src={FASTRASUITE_LOGO_BASE64} alt="Fastra Suite Logo" className="h-full object-contain" />
         </div>
         <div>
           <div className="flex items-center gap-3">
@@ -519,7 +520,7 @@ export const ProjectCostingExportTemplate = ({
   const renderSectionHeader = (title: string) => (
     <div className="flex justify-between items-center bg-white px-6 py-4 rounded-xl border border-gray-200 shadow-xs mb-2">
       <div className="flex items-center gap-4">
-        <img src="/fastraLogo.png" alt="Fastra Logo" className="h-7 w-auto" />
+        <img src={FASTRASUITE_LOGO_BASE64} alt="Fastra Logo" className="h-7 w-auto" />
         <div className="h-5 w-px bg-gray-200" />
         <div>
           <h2 className="text-base font-bold text-gray-900">{project?.name || "Project"}</h2>
@@ -581,9 +582,9 @@ export const ProjectCostingExportTemplate = ({
                   <XAxis dataKey="name" axisLine={{ stroke: '#E5E7EB' }} tickLine={false} tick={{fill: '#4B5563', fontSize: 11}} dy={6} />
                   <YAxis axisLine={{ stroke: '#E5E7EB' }} tickLine={false} width={75} tick={{fill: '#4B5563', fontSize: 11}} tickFormatter={(val) => val === 0 ? "₦0" : (val >= 1000000 ? `₦${(val/1000000).toFixed(1)}M` : `₦${(val/1000).toFixed(0)}k`)} />
                   <Legend verticalAlign="top" align="right" height={30} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "11px", fontWeight: 600 }} />
-                  <Line type="monotone" dataKey="planned" name="Planned Spend" stroke="#3B7CED" strokeWidth={2.5} dot={false} strokeDasharray="5 5" isAnimationActive={false} />
-                  <Line type="monotone" dataKey="actual" name="Actual Spent" stroke="#10B981" strokeWidth={2.5} dot={{ r: 4, fill: '#10B981' }} isAnimationActive={false} />
-                  <Line type="monotone" dataKey="committed" name="Committed Spent" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 4, fill: '#F59E0B' }} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="planned" name="Planned Spend" stroke="#3B7CED" strokeWidth={2.5} dot={false} strokeDasharray="5 5" isAnimationActive={false} connectNulls={false} />
+                  <Line type="monotone" dataKey="actual" name="Actual Spent" stroke="#10B981" strokeWidth={2.5} dot={{ r: 4, fill: '#10B981' }} isAnimationActive={false} connectNulls={false} />
+                  <Line type="monotone" dataKey="committed" name="Committed Spent" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 4, fill: '#F59E0B' }} isAnimationActive={false} connectNulls={false} />
                 </LineChart>
               ) : (
                 <div className="text-center py-12 text-xs text-gray-400">

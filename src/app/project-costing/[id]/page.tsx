@@ -18,6 +18,7 @@ import type { RootState } from "@/lib/store/store";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { cn } from "@/lib/utils";
 import { ModuleWizard, WizardGuideButton } from "@/components/shared/wizard/ModuleWizard";
 import { TransactionDetailsModal } from "@/components/project-costing/modals/TransactionDetailsModal";
 import { extractAmount, formatCategory } from "@/components/project-costing/TransactionHistoryTable";
@@ -265,14 +266,16 @@ export default function ProjectDashboardPage() {
   const [isAddDocumentModalOpen, setIsAddDocumentModalOpen] = useState(false);
   const [isExportingImage, setIsExportingImage] = useState(false);
   const [exportDocType, setExportDocType] = useState<ExportDocType>("all");
+  const [exportStatusText, setExportStatusText] = useState<string>("Export Report");
+  const isExporting = isExportingPdf || isExportingImage;
 
   const tenant_company_name = useSelector((state: RootState) => (state.auth as any)?.tenant_company_name);
   const { data: companyData } = useGetCompanyQuery();
-  const companyName = tenant_company_name || (companyData as any)?.name || "Prorad Health Center";
+  const companyName = tenant_company_name || (companyData as any)?.name || (companyData as any)?.company_name || "";
   const companyAddress = companyData?.street_address
     ? [companyData.street_address, companyData.city, companyData.state, companyData.country].filter(Boolean).join(", ")
-    : "Level 1, 12 Sample St, Sydney NSW 2000";
-  const companyPhone = companyData?.phone || "+234 801 234 5679";
+    : "";
+  const companyPhone = companyData?.phone || "";
   const companyLogo = companyData?.logo || "";
 
   // Resolve accurate Project Manager name
@@ -386,12 +389,66 @@ export default function ProjectDashboardPage() {
     executive: "Project_Costing_Report",
   };
 
+  // Robust DOM to Image capture helper with font-skipping, image-error safety & html2canvas fallback
+  const captureElementToDataUrl = async (el: HTMLElement, format: "jpeg" | "png" = "jpeg"): Promise<string> => {
+    const blankPlaceholder = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAEDEB1CQAAAElFTkSuQmCC";
+    try {
+      if (format === "png") {
+        return await toPng(el, {
+          pixelRatio: 2,
+          backgroundColor: '#ffffff',
+          skipFonts: true,
+          fontEmbedCSS: '',
+          cacheBust: false,
+          imagePlaceholder: blankPlaceholder,
+          onImageErrorHandler: (err) => {
+            console.warn("Handled image load failure in export capture:", err);
+          },
+        });
+      } else {
+        return await toJpeg(el, {
+          quality: 0.95,
+          pixelRatio: 2,
+          backgroundColor: '#ffffff',
+          skipFonts: true,
+          fontEmbedCSS: '',
+          cacheBust: false,
+          imagePlaceholder: blankPlaceholder,
+          onImageErrorHandler: (err) => {
+            console.warn("Handled image load failure in export capture:", err);
+          },
+        });
+      }
+    } catch (primaryErr) {
+      console.warn("Primary html-to-image capture encountered an issue, running fallback:", primaryErr);
+      try {
+        const html2canvas = (await import("html2canvas")).default;
+        const canvas = await html2canvas(el, {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          useCORS: true,
+          logging: false,
+          allowTaint: true,
+        });
+        return canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", 0.95);
+      } catch (fallbackErr: any) {
+        console.error("html2canvas fallback also failed:", fallbackErr);
+        throw new Error(
+          fallbackErr?.message || 
+          (primaryErr instanceof Error ? primaryErr.message : "Document rendering failed. Please retry.")
+        );
+      }
+    }
+  };
+
   const handleExportPdf = async (targetDocType: ExportDocType = "all") => {
     setIsExportingPdf(true);
     setExportDocType(targetDocType);
+    setExportStatusText("Preparing document...");
     try {
       // Allow DOM to re-render with the selected docType
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      setExportStatusText(targetDocType === "all" ? "Rendering pages..." : "Generating PDF...");
 
       if (!exportRef.current) return;
       const element = exportRef.current;
@@ -409,15 +466,13 @@ export default function ProjectDashboardPage() {
       if (targetDocType === "all" && sectionElements.length > 0) {
         // Multi-page export section by section: Each major report section gets its own clean page!
         let isFirst = true;
+        let secIdx = 0;
         for (const sec of sectionElements) {
+          secIdx++;
+          setExportStatusText(`Rendering section ${secIdx}/${sectionElements.length}...`);
           const secCanvasWidth = sec.clientWidth || 1400;
-          const secCanvasHeight = sec.clientHeight;
-          const secImgData = await toJpeg(sec, {
-            cacheBust: true,
-            pixelRatio: 1.5,
-            quality: 0.9,
-            backgroundColor: '#ffffff'
-          });
+          const secCanvasHeight = sec.clientHeight || 800;
+          const secImgData = await captureElementToDataUrl(sec, "jpeg");
 
           const secImgHeight = (secCanvasHeight * usableWidth) / secCanvasWidth;
 
@@ -446,14 +501,11 @@ export default function ProjectDashboardPage() {
       } else {
         // Single document export
         const canvasWidth = element.clientWidth || (isPortrait ? 820 : 1400);
-        const canvasHeight = element.clientHeight;
-        const imgData = await toJpeg(element, {
-          cacheBust: true,
-          pixelRatio: 2,
-          quality: 0.95,
-          backgroundColor: '#ffffff'
-        });
+        const canvasHeight = element.clientHeight || (isPortrait ? 1160 : 900);
+        setExportStatusText("Capturing document...");
+        const imgData = await captureElementToDataUrl(element, "jpeg");
 
+        setExportStatusText("Compiling PDF...");
         const imgHeight = (canvasHeight * usableWidth) / canvasWidth;
         let heightLeft = imgHeight;
         let position = 0;
@@ -469,31 +521,44 @@ export default function ProjectDashboardPage() {
         }
       }
 
+      setExportStatusText("Saving PDF...");
       const cleanProjectName = (project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_");
       pdf.save(`${cleanProjectName}_${docNameMap[targetDocType]}.pdf`);
       statusModal.showSuccess("Export Successful", `${docNameMap[targetDocType].replace(/_/g, " ")} PDF has been downloaded.`);
     } catch (err: any) {
       console.error("PDF export error", err);
-      statusModal.showError("Export Failed", `Failed to generate PDF document: ${err.message || String(err)}`);
+      let errorMsg = "An unexpected error occurred during rendering";
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      } else if (typeof err === "string") {
+        errorMsg = err;
+      } else if (err && typeof err === "object") {
+        if ("message" in err && typeof err.message === "string") {
+          errorMsg = err.message;
+        } else if (err.type || err.target) {
+          errorMsg = "Resource rendering error. Please try again.";
+        }
+      }
+      statusModal.showError("Export Failed", `Failed to generate PDF document: ${errorMsg}`);
     } finally {
       setIsExportingPdf(false);
       setExportDocType("all");
+      setExportStatusText("Export Report");
     }
   };
 
   const handleExportImage = async (targetDocType: ExportDocType = "all") => {
     setIsExportingImage(true);
     setExportDocType(targetDocType);
+    setExportStatusText("Preparing layout...");
     try {
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      setExportStatusText("Capturing visual...");
 
       if (!exportRef.current) return;
       const element = exportRef.current;
-      const image = await toPng(element, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff'
-      });
+      const image = await captureElementToDataUrl(element, "png");
+      setExportStatusText("Downloading image...");
       const cleanProjectName = (project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_");
       const link = document.createElement("a");
       link.href = image;
@@ -502,10 +567,23 @@ export default function ProjectDashboardPage() {
       statusModal.showSuccess("Export Successful", "Visual image has been downloaded.");
     } catch (err: any) {
       console.error("Image export error", err);
-      statusModal.showError("Export Failed", `Failed to export image: ${err.message || String(err)}`);
+      let errorMsg = "An unexpected error occurred during rendering";
+      if (err instanceof Error) {
+        errorMsg = err.message;
+      } else if (typeof err === "string") {
+        errorMsg = err;
+      } else if (err && typeof err === "object") {
+        if ("message" in err && typeof err.message === "string") {
+          errorMsg = err.message;
+        } else if (err.type || err.target) {
+          errorMsg = "Resource rendering error. Please try again.";
+        }
+      }
+      statusModal.showError("Export Failed", `Failed to export image: ${errorMsg}`);
     } finally {
       setIsExportingImage(false);
       setExportDocType("all");
+      setExportStatusText("Export Report");
     }
   };
 
@@ -1887,10 +1965,62 @@ export default function ProjectDashboardPage() {
             <PermissionGuard module="project_costing" entitlement="export_reports">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="border-[#3B7CED] text-[#3B7CED] hover:bg-blue-50 h-9 font-medium flex items-center gap-2 px-4 shadow-sm">
-                    <Download className="w-4 h-4" />
-                    {isExportingPdf || isExportingImage ? "Exporting..." : "Export Report"}
-                    <ChevronDown className="w-4 h-4 opacity-70 ml-1" />
+                  <Button 
+                    variant="outline" 
+                    disabled={isExporting}
+                    className={cn(
+                      "relative overflow-hidden border-[#3B7CED] text-[#3B7CED] h-9 font-medium flex items-center gap-2 px-3.5 shadow-xs transition-all duration-200 select-none",
+                      isExporting 
+                        ? "bg-blue-50/80 border-blue-400 cursor-wait pointer-events-none" 
+                        : "hover:bg-blue-50"
+                    )}
+                  >
+                    <AnimatePresence mode="wait" initial={false}>
+                      {isExporting ? (
+                        <motion.div
+                          key="exporting"
+                          initial={{ opacity: 0, y: 1 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -1 }}
+                          transition={{ duration: 0.15 }}
+                          className="flex items-center gap-2"
+                        >
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-[#3B7CED] shrink-0" />
+                          <span className="text-xs font-semibold text-[#3B7CED] tracking-tight">
+                            {exportStatusText}
+                          </span>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          key="idle"
+                          initial={{ opacity: 0, y: 1 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -1 }}
+                          transition={{ duration: 0.15 }}
+                          className="flex items-center gap-2"
+                        >
+                          <Download className="w-4 h-4 shrink-0 text-[#3B7CED]" />
+                          <span className="text-xs font-semibold">Export Report</span>
+                          <ChevronDown className="w-3.5 h-3.5 opacity-70 shrink-0 ml-0.5" />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Subtle hairline progress bar along the bottom edge while active */}
+                    {isExporting && (
+                      <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-blue-100 overflow-hidden">
+                        <motion.div
+                          initial={{ x: "-100%" }}
+                          animate={{ x: "100%" }}
+                          transition={{
+                            repeat: Infinity,
+                            duration: 1.15,
+                            ease: "easeInOut",
+                          }}
+                          className="h-full w-2/5 bg-[#3B7CED] rounded-full"
+                        />
+                      </div>
+                    )}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80 rounded-xl shadow-xl border-gray-200 p-2 max-h-[85vh] overflow-y-auto">
@@ -3254,23 +3384,23 @@ export default function ProjectDashboardPage() {
         transaction={selectedTransaction}
       />
 
-      {/* Hidden Export Template - Mounted strictly during export in an isolated fixed 0x0 container so it never creates blank page scrolling */}
+      {/* Off-screen Export Template - Mounted strictly during export, positioned far off-screen so layout calculations & rasterization are never clamped */}
       {(isExportingPdf || isExportingImage) && (
         <div 
           aria-hidden="true"
           style={{
             position: "fixed",
-            top: 0,
-            left: 0,
-            width: "1px",
-            height: "1px",
-            overflow: "hidden",
+            top: "-10000px",
+            left: "-10000px",
+            width: exportDocType === "executive" ? "820px" : "1400px",
+            minHeight: "1000px",
+            overflow: "visible",
             pointerEvents: "none",
-            opacity: 0,
+            opacity: 1,
             zIndex: -9999,
           }}
         >
-          <div ref={exportRef} style={{ width: exportDocType === "executive" ? "820px" : "1400px" }}>
+          <div ref={exportRef} style={{ width: exportDocType === "executive" ? "820px" : "1400px", backgroundColor: "#ffffff" }}>
             {exportDocType === "executive" ? (
               <ExecutiveProjectReportTemplate
                 project={project}
