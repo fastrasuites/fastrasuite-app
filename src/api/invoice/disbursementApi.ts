@@ -1,11 +1,11 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import { createTenantBaseQuery } from "@/api/baseQueryWithReauth";
+import type { RootState } from "../../lib/store/store";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
 /* -------------------------------------------------------------------------- */
 
-export type DisbursementSourceType = "PETTY_CASH" | string;
+export type DisbursementSourceType = "PETTY_CASH" | "DIRECT_PAYMENT" | string;
 
 export type DisbursementMethod = "CASH" | "BANK_TRANSFER" | string;
 
@@ -87,15 +87,31 @@ export interface PaymentOptionsResponse {
 
 /* ------------------------- Create / Update Payloads ----------------------- */
 
-interface BaseCreateDisbursement {
+interface BaseCreateDisbursementPettyCash {
   source_type: "PETTY_CASH";
   petty_cash_request: number;
+  labour_request?: never;
   /** Required – GL expense account */
   expense_account: number;
   payment_reference?: string;
   notes?: string;
   document?: string | File | null;
 }
+
+/** Labour approved request → disbursement (skips vendor bill) */
+interface BaseCreateDisbursementLabour {
+  source_type: "DIRECT_PAYMENT";
+  labour_request: number;
+  petty_cash_request?: never;
+  expense_account: number;
+  payment_reference?: string;
+  notes?: string;
+  document?: string | File | null;
+}
+
+type BaseCreateDisbursement =
+  | BaseCreateDisbursementPettyCash
+  | BaseCreateDisbursementLabour;
 
 /** Cash hand-out – uses payment_account (cash CoA), not company_bank_account */
 export type CreateCashDisbursement = BaseCreateDisbursement & {
@@ -166,13 +182,98 @@ export interface GetPaymentOptionsParams {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                              Base Query Helper                             */
+/* -------------------------------------------------------------------------- */
+
+const getTenantBaseUrl = (state: RootState): string => {
+  const tenantSchemaName = state.auth.tenant_schema_name;
+  const apiDomain =
+    process.env.NEXT_PUBLIC_API_DOMAIN || "fastrasuiteapi.com.ng";
+  const protocol =
+    apiDomain.includes("localhost") || apiDomain.includes("127.0.0.1")
+      ? "http"
+      : "https";
+  return `${protocol}://${tenantSchemaName}.${apiDomain}`;
+};
+
+/* -------------------------------------------------------------------------- */
 /*                                   API                                      */
 /* -------------------------------------------------------------------------- */
 
 export const disbursementsApi = createApi({
   reducerPath: "disbursementsApi",
-  baseQuery: createTenantBaseQuery(),
-  refetchOnMountOrArgChange: true,
+  baseQuery: async (args, api, _extraOptions) => {
+    const state = api.getState() as RootState;
+    const baseUrl = getTenantBaseUrl(state);
+    const token = state.auth.access_token;
+
+    const headers = new Headers();
+    if (token) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
+    headers.set("content-type", "application/json");
+
+    let url: string;
+    if (typeof args === "string") {
+      url = `${baseUrl}${args}`;
+    } else {
+      const params = new URLSearchParams();
+      if (args.params) {
+        Object.entries(args.params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "") {
+            params.append(key, String(value));
+          }
+        });
+      }
+      const queryString = params.toString();
+      url = `${baseUrl}${args.url}${queryString ? `?${queryString}` : ""}`;
+    }
+
+    const isFormData =
+      args && typeof args === "object" && args.body instanceof FormData;
+
+    if (isFormData) {
+      headers.delete("content-type");
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: typeof args === "string" ? "GET" : args.method || "GET",
+        headers,
+        body:
+          typeof args === "string"
+            ? undefined
+            : args.body
+              ? isFormData
+                ? args.body
+                : JSON.stringify(args.body)
+              : undefined,
+      });
+
+      if (!response.ok) {
+        return {
+          error: {
+            status: response.status,
+            data: await response.json().catch(() => null),
+          },
+        };
+      }
+
+      if (response.status === 204) {
+        return { data: null };
+      }
+
+      const data = await response.json();
+      return { data };
+    } catch (error) {
+      return {
+        error: {
+          status: "FETCH_ERROR" as const,
+          data: error,
+        },
+      };
+    }
+  },
   tagTypes: ["Disbursement"],
   endpoints: (builder) => ({
     getDisbursements: builder.query<
@@ -181,7 +282,7 @@ export const disbursementsApi = createApi({
     >({
       query: (params) => ({
         url: "/invoicing/disbursements/",
-        ...(params ? { params } : {}),
+        params,
       }),
       providesTags: (result) =>
         result
