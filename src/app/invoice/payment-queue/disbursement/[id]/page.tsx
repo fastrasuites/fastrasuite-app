@@ -142,7 +142,7 @@ function ConfirmModal({
         : "bg-gray-900 hover:bg-gray-800 text-white";
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-80 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/40"
         onClick={loading ? undefined : onClose}
@@ -231,7 +231,7 @@ function RejectReasonModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-80 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/40"
         onClick={loading ? undefined : onClose}
@@ -311,7 +311,7 @@ function InfoField({
       <p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">
         {label}
       </p>
-      <div className="break-words text-sm font-medium text-gray-900">
+      <div className="wrap-break-word text-sm font-medium text-gray-900">
         {value ?? "—"}
       </div>
     </div>
@@ -507,7 +507,7 @@ export default function DisbursementDetailPage() {
   return (
     <PageGuard module="invoice" entitlement="view_accounts_payable_queue">
       <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
-        <div className="fixed bottom-6 right-6 z-[60] max-w-sm">
+        <div className="fixed bottom-6 right-6 z-60 max-w-sm">
           <ToastNotification
             show={toast.show}
             message={toast.message}

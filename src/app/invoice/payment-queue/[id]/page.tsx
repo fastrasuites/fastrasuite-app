@@ -181,7 +181,7 @@ function InfoField({
         {icon}
         {label}
       </div>
-      <div className="text-sm font-medium text-gray-900 break-words">
+      <div className="text-sm font-medium text-gray-900 wrap-break-word">
         {value ?? "—"}
       </div>
     </div>
@@ -524,7 +524,7 @@ export default function PaymentQueueDetailPage() {
               Payment Queue
             </button>
             <span className="text-gray-300">›</span>
-            <span className="text-gray-800 font-medium truncate max-w-[160px]">
+            <span className="text-gray-800 font-medium truncate max-w-40">
               {inv?.bill_number || "Vendor Bill"}
             </span>
           </nav>
@@ -776,7 +776,7 @@ export default function PaymentQueueDetailPage() {
                     </h2>
                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                       <div className="overflow-x-auto">
-                        <table className="w-full min-w-[520px]">
+                        <table className="w-full min-w-130">
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
                               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -829,7 +829,7 @@ export default function PaymentQueueDetailPage() {
                                     key={line.id || idx}
                                     className="hover:bg-gray-50/60"
                                   >
-                                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[260px]">
+                                    <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-65]">
                                       <span
                                         className="block truncate"
                                         title={
