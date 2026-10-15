@@ -14,7 +14,7 @@ import { useGetApprovedProjectRequestsQuery } from "@/api/invoice/approvedProjec
 import { useConvertRequestToPurchaseOrderMutation } from "@/api/invoice/projectPurchaseOrdersApi";
 import ConvertToPOModal from "@/components/invoice/ConvertToPOModal";
 import ConvertToPOSubcontractorModal from "@/components/invoice/subcontractor/ConvertToPOSubcontractorModal";
-import CreateVendorBillLabourModal from "@/components/invoice/labour-request/CreateVendorBillLabourReqModal";
+import CreateDisbursementLabourReqModal from "@/components/invoice/labour-request/CreateDisbursementLabourReqModal";
 import CreateDisbursementModal from "@/components/invoice/petty-cash/CreateDisbursementModal";
 import ConvertToPOPlantEquipmentModal from "@/components/invoice/plant-and-equipment/ConvertToPOPlantEquipmentModal";
 import { useCreateDisbursementMutation } from "@/api/invoice/disbursementApi";
@@ -53,37 +53,87 @@ const items: BreadcrumbItem[] = [
 ];
 
 /** Safely extract a human-readable error message from any API shape */
+/** Safely extract a human-readable error message from any API / RTK shape */
 function extractErrorMessage(err: unknown): string {
   if (!err) return "An unexpected error occurred.";
 
-  const data = (err as any)?.data ?? err;
+  const e = err as any;
+  const status = e?.status;
+  const data = e?.data ?? err;
 
-  if (typeof data === "string") return data;
-
-  if (data?.detail && typeof data.detail === "string") return data.detail;
-  if (data?.error && typeof data.error === "string") return data.error;
-
-  if (Array.isArray(data?.error) && data.error.length > 0) {
-    const first = data.error[0];
-    if (typeof first === "string") return first;
-    if (first?.detail && typeof first.detail === "string") return first.detail;
-    if (first?.error && typeof first.error === "string") return first.error;
-    if (first?.message && typeof first.message === "string")
-      return first.message;
+  // HTTP status with little or no body (common for 413)
+  if (status === 413) {
+    return "File is too large for the server. Try a smaller file (under about 1 MB).";
+  }
+  if (status === 401 || status === 403) {
+    return "You are not allowed to perform this action. Try signing in again.";
+  }
+  if (status === 404) {
+    return "The requested resource was not found.";
+  }
+  if (status === 400 || status === 422) {
+    // fall through to parse body
+  }
+  if (status === "FETCH_ERROR") {
+    return e?.error || "Network error. Check your connection and try again.";
+  }
+  if (status === "PARSING_ERROR") {
+    return "The server returned an unexpected response.";
+  }
+  if (typeof status === "number" && status >= 500) {
+    return "Server error. Please try again in a moment.";
   }
 
-  if (Array.isArray(data) && data.length > 0) {
-    const first = data[0];
-    if (typeof first === "string") return first;
-    if (first?.detail) return String(first.detail);
-    if (first?.error) return String(first.error);
+  if (typeof data === "string" && data.trim()) return data.trim();
+
+  if (data && typeof data === "object") {
+    if (typeof data.detail === "string" && data.detail.trim())
+      return data.detail;
+    if (typeof data.error === "string" && data.error.trim()) return data.error;
+    if (typeof data.message === "string" && data.message.trim())
+      return data.message;
+
+    if (Array.isArray(data.error) && data.error.length > 0) {
+      const first = data.error[0];
+      if (typeof first === "string") return first;
+      if (first?.detail) return String(first.detail);
+      if (first?.error) return String(first.error);
+      if (first?.message) return String(first.message);
+    }
+
+    if (Array.isArray(data.detail) && data.detail.length > 0) {
+      const first = data.detail[0];
+      if (typeof first === "string") return first;
+      if (first?.msg) return String(first.msg);
+      if (first?.message) return String(first.message);
+    }
+
+    // Field errors: { amount: ["..."], document: ["..."] }
+    const fieldMsgs: string[] = [];
+    for (const [key, val] of Object.entries(data)) {
+      if (key === "status" || key === "statusText") continue;
+      if (Array.isArray(val) && val.length && typeof val[0] === "string") {
+        fieldMsgs.push(`${key}: ${val[0]}`);
+      } else if (typeof val === "string" && val.trim()) {
+        fieldMsgs.push(val);
+      }
+    }
+    if (fieldMsgs.length) return fieldMsgs.join("; ");
   }
 
-  try {
-    return JSON.stringify(data).slice(0, 180);
-  } catch {
-    return "An unexpected error occurred.";
+  if (typeof e?.message === "string" && e.message.trim()) {
+    // Avoid useless generic Error messages when we have a status
+    if (status === 413) {
+      return "File is too large for the server. Try a smaller file or ask an admin to raise the upload limit.";
+    }
+    return e.message;
   }
+
+  if (typeof status === "number") {
+    return `Request failed (${status}). Please try again.`;
+  }
+
+  return "An unexpected error occurred.";
 }
 
 /** Format any date string to yyyy-mm-dd */
@@ -200,7 +250,7 @@ export default function ApprovedRequestsPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubcontractorModalOpen, setIsSubcontractorModalOpen] =
     useState(false);
-  const [isLabourCreateBillModalOpen, setIsLabourCreateBillModalOpen] =
+  const [isLabourDisbursementModalOpen, setIsLabourDisbursementModalOpen] =
     useState(false);
   const [
     isPettyCashDisbursementModalOpen,
@@ -319,15 +369,43 @@ export default function ApprovedRequestsPage() {
     setCurrentStep(1);
   };
 
-  // ---------- Labour (PRD 9.3.1) ----------
-  const handleConvertToLabourInvoice = (request: any) => {
+  // ---------- Labour Request -----
+  // ---------- Labour → Disbursement (same flow as petty cash) ----------
+  const handleProcessLabourDisbursement = (request: any) => {
     setSelectedRequest(request);
-    setIsLabourCreateBillModalOpen(true);
+    setIsLabourDisbursementModalOpen(true);
   };
 
-  const handleCloseLabourCreateBillModal = () => {
-    setIsLabourCreateBillModalOpen(false);
+  const handleCloseLabourDisbursementModal = () => {
+    setIsLabourDisbursementModalOpen(false);
     setSelectedRequest(null);
+  };
+
+  const handleLabourSubmitDisbursement = async (
+    payload: CreateDisbursementBody,
+  ) => {
+    try {
+      if (process.env.NODE_ENV === "development")
+        console.log("Labour Disbursement payload →", payload);
+      await createDisbursement(payload).unwrap();
+
+      showToast(
+        "success",
+        "Successfully created disbursement. Navigating to Payment Queue.",
+      );
+
+      handleCloseLabourDisbursementModal();
+      refetch();
+
+      setTimeout(() => {
+        router.push("/invoice/payment-queue/disbursement");
+      }, 900);
+    } catch (err: unknown) {
+      if (process.env.NODE_ENV === "development") {
+        console.error("Create labour disbursement error →", err);
+      }
+      showToast("error", extractErrorMessage(err));
+    }
   };
 
   // ---------- Shared step nav (Purchase / PE / Subcontractor) ----------
@@ -472,7 +550,7 @@ export default function ApprovedRequestsPage() {
               return (
                 <div
                   key={card.key}
-                  className="flex flex-col items-start gap-3 px-5 py-4 min-h-[96px]"
+                  className="flex flex-col items-start gap-3 px-5 py-4 min-h-24"
                 >
                   <div className="flex items-center gap-2">
                     <Icon className={`w-4 h-4 shrink-0 ${card.iconClass}`} />
@@ -591,7 +669,7 @@ export default function ApprovedRequestsPage() {
                           {request.type}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 max-w-[220px]">
+                      <td className="px-4 py-3 text-sm text-gray-600 max-w-55">
                         <span className="truncate block" title={request.wbs}>
                           {request.wbs}
                         </span>
@@ -667,12 +745,11 @@ export default function ApprovedRequestsPage() {
                               <button
                                 type="button"
                                 onClick={() =>
-                                  handleConvertToLabourInvoice(request)
+                                  handleProcessLabourDisbursement(request)
                                 }
-                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors whitespace-nowrap"
-                                aria-label={`Convert ${request.id} to Invoice`}
+                                className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700"
                               >
-                                Convert to Invoice
+                                Process Disbursement
                               </button>
                             </PermissionGuard>
                           )}
@@ -742,12 +819,14 @@ export default function ApprovedRequestsPage() {
           isIssuing={false}
         />
 
-        {/* Labour → Vendor Bill */}
-        <CreateVendorBillLabourModal
-          isOpen={isLabourCreateBillModalOpen}
-          onClose={handleCloseLabourCreateBillModal}
+        {/* Labour → Disbursement */}
+        <CreateDisbursementLabourReqModal
+          isOpen={isLabourDisbursementModalOpen}
+          onClose={handleCloseLabourDisbursementModal}
           request={selectedRequest}
+          onSubmit={handleLabourSubmitDisbursement}
           formatCurrency={formatCurrency}
+          isSubmitting={isCreatingDisbursement}
         />
 
         {/* Petty Cash → Disbursement */}
@@ -762,7 +841,7 @@ export default function ApprovedRequestsPage() {
 
         {/* Global toast */}
         {toast && (
-          <div className="fixed bottom-6 right-6 z-[70] max-w-sm">
+          <div className="fixed bottom-6 right-6 z-70 max-w-sm">
             <ToastNotification
               show={true}
               type={toast.type}
