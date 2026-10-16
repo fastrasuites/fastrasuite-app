@@ -18,6 +18,7 @@ import {
   useVerifyInvoicePaymentMutation,
   useCancelSubscriptionMutation,
   Plan,
+  SubscriptionInvoice,
 } from "@/api/settings/subscriptionApi";
 import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
 
@@ -102,6 +103,7 @@ export default function BillingPage() {
   const [modalStep, setModalStep] = useState<1 | 2>(1);
   const [selectedPlanTier, setSelectedPlanTier] = useState<"starter" | "professional" | "enterprise">("starter");
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [receiptInvoice, setReceiptInvoice] = useState<SubscriptionInvoice | null>(null);
 
   const statusModal = useStatusModal();
 
@@ -466,15 +468,7 @@ export default function BillingPage() {
   <div class="header">
     <h1 class="title">Invoice</h1>
     <div class="logo-container">
-      <div class="logo-bars">
-        <div class="bar-blue"></div>
-        <div class="bar-green"></div>
-        <div class="bar-red"></div>
-      </div>
-      <div>
-        <div class="logo-text">fastra</div>
-        <div class="logo-sub">suite</div>
-      </div>
+      <img src="/fastraLogo.png" style="height: 36px; width: auto; object-fit: contain;" alt="Fastra Suite" />
     </div>
   </div>
 
@@ -582,6 +576,33 @@ export default function BillingPage() {
     day: "numeric",
   });
   const billingPeriodString = `${formattedPeriodStart} - ${formattedPeriodEnd}`;
+
+  const formatInvoiceDate = (dateStr?: string) => {
+    if (!dateStr) return formattedToday;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  const formatInvoicePeriod = (startStr?: string, endStr?: string) => {
+    if (!startStr && !endStr) return billingPeriodString;
+    const start = startStr ? new Date(startStr) : null;
+    const end = endStr ? new Date(endStr) : null;
+    const validStart = start && !isNaN(start.getTime());
+    const validEnd = end && !isNaN(end.getTime());
+
+    if (validStart && validEnd) {
+      const startFmt = start.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const endFmt = end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const year = end.getFullYear();
+      return `${startFmt} - ${endFmt}, ${year}`;
+    }
+    return startStr && endStr ? `${startStr} - ${endStr}` : billingPeriodString;
+  };
   const modalSelectedPrice =
     billingCycle === "monthly"
       ? PLAN_PRICES[selectedPlanTier].monthly
@@ -1268,7 +1289,7 @@ export default function BillingPage() {
                         <th className="py-3 px-5">Due Date</th>
                         <th className="py-3 px-5">Amount</th>
                         <th className="py-3 px-5 text-center">Status</th>
-                        <th className="py-3 px-5 text-right">Action</th>
+                        <th className="py-3 px-5 text-center">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1309,10 +1330,10 @@ export default function BillingPage() {
                                   {inv.status}
                                 </span>
                               </td>
-                              <td className="py-4 px-5 text-right">
-                                <div className="flex items-center justify-end gap-2.5">
+                              <td className="py-4 px-5 text-center">
+                                <div className="flex items-center justify-center gap-2.5">
                                   {isPending ? (
-                                    <div className="flex items-center gap-2 justify-end">
+                                    <div className="flex items-center gap-2 justify-center">
                                       <Button
                                         size="sm"
                                         onClick={() => handlePayInvoice(inv.id, inv.payment_url)}
@@ -1336,36 +1357,23 @@ export default function BillingPage() {
                                         )}
                                         Verify
                                       </Button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setReceiptInvoice(inv)}
+                                        className="text-[#3B7CED] hover:underline font-medium text-xs cursor-pointer ml-1"
+                                      >
+                                        View Receipt
+                                      </button>
                                     </div>
-                                  ) : inv.payment_url ? (
-                                    <a
-                                      href={inv.payment_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-[#3B7CED] hover:underline font-medium text-xs"
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setReceiptInvoice(inv)}
+                                      className="text-[#3B7CED] hover:underline font-medium text-xs cursor-pointer"
                                     >
                                       View Receipt
-                                    </a>
-                                  ) : null}
-
-                                  <button
-                                    onClick={() =>
-                                      handleDownloadInvoice({
-                                        invoice_number:
-                                          inv.invoice_number || `INV-${String(inv.id).padStart(6, "0")}`,
-                                        plan_name: inv.plan?.name || "FastraSuite Plan",
-                                        amount: inv.amount,
-                                        billing_period: `${inv.period_start} - ${inv.period_end}`,
-                                        issue_date: inv.period_start,
-                                        due_date: inv.due_date,
-                                        status: inv.status,
-                                      })
-                                    }
-                                    className="p-1 text-gray-400 hover:text-[#3B7CED] hover:bg-gray-100 rounded transition-colors"
-                                    title="Download Invoice PDF"
-                                  >
-                                    <Download className="w-4 h-4" />
-                                  </button>
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -1390,8 +1398,8 @@ export default function BillingPage() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
               className={`bg-white rounded-2xl w-full ${
-                modalStep === 2 ? "max-w-3xl" : "max-w-4xl"
-              } p-6 sm:p-8 shadow-2xl relative my-8`}
+                modalStep === 2 ? "max-w-2xl" : "max-w-4xl"
+              } max-h-[92vh] overflow-y-auto p-6 sm:p-8 shadow-2xl relative my-auto`}
             >
               <button
                 onClick={() => setIsPlanModalOpen(false)}
@@ -1551,20 +1559,16 @@ export default function BillingPage() {
               {modalStep === 2 && (
                 <div className="space-y-6">
                   {/* A4 Document Card */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-8 sm:p-10 shadow-sm font-sans space-y-8 max-w-[720px] mx-auto text-gray-900">
+                  <div className="bg-white rounded-xl border border-gray-200 p-6 sm:p-7 shadow-sm font-sans space-y-5 max-w-[580px] mx-auto text-gray-900">
                     {/* Invoice Top Header */}
                     <div className="flex justify-between items-start">
-                      <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">Invoice</h1>
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex flex-col gap-1 items-end">
-                          <div className="w-8 h-1.5 bg-[#3B7CED] rounded-full" />
-                          <div className="w-6 h-1.5 bg-[#10B981] rounded-full" />
-                          <div className="w-3.5 h-1.5 bg-[#EF4444] rounded-full" />
-                        </div>
-                        <div className="flex flex-col leading-none">
-                          <span className="text-xl font-black text-gray-900 tracking-tight">fastra</span>
-                          <span className="text-xs font-bold text-[#3B7CED] tracking-wider">suite</span>
-                        </div>
+                      <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-none">Invoice</h1>
+                      <div className="flex items-center">
+                        <img
+                          src="/fastraLogo.png"
+                          alt="Fastra Suite"
+                          className="h-8 sm:h-9 w-auto object-contain"
+                        />
                       </div>
                     </div>
 
@@ -1645,16 +1649,16 @@ export default function BillingPage() {
                       </div>
 
                       {/* Totals Right Aligned */}
-                      <div className="pt-4 flex flex-col items-end gap-2 text-xs">
-                        <div className="flex justify-between w-64 text-gray-700">
+                      <div className="pt-2 flex flex-col items-end text-xs">
+                        <div className="flex justify-between w-full max-w-[360px] py-1 text-gray-700">
                           <span className="font-medium">Subtotal</span>
                           <span className="font-medium">₦{modalSelectedPrice.toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between w-64 text-gray-700">
+                        <div className="flex justify-between w-full max-w-[360px] py-1 text-gray-700">
                           <span className="font-medium">Total</span>
                           <span className="font-medium">₦{modalSelectedPrice.toLocaleString()}</span>
                         </div>
-                        <div className="flex justify-between w-64 pt-2 border-t border-gray-200 text-gray-900 font-extrabold text-sm">
+                        <div className="flex justify-between w-full max-w-[360px] py-1 pt-2 border-t border-gray-200 text-gray-900 font-extrabold text-sm">
                           <span>Amount due</span>
                           <span>₦{modalSelectedPrice.toLocaleString()}</span>
                         </div>
@@ -1771,6 +1775,187 @@ export default function BillingPage() {
                 >
                   {isCanceling ? <Loader2 className="w-4 h-4 animate-spin" /> : "Yes, Cancel"}
                 </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL 3: VIEW RECEIPT (A4 SHEET MATCHING USER IMAGE) */}
+      <AnimatePresence>
+        {receiptInvoice && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="relative my-auto w-full max-w-[510px] flex flex-col items-center"
+            >
+              {/* Header Action Bar */}
+              <div className="w-full flex justify-between items-center mb-2 px-1 text-white flex-shrink-0">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-white/80 bg-white/10 px-2.5 py-0.5 rounded-full">
+                  Receipt · {receiptInvoice.invoice_number || `INV-${String(receiptInvoice.id).padStart(6, "0")}`}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      handleDownloadInvoice({
+                        invoice_number:
+                          receiptInvoice.invoice_number || `INV-${String(receiptInvoice.id).padStart(6, "0")}`,
+                        plan_name: receiptInvoice.plan?.name || "FastraSuite Plan",
+                        amount: receiptInvoice.amount,
+                        billing_period: formatInvoicePeriod(
+                          receiptInvoice.period_start,
+                          receiptInvoice.period_end
+                        ),
+                        issue_date: formatInvoiceDate(
+                          receiptInvoice.created_at || receiptInvoice.period_start
+                        ),
+                        due_date: formatInvoiceDate(
+                          receiptInvoice.due_date || receiptInvoice.period_start
+                        ),
+                        status: receiptInvoice.status,
+                      })
+                    }
+                    className="bg-white/95 hover:bg-white text-gray-800 text-[10px] h-6 px-2.5 rounded-md shadow-xs flex items-center gap-1.5 cursor-pointer border-none"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Download / Print</span>
+                  </Button>
+                  <button
+                    onClick={() => setReceiptInvoice(null)}
+                    className="p-1 rounded-md bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                    title="Close"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* The Pixel-Perfect A4 Document Sheet (210mm x 297mm proportion) */}
+              <div className="bg-white rounded-xl shadow-2xl p-6 sm:p-8 w-full max-w-[510px] min-h-[700px] sm:min-h-[720px] aspect-[210/297] text-gray-950 font-sans border border-gray-100 flex flex-col justify-between overflow-y-auto">
+                <div>
+                  {/* Top Header: "Invoice" on left, Official Logo on right */}
+                  <div className="flex justify-between items-start mb-4">
+                    <h1 className="text-xl sm:text-[22px] font-bold text-gray-900 tracking-tight leading-none">
+                      Invoice
+                    </h1>
+                    <div className="flex items-center">
+                      <img
+                        src="/fastraLogo.png"
+                        alt="Fastra Suite"
+                        className="h-6 w-auto object-contain"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Metadata block */}
+                  <div className="grid grid-cols-[105px_1fr] text-[10px] gap-y-0.5 text-gray-900 mb-4 leading-normal">
+                    <span className="font-semibold text-gray-900">Invoice number</span>
+                    <span className="font-normal text-gray-900 uppercase">
+                      {receiptInvoice.invoice_number || `INV-${String(receiptInvoice.id).padStart(6, "0")}`}
+                    </span>
+
+                    <span className="font-semibold text-gray-900">Date of issue</span>
+                    <span className="font-normal text-gray-900">
+                      {formatInvoiceDate(receiptInvoice.created_at || receiptInvoice.period_start)}
+                    </span>
+
+                    <span className="font-semibold text-gray-900">Date due</span>
+                    <span className="font-normal text-gray-900">
+                      {formatInvoiceDate(receiptInvoice.due_date || receiptInvoice.period_start)}
+                    </span>
+
+                    <span className="font-semibold text-gray-900">Billing period</span>
+                    <span className="font-normal text-gray-900">
+                      {formatInvoicePeriod(receiptInvoice.period_start, receiptInvoice.period_end)}
+                    </span>
+
+                    <span className="font-semibold text-gray-900">Team name</span>
+                    <span className="font-normal text-gray-900">
+                      {receiptInvoice.tenant_name || auth?.tenant_company_name || (companyData as any)?.name || (companyData as any)?.company_name || "Workspace"}
+                    </span>
+                  </div>
+
+                  {/* Address Columns: Fastra Suite, Inc vs Bill to */}
+                  <div className="grid grid-cols-2 gap-5 text-[10px] text-gray-900 mb-5 leading-relaxed">
+                    <div>
+                      <p className="font-bold text-gray-900 mb-0.5 text-[10.5px]">Fastra Suite, Inc</p>
+                      <p>123, Lagos st</p>
+                      <p>123, Lagos st</p>
+                      <p>Lagos st</p>
+                      <p>Nigeria</p>
+                      <p>support@Fastra.com</p>
+                    </div>
+
+                    <div>
+                      <p className="font-bold text-gray-900 mb-0.5 text-[10.5px]">Bill to</p>
+                      <p className="font-medium text-gray-900">
+                        {receiptInvoice.tenant_name || auth?.tenant_company_name || (companyData as any)?.name || (companyData as any)?.company_name || "WorkAll"}
+                      </p>
+                      <p>{companyData?.street_address || "234, Abuja st"}</p>
+                      <p>{companyData?.city || "Abuja st"}</p>
+                      <p>{companyData?.country || "Nigeria"}</p>
+                      <p>{auth?.user?.email || "support@workall.com"}</p>
+                    </div>
+                  </div>
+
+                  {/* Amount Due Banner */}
+                  <div className="mb-4">
+                    <h2 className="text-base sm:text-[17px] font-bold text-gray-900 tracking-tight">
+                      ₦{Number(receiptInvoice.amount || 0).toLocaleString()} due {formatInvoiceDate(receiptInvoice.due_date || receiptInvoice.period_start)}
+                    </h2>
+                    <p className="text-[10px] text-gray-600 mt-0.5">
+                      Fastra {formatInvoicePeriod(receiptInvoice.period_start, receiptInvoice.period_end)}
+                    </p>
+                  </div>
+
+                  {/* Items Table & Totals */}
+                  <div className="space-y-1.5">
+                    <div className="border-b border-gray-300 pb-1 flex justify-between text-[10px] text-gray-700 font-medium">
+                      <span className="w-1/2">Description</span>
+                      <span className="w-10 text-center">Qty</span>
+                      <span className="w-20 text-right">Unit price</span>
+                      <span className="w-20 text-right">Amount</span>
+                    </div>
+
+                    <div className="flex justify-between text-[10px] text-gray-900 py-1">
+                      <span className="w-1/2 font-normal">
+                        {receiptInvoice.plan?.name || "Enterprise Plan"} ({receiptInvoice.plan?.interval === "annually" ? "1 year" : "1 month"} subscription)
+                      </span>
+                      <span className="w-10 text-center">1</span>
+                      <span className="w-20 text-right font-normal">
+                        ₦{Number(receiptInvoice.amount || 0).toLocaleString()}
+                      </span>
+                      <span className="w-20 text-right font-normal">
+                        ₦{Number(receiptInvoice.amount || 0).toLocaleString()}
+                      </span>
+                    </div>
+
+                    {/* Totals Section */}
+                    <div className="pt-1 flex flex-col items-end text-[10px]">
+                      <div className="flex justify-between w-full max-w-[240px] py-0.5 text-gray-800">
+                        <span className="font-normal">Subtotal</span>
+                        <span className="font-normal">₦{Number(receiptInvoice.amount || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between w-full max-w-[240px] py-0.5 text-gray-800">
+                        <span className="font-normal">Total</span>
+                        <span className="font-normal">₦{Number(receiptInvoice.amount || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between w-full max-w-[240px] py-0.5 text-gray-900 font-bold text-[10.5px]">
+                        <span>Amount due</span>
+                        <span>₦{Number(receiptInvoice.amount || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lower blank A4 paper space (authentically matching the reference image) */}
+                <div className="pt-12 pb-2 text-[10px] text-gray-300 select-none text-center opacity-0 pointer-events-none">
+                  A4 Lower Margin
+                </div>
               </div>
             </motion.div>
           </div>

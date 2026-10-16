@@ -202,7 +202,7 @@ export default function ProjectDashboardPage() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [costCategoryFilter, setCostCategoryFilter] = useState("all");
-  const [timeGranularity, setTimeGranularity] = useState<"monthly" | "weekly">("monthly");
+  const [timeGranularity, setTimeGranularity] = useState<"monthly" | "weekly" | "daily">("monthly");
   const [commitmentViewMode, setCommitmentViewMode] = useState<"active" | "monthly">("active");
   const [showCompletedDemo, setShowCompletedDemo] = useState(false);
 
@@ -1442,7 +1442,33 @@ export default function ProjectDashboardPage() {
 
     const filteredDemo = monthsRef.filter(m => isDateInRange(m.date));
 
-    if (timeGranularity === "weekly") {
+    if (timeGranularity === "daily") {
+      const dailyDemo: any[] = [];
+      filteredDemo.forEach((m, mIdx) => {
+        const nextActual = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].actual : m.actual;
+        const actualDelta = (nextActual - m.actual) / 30;
+        const nextActivePo = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].activePo : m.activePo;
+        const poDelta = (nextActivePo - m.activePo) / 30;
+
+        for (let d = 1; d <= 30; d++) {
+          const dActual = Math.round(m.actual + (actualDelta * d));
+          const dActivePo = Math.round(m.activePo + (poDelta * d));
+          const dMonthlyPo = d === 15 ? Math.round(m.monthlyPo * 0.7) : d === 28 ? Math.round(m.monthlyPo * 0.3) : 0;
+          const dayPad = String(d).padStart(2, "0");
+          const dateStr = `${m.date.slice(0, 7)}-${dayPad}`;
+
+          dailyDemo.push({
+            name: `${d} ${m.short}`,
+            fullName: `${d} ${m.period}`,
+            planned: chartBudget,
+            actual: dActual,
+            committed: commitmentViewMode === "active" ? dActivePo : dMonthlyPo,
+            date: dateStr,
+          });
+        }
+      });
+      dynamicLineChartData = dailyDemo;
+    } else if (timeGranularity === "weekly") {
       const weeklyDemo: any[] = [];
       filteredDemo.forEach((m, mIdx) => {
         const nextActual = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].actual : m.actual;
@@ -1483,7 +1509,68 @@ export default function ProjectDashboardPage() {
 
     const backendIsMonthlyDelta = totalActualSpend > 0 && Math.abs(sumRawActual - totalActualSpend) < 1 && lastItemActual < totalActualSpend;
 
-    if (timeGranularity === "weekly") {
+    if (timeGranularity === "daily") {
+      // DAILY VIEW DRILLDOWN: extract daily_spend inside each month
+      let runningCumulativeActual = 0;
+      let runningCumulativeCommitted = 0;
+      const dailyPoints: any[] = [];
+
+      backendTimeline.forEach((monthItem: any) => {
+        const monthCommitted = parseNumber(monthItem.committed ?? monthItem.committed_spend ?? 0);
+        runningCumulativeCommitted += monthCommitted;
+
+        const days = Array.isArray(monthItem.daily_spend) ? monthItem.daily_spend : [];
+        if (days.length > 0) {
+          days.forEach((day: any) => {
+            const dayDate = day.date || monthItem.date;
+            if (!isDateInRange(dayDate)) return;
+
+            const dayActual = parseNumber(day.amount ?? 0);
+            runningCumulativeActual += dayActual;
+
+            const activeCommitment = Math.max(0, runningCumulativeCommitted - runningCumulativeActual);
+
+            let dayName = dayDate;
+            let fullName = dayDate;
+            try {
+              const dObj = new Date(dayDate);
+              if (!isNaN(dObj.getTime())) {
+                dayName = dObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                fullName = dObj.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+              }
+            } catch {
+              // fallback
+            }
+
+            dailyPoints.push({
+              name: dayName,
+              fullName: fullName,
+              planned: chartBudget,
+              actual: runningCumulativeActual,
+              committed: commitmentViewMode === "active" ? activeCommitment : (dayDate.endsWith("-01") ? monthCommitted : 0),
+              date: dayDate,
+            });
+          });
+        } else {
+          // If a month has no daily breakdown, include the month as a single slot
+          if (isDateInRange(monthItem.date)) {
+            const rawActual = parseNumber(monthItem.actual ?? monthItem.spent ?? 0);
+            runningCumulativeActual += rawActual;
+            const activeCommitment = Math.max(0, runningCumulativeCommitted - runningCumulativeActual);
+            dailyPoints.push({
+              name: monthItem.period,
+              fullName: monthItem.full_name || monthItem.period,
+              planned: chartBudget,
+              actual: runningCumulativeActual,
+              committed: commitmentViewMode === "active" ? activeCommitment : monthCommitted,
+              date: monthItem.date,
+            });
+          }
+        }
+      });
+
+      dynamicLineChartData = dailyPoints;
+    } else if (timeGranularity === "weekly") {
       // WEEKLY VIEW DRILLDOWN: extract weekly_spend inside each month
       let runningCumulativeActual = 0;
       let runningCumulativeCommitted = 0;
@@ -1693,13 +1780,17 @@ export default function ProjectDashboardPage() {
     });
   }
 
-  // Stop committed/actual lines at the current month (budget line continues)
+  // Stop committed/actual lines at the current month/day (budget line continues)
   if (!showCompletedDemo) {
     const nowRef = new Date();
     const currentKey = nowRef.getFullYear() * 12 + nowRef.getMonth();
+    const todayStr = nowRef.toISOString().split("T")[0];
     dynamicLineChartData = dynamicLineChartData.map((pt: any) => {
       const d = new Date(pt.date);
       if (!pt.date || isNaN(d.getTime())) return pt;
+      if (timeGranularity === "daily") {
+        return pt.date > todayStr ? { ...pt, committed: null, actual: null } : pt;
+      }
       const key = d.getFullYear() * 12 + d.getMonth();
       return key > currentKey ? { ...pt, committed: null, actual: null } : pt;
     });
@@ -2334,9 +2425,9 @@ export default function ProjectDashboardPage() {
               <div className="flex flex-col gap-4 mb-6">
                 <div className="flex items-center justify-between gap-4">
                   <h3 className="text-lg font-medium text-[#3B7CED] whitespace-nowrap shrink-0">Spend Over Time vs Budget Curve</h3>
-                  {/* Granularity Toggle: Monthly vs Weekly */}
+                  {/* Granularity Toggle: Monthly vs Weekly vs Daily */}
                   <div className="inline-flex rounded-lg bg-gray-100 p-0.5 border border-gray-200/60">
-                    {(["monthly", "weekly"] as const).map((g) => (
+                    {(["monthly", "weekly", "daily"] as const).map((g) => (
                       <button
                         key={g}
                         type="button"
@@ -2399,6 +2490,7 @@ export default function ProjectDashboardPage() {
                       axisLine={{ stroke: '#E5E7EB' }} 
                       tickLine={false} 
                       tick={{ fill: '#6B7280', fontSize: 11 }} 
+                      minTickGap={16}
                       dy={10} 
                     />
                     <YAxis 

@@ -18,6 +18,8 @@ import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { extractErrorMessage } from "@/lib/utils";
 import { UserHeaderActions } from "@/components/shared/TopBar/UserHeaderActions";
+import { OverBudgetNoticeModal } from "@/components/requests/OverBudgetNoticeModal";
+import { RejectRequestModal } from "@/components/requests/RejectRequestModal";
 
 export default function ApproveRequestPage() {
   const router = useRouter();
@@ -25,6 +27,12 @@ export default function ApproveRequestPage() {
   const statusModal = useStatusModal();
 
   const [removedIds, setRemovedIds] = useState<number[]>([]);
+  const [selectedOverrunId, setSelectedOverrunId] = useState<number | null>(null);
+  const [overrunAmountState, setOverrunAmountState] = useState<number>(0);
+  const [isOverBudgetNoticeOpen, setIsOverBudgetNoticeOpen] = useState(false);
+  const [selectedRejectId, setSelectedRejectId] = useState<number | null>(null);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isRejectingState, setIsRejectingState] = useState(false);
 
   const { data: rawApiRequests, isLoading: isRequestsLoading, refetch } = useGetProjectRequestsQuery({
     status: "pending",
@@ -139,16 +147,11 @@ export default function ApproveRequestPage() {
         errData?.warning === true;
 
       if (isOverBudget) {
-        statusModal.showConfirm(
-          "Over Budget",
-          "This request exceeds the available budget. Do you want to proceed with approval?",
-          async () => {
-            await handleApprove(id, true);
-          },
-          "Yes, Approve",
-          "Cancel",
-          "primary"
-        );
+        setRemovedIds((prev) => prev.filter((item) => item !== id));
+        const backendOverrun = Number(errData?.details?.amount_over_budget || 0);
+        setSelectedOverrunId(id);
+        setOverrunAmountState(backendOverrun);
+        setIsOverBudgetNoticeOpen(true);
         return;
       }
 
@@ -157,15 +160,25 @@ export default function ApproveRequestPage() {
     }
   };
 
-  const handleReject = async (id: number) => {
+  const handleOpenRejectModal = (id: number) => {
+    setIsOverBudgetNoticeOpen(false);
+    setSelectedRejectId(id);
+    setIsRejectModalOpen(true);
+  };
+
+  const handleConfirmReject = async (reason: string) => {
+    if (!selectedRejectId) return;
+    const id = selectedRejectId;
     const request = apiRequests.find((r: any) => r.id === id);
     const displayId = getRequestReferenceId(request);
 
-    // Optimistically remove from view immediately
+    setIsRejectingState(true);
     setRemovedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
 
     try {
-      await rejectRequest({ id }).unwrap();
+      await rejectRequest({ id, data: { status: "rejected", rejection_notes: reason } }).unwrap();
+      setIsRejectModalOpen(false);
+      setSelectedRejectId(null);
       statusModal.showSuccess(
         "Request Rejected",
         `Project request ${displayId} has been successfully rejected.`
@@ -173,10 +186,11 @@ export default function ApproveRequestPage() {
       refetch();
       router.refresh();
     } catch (err: any) {
-      // Revert if error
       setRemovedIds((prev) => prev.filter((item) => item !== id));
       const errMsg = extractErrorMessage(err, "An error occurred while rejecting the request.");
       statusModal.showError("Rejection Failed", errMsg);
+    } finally {
+      setIsRejectingState(false);
     }
   };
 
@@ -289,10 +303,10 @@ export default function ApproveRequestPage() {
                       <Button
                         variant="outline"
                         className="flex-1 border-red-500 text-red-500 hover:bg-red-50 hover:text-red-600 h-10 font-semibold"
-                        disabled={isApproving || isRejecting}
+                        disabled={isApproving || isRejectingState}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleReject(request.id);
+                          handleOpenRejectModal(request.id);
                         }}
                       >
                         Reject
@@ -352,6 +366,36 @@ export default function ApproveRequestPage() {
         secondaryText={statusModal.secondaryText}
         onSecondary={statusModal.onSecondary}
         actionVariant={statusModal.actionVariant}
+      />
+
+      <OverBudgetNoticeModal
+        isOpen={isOverBudgetNoticeOpen}
+        onClose={() => {
+          setIsOverBudgetNoticeOpen(false);
+          setSelectedOverrunId(null);
+        }}
+        overrunAmount={overrunAmountState}
+        onApproveOverBudget={() => {
+          if (selectedOverrunId) {
+            handleApprove(selectedOverrunId, true);
+            setIsOverBudgetNoticeOpen(false);
+          }
+        }}
+        onReject={() => {
+          if (selectedOverrunId) {
+            handleOpenRejectModal(selectedOverrunId);
+          }
+        }}
+      />
+
+      <RejectRequestModal
+        isOpen={isRejectModalOpen}
+        onClose={() => {
+          setIsRejectModalOpen(false);
+          setSelectedRejectId(null);
+        }}
+        onConfirm={handleConfirmReject}
+        isLoading={isRejectingState}
       />
     </motion.div>
   );

@@ -25,6 +25,7 @@ import { PageGuard } from "@/components/auth/PageGuard";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { extractErrorMessage } from "@/lib/utils";
+import { BudgetWarningModal } from "@/components/requests/BudgetWarningModal";
 
 interface MaterialItem {
   id?: string | number;
@@ -40,6 +41,7 @@ export default function MaterialConsumptionRequestDetailPage() {
   const router = useRouter();
   const id = Number(params.id);
   const statusModal = useStatusModal();
+  const [isBudgetWarningOpen, setIsBudgetWarningOpen] = useState(false);
   const { canDo } = useModulePermissions();
   const { fullName: currentUserName } = useCurrentUser();
 
@@ -49,6 +51,30 @@ export default function MaterialConsumptionRequestDetailPage() {
 
   const [deleteRequest, { isLoading: isDeleting }] = useDeleteMaterialConsumptionMutation();
   const [submitProjectRequest, { isLoading: isSubmitting }] = useSubmitMaterialConsumptionRequestMutation();
+
+  const reqObj: any = request;
+  const parentPR: any = typeof reqObj?.project_request === "object" ? reqObj?.project_request : null;
+
+  const projectId =
+    reqObj?.project_details?.id ??
+    reqObj?.project ??
+    parentPR?.project_details?.id ??
+    parentPR?.project;
+  const phaseId =
+    reqObj?.phase_details?.id ??
+    reqObj?.phase ??
+    parentPR?.phase_details?.id ??
+    parentPR?.phase;
+  const activityId =
+    reqObj?.activity_details?.id ??
+    reqObj?.activity ??
+    parentPR?.activity_details?.id ??
+    parentPR?.activity;
+
+  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
+    { project_id: Number(projectId), phase_id: phaseId },
+    { skip: !projectId || !phaseId }
+  );
 
   const handleDelete = () => {
     statusModal.showConfirm(
@@ -84,7 +110,7 @@ export default function MaterialConsumptionRequestDetailPage() {
     );
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (confirmOverBudget = false) => {
     try {
       const parentId =
         typeof request?.project_request === "object"
@@ -92,7 +118,8 @@ export default function MaterialConsumptionRequestDetailPage() {
           : request?.project_request;
       if (!parentId) throw new Error("Could not find parent project request ID");
 
-      await submitProjectRequest({ id: parentId as number }).unwrap();
+      const payloadData = confirmOverBudget ? { confirm_over_budget: true } : {};
+      await submitProjectRequest({ id: parentId as number, data: payloadData }).unwrap();
       statusModal.showSuccess(
         "Request Submitted",
         "The material consumption request has been submitted for approval."
@@ -100,6 +127,17 @@ export default function MaterialConsumptionRequestDetailPage() {
       refetch();
     } catch (err: any) {
       console.error("Failed to submit request:", err);
+      const errData = err?.data || err?.response?.data || err?.error?.data || err || {};
+      const isOverBudget =
+        errData?.confirmation_required === true ||
+        errData?.code === "OVER_BUDGET" ||
+        errData?.warning === true;
+
+      if (isOverBudget) {
+        setIsBudgetWarningOpen(true);
+        return;
+      }
+
       statusModal.showError(
         "Submit Failed",
         extractErrorMessage(err, "Failed to submit the request. Please try again.")
@@ -164,9 +202,6 @@ export default function MaterialConsumptionRequestDetailPage() {
       </div>
     );
   }
-
-  const reqObj: any = request;
-  const parentPR: any = typeof reqObj.project_request === "object" ? reqObj.project_request : null;
 
   // Resolve requester name accurately
   let requesterName = "-";
@@ -266,27 +301,6 @@ export default function MaterialConsumptionRequestDetailPage() {
   const totalCost =
     materials.reduce((sum, item) => sum + item.lineTotal, 0) ||
     Number(parentPR?.request_amount || 0);
-
-  const projectId =
-    reqObj.project_details?.id ??
-    reqObj.project ??
-    parentPR?.project_details?.id ??
-    parentPR?.project;
-  const phaseId =
-    reqObj.phase_details?.id ??
-    reqObj.phase ??
-    parentPR?.phase_details?.id ??
-    parentPR?.phase;
-  const activityId =
-    reqObj.activity_details?.id ??
-    reqObj.activity ??
-    parentPR?.activity_details?.id ??
-    parentPR?.activity;
-
-  const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
-    { project_id: Number(projectId), phase_id: phaseId },
-    { skip: !projectId || !phaseId }
-  );
 
   const activityOptionsList = Array.isArray(rawActivityOptions)
     ? rawActivityOptions
@@ -589,7 +603,7 @@ export default function MaterialConsumptionRequestDetailPage() {
                 {canSubmit && (
                   <Button
                     disabled={isSubmitting}
-                    onClick={handleSubmit}
+                    onClick={() => handleSubmit()}
                     className="h-10 px-4 text-xs font-semibold bg-[#3B82F6] hover:bg-[#2563EB] text-white rounded-lg gap-1.5 shadow-sm"
                   >
                     <Send size={14} /> Submit
@@ -611,6 +625,18 @@ export default function MaterialConsumptionRequestDetailPage() {
             secondaryText={statusModal.secondaryText}
             onSecondary={statusModal.onSecondary}
             actionVariant={statusModal.actionVariant}
+          />
+
+          {/* Budget Warning Modal */}
+          <BudgetWarningModal
+            isOpen={isBudgetWarningOpen}
+            onClose={() => setIsBudgetWarningOpen(false)}
+            onEditRequest={() => router.push(`/project-request/material-consumption-request/${id}/edit`)}
+            onSubmitAnyway={async () => {
+              setIsBudgetWarningOpen(false);
+              await handleSubmit(true);
+            }}
+            isSubmitting={isSubmitting}
           />
         </div>
       </motion.div>

@@ -16,6 +16,7 @@ import {
 import { useGetActivityOptionsQuery } from "@/api/requests/projectRequestApi";
 import { StatusModal, useStatusModal, extractErrorMessage } from "@/components/shared/StatusModal";
 import { FormActionFooter } from "@/components/shared/FormActionFooter";
+import { BudgetWarningModal } from "@/components/requests/BudgetWarningModal";
 import { useGetProjectCostingProjectQuery } from "@/api/projectCostingApi";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { motion } from "framer-motion";
@@ -207,6 +208,7 @@ export default function PurchaseRequestDetailPage() {
   const { id } = useParams();
   const { canDo } = useModulePermissions();
   const [request, setRequest] = useState<PurchaseRequestItem | null>(null);
+  const [isBudgetWarningOpen, setIsBudgetWarningOpen] = useState(false);
   const statusModal = useStatusModal();
 
   const { data: apiData, isLoading: isApiLoading } = useGetProjectPurchaseRequestQuery(
@@ -486,36 +488,7 @@ export default function PurchaseRequestDetailPage() {
         errData?.warning === true;
 
       if (isOverBudget) {
-        const msg =
-          errData?.confirmation_message ||
-          errData?.message ||
-          "This request is higher than the amount currently available for the selected activity. Do you want to continue?";
-
-        let detailText = "";
-        if (errData?.details) {
-          const d = errData.details;
-          const reqAmt = d.requested_amount ? `₦${Number(d.requested_amount).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-          const availAmt = d.available_budget ? `₦${Number(d.available_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-          const overAmt = d.amount_over_budget ? `₦${Number(d.amount_over_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-
-          const parts: string[] = [];
-          if (reqAmt) parts.push(`Requested: ${reqAmt}`);
-          if (availAmt) parts.push(`Available: ${availAmt}`);
-          if (overAmt) parts.push(`Over Budget: ${overAmt}`);
-          if (parts.length > 0) {
-            detailText = `\n\n• ${parts.join("\n• ")}`;
-          }
-        }
-
-        statusModal.showConfirm(
-          "Over Budget Warning",
-          `${msg}${detailText}`,
-          async () => {
-            await handleStatusChange(newStatus, true);
-          },
-          "Yes, Continue",
-          "No, Cancel"
-        );
+        setIsBudgetWarningOpen(true);
         return;
       }
 
@@ -795,6 +768,18 @@ export default function PurchaseRequestDetailPage() {
           secondaryText={statusModal.secondaryText}
           onSecondary={statusModal.onSecondary}
           actionVariant={statusModal.actionVariant}
+        />
+
+        {/* Budget Warning Modal */}
+        <BudgetWarningModal
+          isOpen={isBudgetWarningOpen}
+          onClose={() => setIsBudgetWarningOpen(false)}
+          onEditRequest={() => router.push(`/project-request/purchase-request/${id}/edit`)}
+          onSubmitAnyway={async () => {
+            setIsBudgetWarningOpen(false);
+            await handleStatusChange("pending", true);
+          }}
+          isSubmitting={isSubmitting}
         />
       </div>
     </motion.div>

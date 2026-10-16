@@ -10,13 +10,14 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { UserHeaderActions } from "@/components/shared/TopBar/UserHeaderActions";
+import { Button } from "@/components/ui/button";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { extractErrorMessage } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { StatusModal, useStatusModal } from "@/components/shared/StatusModal";
 import { FormActionFooter } from "@/components/shared/FormActionFooter";
+import { BudgetWarningModal } from "@/components/requests/BudgetWarningModal";
 import {
   useGetLabourRequestQuery,
   useDeleteLabourRequestMutation,
@@ -33,6 +34,7 @@ export default function LabourRequestDetailPage() {
   const id = rawId ? parseInt(rawId as string, 10) : NaN;
   const { canDo } = useModulePermissions();
   const statusModal = useStatusModal();
+  const [isBudgetWarningOpen, setIsBudgetWarningOpen] = useState(false);
 
   const {
     data: request,
@@ -262,36 +264,7 @@ export default function LabourRequestDetailPage() {
         errData?.warning === true;
 
       if (isOverBudget) {
-        const msg =
-          errData?.confirmation_message ||
-          errData?.message ||
-          "This request is higher than the amount currently available for the selected activity. Do you want to continue?";
-
-        let detailText = "";
-        if (errData?.details) {
-          const d = errData.details;
-          const reqAmt = d.requested_amount ? `₦${Number(d.requested_amount).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-          const availAmt = d.available_budget ? `₦${Number(d.available_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-          const overAmt = d.amount_over_budget ? `₦${Number(d.amount_over_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-
-          const parts: string[] = [];
-          if (reqAmt) parts.push(`Requested: ${reqAmt}`);
-          if (availAmt) parts.push(`Available: ${availAmt}`);
-          if (overAmt) parts.push(`Over Budget: ${overAmt}`);
-          if (parts.length > 0) {
-            detailText = `\n\n• ${parts.join("\n• ")}`;
-          }
-        }
-
-        statusModal.showConfirm(
-          "Over Budget Warning",
-          `${msg}${detailText}`,
-          async () => {
-            await handleSubmit(true);
-          },
-          "Yes, Continue",
-          "No, Cancel"
-        );
+        setIsBudgetWarningOpen(true);
         return;
       }
 
@@ -734,6 +707,17 @@ export default function LabourRequestDetailPage() {
             secondaryText={statusModal.secondaryText}
             onSecondary={statusModal.onSecondary}
             actionVariant={statusModal.actionVariant}
+          />
+
+          {/* Budget Warning Modal */}
+          <BudgetWarningModal
+            isOpen={isBudgetWarningOpen}
+            onClose={() => setIsBudgetWarningOpen(false)}
+            onEditRequest={() => router.push(`/project-request/labour-request/${id}/edit`)}
+            onSubmitAnyway={async () => {
+              setIsBudgetWarningOpen(false);
+              await handleSubmit(true);
+            }}
           />
         </div>
       </motion.div>

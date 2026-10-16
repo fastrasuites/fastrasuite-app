@@ -23,6 +23,8 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useGetUserByIdQuery } from "@/api/settings/usersApi";
 import { useGetVendorByIdQuery, useGetActiveVendorsQuery } from "@/api/invoice/vendorsApi";
 import { FormActionFooter } from "@/components/shared/FormActionFooter";
+import { OverBudgetNoticeModal } from "@/components/requests/OverBudgetNoticeModal";
+import { RejectRequestModal } from "@/components/requests/RejectRequestModal";
 
 const DataField = ({ label, value, fullWidth = false }: { label: string; value: string | React.ReactNode; fullWidth?: boolean }) => (
   <div className={`flex flex-col gap-1 ${fullWidth ? "col-span-2" : ""}`}>
@@ -55,6 +57,9 @@ export default function RequestDetailsPage() {
   });
 
   const [localStatus, setLocalStatus] = useState<string | null>(null);
+  const [isOverBudgetNoticeOpen, setIsOverBudgetNoticeOpen] = useState(false);
+  const [overrunAmountState, setOverrunAmountState] = useState<number>(0);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
   const { data: rawProjects } = useGetProjectCostingProjectsQuery({});
   const projects = React.useMemo(() => {
     const list = Array.isArray(rawProjects) ? rawProjects : (rawProjects as any)?.results || [];
@@ -428,10 +433,21 @@ export default function RequestDetailsPage() {
   };
 
   const handleApprove = async (confirmOverBudget = false) => {
+    const totalCostVal = getTotalCost();
+    const calculatedOverrun = Math.max(0, totalCostVal - availableBudget);
+
+    // If not already confirming over-budget, and request is known to be over available budget
+    if (!confirmOverBudget && availableBudget > 0 && totalCostVal > availableBudget) {
+      setOverrunAmountState(calculatedOverrun);
+      setIsOverBudgetNoticeOpen(true);
+      return;
+    }
+
     const displayRequestId = mainRequestId;
     try {
       const payloadData = confirmOverBudget === true ? { confirm_over_budget: true } : {};
       await approveRequest({ id: numericId, data: payloadData }).unwrap();
+      setIsOverBudgetNoticeOpen(false);
       setLocalStatus("approved");
       statusModal.showSuccess(
         "Request Approved",
@@ -447,16 +463,9 @@ export default function RequestDetailsPage() {
         errData?.warning === true;
 
       if (isOverBudget) {
-        statusModal.showConfirm(
-          "Over Budget",
-          "This request exceeds the available budget. Do you want to proceed with approval?",
-          async () => {
-            await handleApprove(true);
-          },
-          "Yes, Approve",
-          "Cancel",
-          "primary"
-        );
+        const backendOverrun = Number(errData?.details?.amount_over_budget || 0);
+        setOverrunAmountState(backendOverrun > 0 ? backendOverrun : (calculatedOverrun > 0 ? calculatedOverrun : totalCostVal));
+        setIsOverBudgetNoticeOpen(true);
         return;
       }
 
@@ -465,10 +474,19 @@ export default function RequestDetailsPage() {
     }
   };
 
-  const handleReject = async () => {
+  const handleOpenRejectModal = () => {
+    setIsOverBudgetNoticeOpen(false);
+    setIsRejectModalOpen(true);
+  };
+
+  const handleConfirmReject = async (reason: string) => {
     const displayRequestId = mainRequestId;
     try {
-      await rejectRequest({ id: numericId }).unwrap();
+      await rejectRequest({
+        id: numericId,
+        data: { status: "rejected", rejection_notes: reason },
+      }).unwrap();
+      setIsRejectModalOpen(false);
       setLocalStatus("rejected");
       statusModal.showSuccess(
         "Request Rejected",
@@ -927,7 +945,7 @@ export default function RequestDetailsPage() {
                 variant="outline" 
                 className="flex-1 border-red-500 text-red-500 hover:bg-red-50 hover:text-red-600 h-12 text-base font-semibold"
                 disabled={isApproving || isRejecting}
-                onClick={handleReject}
+                onClick={handleOpenRejectModal}
               >
                 {isRejecting ? "Rejecting..." : "Reject"}
               </Button>
@@ -954,6 +972,23 @@ export default function RequestDetailsPage() {
         secondaryText={statusModal.secondaryText}
         onSecondary={statusModal.onSecondary}
         actionVariant={statusModal.actionVariant}
+      />
+
+      <OverBudgetNoticeModal
+        isOpen={isOverBudgetNoticeOpen}
+        onClose={() => setIsOverBudgetNoticeOpen(false)}
+        overrunAmount={overrunAmountState}
+        onApproveOverBudget={() => handleApprove(true)}
+        onReject={handleOpenRejectModal}
+        isApproving={isApproving}
+      />
+
+      <RejectRequestModal
+        isOpen={isRejectModalOpen}
+        onClose={() => setIsRejectModalOpen(false)}
+        onConfirm={handleConfirmReject}
+        isLoading={isRejecting}
+        requestReference={mainRequestId}
       />
     </motion.div>
   );

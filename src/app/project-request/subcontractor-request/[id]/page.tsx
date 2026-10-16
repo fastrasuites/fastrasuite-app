@@ -28,12 +28,14 @@ import { extractErrorMessage, cn } from "@/lib/utils";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { motion } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
+import { BudgetWarningModal } from "@/components/requests/BudgetWarningModal";
 
 export default function SubcontractorRequestDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const statusModal = useStatusModal();
   const requestId = Number(params.id);
+  const [isBudgetWarningOpen, setIsBudgetWarningOpen] = useState(false);
 
   const { canDo } = useModulePermissions();
 
@@ -230,36 +232,7 @@ export default function SubcontractorRequestDetailsPage() {
         errData?.warning === true;
 
       if (isOverBudget) {
-        const msg =
-          errData?.confirmation_message ||
-          errData?.message ||
-          "This request is higher than the amount currently available for the selected activity. Do you want to continue?";
-
-        let detailText = "";
-        if (errData?.details) {
-          const d = errData.details;
-          const reqAmt = d.requested_amount ? `₦${Number(d.requested_amount).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-          const availAmt = d.available_budget ? `₦${Number(d.available_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-          const overAmt = d.amount_over_budget ? `₦${Number(d.amount_over_budget).toLocaleString("en-NG", { minimumFractionDigits: 2 })}` : null;
-
-          const parts: string[] = [];
-          if (reqAmt) parts.push(`Requested: ${reqAmt}`);
-          if (availAmt) parts.push(`Available: ${availAmt}`);
-          if (overAmt) parts.push(`Over Budget: ${overAmt}`);
-          if (parts.length > 0) {
-            detailText = `\n\n• ${parts.join("\n• ")}`;
-          }
-        }
-
-        statusModal.showConfirm(
-          "Over Budget Warning",
-          `${msg}${detailText}`,
-          async () => {
-            await handleSubmit(true);
-          },
-          "Yes, Continue",
-          "No, Cancel"
-        );
+        setIsBudgetWarningOpen(true);
         return;
       }
 
@@ -839,6 +812,18 @@ export default function SubcontractorRequestDetailsPage() {
             secondaryText={statusModal.secondaryText}
             onSecondary={statusModal.onSecondary}
             actionVariant={statusModal.actionVariant}
+          />
+
+          {/* Budget Warning Modal */}
+          <BudgetWarningModal
+            isOpen={isBudgetWarningOpen}
+            onClose={() => setIsBudgetWarningOpen(false)}
+            onEditRequest={() => router.push(`/project-request/subcontractor-request/edit/${requestId}`)}
+            onSubmitAnyway={async () => {
+              setIsBudgetWarningOpen(false);
+              await handleSubmit(true);
+            }}
+            isSubmitting={isSubmitting}
           />
         </div>
       </motion.div>
