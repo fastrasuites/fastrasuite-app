@@ -321,11 +321,11 @@ export default function CreateDisbursementLabourReqModal({
         return;
       }
 
-      const MAX_FILE_BYTES = 1 * 1024 * 1024; // align with server until raised
+      const MAX_FILE_BYTES = 20 * 1024 * 1024; // align with server until raised
       if (file.size > MAX_FILE_BYTES) {
         showToast(
           "error",
-          "File is too large. Maximum size is 1 MB. Compress the image or use a smaller PDF.",
+          "File is too large. Maximum size is 20 MB. Compress the image or use a smaller PDF.",
         );
         return;
       }
@@ -950,8 +950,8 @@ export default function CreateDisbursementLabourReqModal({
                             Upload photo of signed voucher
                           </p>
                           <p className="text-xs text-gray-400">
-                            Drag & drop or click · JPG, PNG, WebP or PDF · max 1
-                            MB
+                            Drag & drop or click · JPG, PNG, WebP or PDF · max
+                            20 MB
                           </p>
                           <input
                             ref={fileInputRef}

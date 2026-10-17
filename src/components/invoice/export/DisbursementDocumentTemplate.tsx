@@ -57,7 +57,9 @@ function formatPersonName(raw?: string | null): string {
     .join(" ");
 }
 
-export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplateProps> = ({
+export const DisbursementDocumentTemplate: React.FC<
+  DisbursementDocumentTemplateProps
+> = ({
   disbursement,
   pettyCashRequest,
   companyName = "Prorad Health Center",
@@ -76,12 +78,12 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
     "Meridian Heights";
 
   const paymentDate = formatDateDDMMYYYY(
-    d?.payment_date || d?.paid_at || d?.created_at || new Date().toISOString()
+    d?.payment_date || d?.paid_at || d?.created_at || new Date().toISOString(),
   );
 
   const amountPaid = Number(d?.amount || pcr?.amount_requested || 0);
   const amountRequested = Number(
-    pcr?.amount_requested || pcr?.amount || d?.amount || 0
+    pcr?.amount_requested || pcr?.amount || d?.amount || 0,
   );
 
   const paymentReference =
@@ -98,14 +100,14 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
     d?.created_by_name ||
       pcr?.created_by_name ||
       pcr?.created_by_details?.first_name ||
-      "Chinedu Eze"
+      "Chinedu Eze",
   );
 
   const recipientName = formatPersonName(
     d?.recipient_name ||
       d?.recipient_account_name ||
       requesterName ||
-      "Chinedu Eze"
+      "Chinedu Eze",
   );
 
   const paymentMethod = React.useMemo(() => {
@@ -116,11 +118,11 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
   }, [d?.disbursement_method]);
 
   const requestDate = formatDateDDMMYYYY(
-    pcr?.created_at || (pcr as any)?.date_created || d?.created_at
+    pcr?.created_at || (pcr as any)?.date_created || d?.created_at,
   );
 
   const requestDateTime = formatDateTimeFormatted(
-    pcr?.created_at || (pcr as any)?.date_created || d?.created_at
+    pcr?.created_at || (pcr as any)?.date_created || d?.created_at,
   );
 
   const wbsActivity = React.useMemo(() => {
@@ -148,7 +150,7 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
   const approverName = formatPersonName(
     d?.approved_by_name ||
       (d as any)?.approved_by_details?.first_name ||
-      "Tunde Adebayo"
+      "Tunde Adebayo",
   );
   const approvedDateTime = formatDateTimeFormatted(d?.approved_at);
 
@@ -156,7 +158,7 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
     (d as any)?.paid_by_name ||
       (d as any)?.paid_by_details?.first_name ||
       d?.approved_by_name ||
-      "Kemi Balogun"
+      "Kemi Balogun",
   );
   const paidDateTime = formatDateTimeFormatted(d?.paid_at || d?.payment_date);
 
@@ -167,7 +169,8 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
         minHeight: "1080px",
         backgroundColor: "#ffffff",
         color: "#111827",
-        fontFamily: "'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        fontFamily:
+          "'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         padding: "40px 48px",
         boxSizing: "border-box",
         position: "relative",
@@ -368,7 +371,7 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
 
           <div className="relative flex items-start justify-between px-10 sm:px-14">
             {/* Connecting Green Line spanning between center of Step 1 and Step 3 */}
-            <div className="absolute top-[22px] left-[17%] right-[17%] h-[1px] bg-[#C2E4CC]" />
+            <div className="absolute top-5.5 left-[17%] right-[17%] h-px bg-[#C2E4CC]" />
 
             {/* Step 1: Requested By */}
             <div className="relative z-10 flex flex-col items-center text-center w-44">
@@ -388,7 +391,7 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
               <div className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mt-3">
                 REQUESTED BY
               </div>
-              <div className="text-[13px] font-bold text-gray-900 mt-0.5 truncate max-w-[160px]">
+              <div className="text-[13px] font-bold text-gray-900 mt-0.5 truncate max-w-40">
                 {requesterName}
               </div>
               <div className="text-[10.5px] text-gray-400 mt-0.5">
@@ -420,7 +423,7 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
               <div className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mt-3">
                 APPROVED BY
               </div>
-              <div className="text-[13px] font-bold text-gray-900 mt-0.5 truncate max-w-[160px]">
+              <div className="text-[13px] font-bold text-gray-900 mt-0.5 truncate max-w-40">
                 {isApproved ? approverName : "Pending"}
               </div>
               <div className="text-[10.5px] text-gray-400 mt-0.5">
@@ -452,7 +455,7 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
               <div className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider mt-3">
                 PAID BY
               </div>
-              <div className="text-[13px] font-bold text-gray-900 mt-0.5 truncate max-w-[160px]">
+              <div className="text-[13px] font-bold text-gray-900 mt-0.5 truncate max-w-40">
                 {isPaid ? payerName : "Pending"}
               </div>
               <div className="text-[10.5px] text-gray-400 mt-0.5">
@@ -479,8 +482,8 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
             {isPaid
               ? "This disbursement has been fully authorized and paid."
               : isApproved
-              ? "This disbursement has been approved and is queued for payment."
-              : "This disbursement is currently pending approval and authorization."}
+                ? "This disbursement has been approved and is queued for payment."
+                : "This disbursement is currently pending approval and authorization."}
           </span>
         </div>
       </div>
@@ -496,12 +499,11 @@ export const DisbursementDocumentTemplate: React.FC<DisbursementDocumentTemplate
         </div>
 
         <div className="tracking-wider uppercase font-medium text-[8px] text-gray-400">
-          GENERATED VIA FASTRASUITE—NIGERIA&apos;S TRUSTED PROJECT COSTING PLATFORM.
+          GENERATED VIA FASTRASUITE—NIGERIA&apos;S TRUSTED PROJECT COSTING
+          PLATFORM.
         </div>
 
-        <div className="font-medium text-gray-400">
-          Page 1 of 1
-        </div>
+        <div className="font-medium text-gray-400">Page 1 of 1</div>
       </div>
     </div>
   );

@@ -9,9 +9,9 @@ import { PermissionProvider } from "@/contexts/PermissionContext";
 import { NotificationProvider } from "@/contexts/NotificationContext";
 import Sidebar from "@/components/shared/Sidebar";
 import SessionTimeoutWrapper from "@/components/SessionTimeoutWrapper";
-import DatabaseInitializer from "@/components/DatabaseInitializer";
 import dynamic from "next/dynamic";
 import SubscriptionGuard from "@/components/shared/SubscriptionGuard";
+import NetworkStatusNotifier from "@/components/shared/NetworkStatusNotifier";
 
 const AdminOnboardingChecklist = dynamic(
   () =>
@@ -140,8 +140,8 @@ export default function AppWrapper({
               }}
             >
               <SessionTimeoutWrapper>
+                <NetworkStatusNotifier />
                 <div className="flex min-h-screen bg-gray-50">
-                  <DatabaseInitializer />
                   {/* Left Sidebar */}
                   {!isAuthPage && (
                     <Sidebar

@@ -1,6 +1,9 @@
 import * as React from "react";
 import { FASTRASUITE_LOGO_BASE64 } from "@/components/project-costing/export/ExecutiveProjectReportTemplate";
-import { ProjectPurchaseOrder, PurchaseOrderLine } from "@/api/invoice/projectPurchaseOrdersApi";
+import {
+  ProjectPurchaseOrder,
+  PurchaseOrderLine,
+} from "@/api/invoice/projectPurchaseOrdersApi";
 
 export interface PurchaseOrderDocumentTemplateProps {
   order?: ProjectPurchaseOrder | null;
@@ -29,7 +32,9 @@ const formatDateDDMMYYYY = (dateStr?: string | null): string => {
   }
 };
 
-export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTemplateProps> = ({
+export const PurchaseOrderDocumentTemplate: React.FC<
+  PurchaseOrderDocumentTemplateProps
+> = ({
   order,
   companyName = "FastraSuite",
   companyAddress = "",
@@ -37,17 +42,28 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
   companyLogo = "",
 }) => {
   // Resolve core header fields
-  const projectName = (order as any)?.project_name || (order as any)?.project?.name || (order as any)?.project_code || "Project";
-  const poDate = formatDateDDMMYYYY(order?.issued_at || order?.created_at || new Date().toISOString());
+  const projectName =
+    (order as any)?.project_name ||
+    (order as any)?.project?.name ||
+    (order as any)?.project_code ||
+    "Project";
+  const poDate = formatDateDDMMYYYY(
+    order?.issued_at || order?.created_at || new Date().toISOString(),
+  );
   const requestDate = formatDateDDMMYYYY(order?.created_at || order?.issued_at);
-  const expectedDeliveryDate = formatDateDDMMYYYY(order?.expected_delivery_date || order?.required_date);
+  const expectedDeliveryDate = formatDateDDMMYYYY(
+    order?.expected_delivery_date || order?.required_date,
+  );
 
   const poNumber = order?.po_number || (order?.id ? `PO-${order.id}` : "—");
-  const vendorName = order?.vendor_name || (order as any)?.vendor_details?.name || "—";
-  
+  const vendorName =
+    order?.vendor_name || (order as any)?.vendor_details?.name || "—";
+
   const vendorDetailsLine = React.useMemo(() => {
     const parts = [
-      (order as any)?.vendor_address || (order as any)?.vendor_details?.address || (order as any)?.vendor_details?.city,
+      (order as any)?.vendor_address ||
+        (order as any)?.vendor_details?.address ||
+        (order as any)?.vendor_details?.city,
       (order as any)?.vendor_email || (order as any)?.vendor_details?.email,
       (order as any)?.vendor_phone || (order as any)?.vendor_details?.phone,
     ].filter(Boolean);
@@ -56,7 +72,10 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
     return "";
   }, [order]);
 
-  const deliveryLocation = order?.site_location || (order as any)?.delivery_location || (projectName !== "Project" ? `${projectName} Site` : "Project Site");
+  const deliveryLocation =
+    order?.site_location ||
+    (order as any)?.delivery_location ||
+    (projectName !== "Project" ? `${projectName} Site` : "Project Site");
 
   // Line items
   const lines: PurchaseOrderLine[] = React.useMemo(() => {
@@ -69,8 +88,16 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
         {
           id: 1,
           product: 1,
-          description: (order as any)?.notes || (order as any)?.description || (order as any)?.title || "Purchase Order Items",
-          item_name: (order as any)?.notes || (order as any)?.description || (order as any)?.title || "Purchase Order Items",
+          description:
+            (order as any)?.notes ||
+            (order as any)?.description ||
+            (order as any)?.title ||
+            "Purchase Order Items",
+          item_name:
+            (order as any)?.notes ||
+            (order as any)?.description ||
+            (order as any)?.title ||
+            "Purchase Order Items",
           qty: "1",
           unit: "Lot",
           unit_price: String(rawTotal),
@@ -85,24 +112,28 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
 
   // Financial calculations
   const rawTotal = Number(order?.total_amount || 0);
-  const subtotal = lines.length > 0
-    ? lines.reduce((acc, l) => {
-        const q = Number(l.qty || 1);
-        const p = Number(l.unit_price || 0);
-        return acc + (q * p);
-      }, 0)
-    : rawTotal;
+  const subtotal =
+    lines.length > 0
+      ? lines.reduce((acc, l) => {
+          const q = Number(l.qty || 1);
+          const p = Number(l.unit_price || 0);
+          return acc + q * p;
+        }, 0)
+      : rawTotal;
 
   const taxRate = 0.075;
   const taxAmount = Math.round(subtotal * taxRate);
-  const grandTotal = rawTotal > 0 ? rawTotal : (subtotal + taxAmount);
+  const grandTotal = rawTotal > 0 ? rawTotal : subtotal + taxAmount;
 
   // Payment & Delivery instructions
-  const paymentTerms = order?.payment_term 
-    ? `${order.payment_term} days after delivery` 
-    : (order as any)?.payment_terms || "In accordance with agreed contract terms";
+  const paymentTerms = order?.payment_term
+    ? `${order.payment_term} days after delivery`
+    : (order as any)?.payment_terms ||
+      "In accordance with agreed contract terms";
 
-  const deliveryInstructions = (order as any)?.delivery_instructions || "Deliver to designated project site coordinator during standard working hours.";
+  const deliveryInstructions =
+    (order as any)?.delivery_instructions ||
+    "Deliver to designated project site coordinator during standard working hours.";
 
   return (
     <div
@@ -111,7 +142,8 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
         minHeight: "1160px",
         backgroundColor: "#ffffff",
         color: "#111827",
-        fontFamily: "'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        fontFamily:
+          "'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
         padding: "40px 45px",
         boxSizing: "border-box",
         position: "relative",
@@ -248,17 +280,30 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
               <thead>
                 <tr className="bg-[#F5F8FF] border-b border-gray-200 text-gray-500 text-[10px] font-semibold">
                   <th className="py-2.5 px-4 font-semibold">Description</th>
-                  <th className="py-2.5 px-3 text-center font-semibold w-16">Qty</th>
-                  <th className="py-2.5 px-3 text-left font-semibold w-20">Unit</th>
-                  <th className="py-2.5 px-4 text-right font-semibold w-28">Unit price</th>
-                  <th className="py-2.5 px-3 text-center font-semibold w-20">Tax</th>
-                  <th className="py-2.5 px-4 text-right font-semibold w-32">Amount</th>
+                  <th className="py-2.5 px-3 text-center font-semibold w-16">
+                    Qty
+                  </th>
+                  <th className="py-2.5 px-3 text-left font-semibold w-20">
+                    Unit
+                  </th>
+                  <th className="py-2.5 px-4 text-right font-semibold w-28">
+                    Unit price
+                  </th>
+                  <th className="py-2.5 px-3 text-center font-semibold w-20">
+                    Tax
+                  </th>
+                  <th className="py-2.5 px-4 text-right font-semibold w-32">
+                    Amount
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-[11px] text-gray-800">
                 {lines.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-6 text-center text-gray-400 italic">
+                    <td
+                      colSpan={6}
+                      className="py-6 text-center text-gray-400 italic"
+                    >
                       No line items specified for this purchase order.
                     </td>
                   </tr>
@@ -266,7 +311,9 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
                   lines.map((item, idx) => {
                     const qty = Number(item.qty || 1);
                     const rate = Number(item.unit_price || 0);
-                    const lineTotal = Number(item.line_total || (qty * rate * (1 + taxRate)));
+                    const lineTotal = Number(
+                      item.line_total || qty * rate * (1 + taxRate),
+                    );
 
                     return (
                       <tr key={idx} className="hover:bg-gray-50/50">
@@ -300,7 +347,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
         {/* ================= 5. DELIVERY & PAYMENT + TOTALS ================= */}
         <div className="flex justify-between items-start mt-6 gap-8">
           {/* Left: Delivery & Payment Details */}
-          <div className="flex-1 max-w-[420px]">
+          <div className="flex-1 max-w-105">
             <h3 className="text-[10px] font-bold text-[#0D3C8C] tracking-wider uppercase mb-2">
               DELIVERY & PAYMENT
             </h3>
@@ -325,14 +372,18 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
           </div>
 
           {/* Right: Summary Box with Blue Total Banner */}
-          <div className="w-[280px]">
+          <div className="w-70">
             <div className="flex justify-between items-center text-[12px] py-1 border-b border-gray-100">
               <span className="text-gray-600 font-medium">Subtotal</span>
-              <span className="font-bold text-gray-900">{formatCurrency(subtotal)}</span>
+              <span className="font-bold text-gray-900">
+                {formatCurrency(subtotal)}
+              </span>
             </div>
             <div className="flex justify-between items-center text-[12px] py-1 mt-1">
               <span className="text-gray-600 font-medium">Tax (7.5%)</span>
-              <span className="font-bold text-gray-900">{formatCurrency(taxAmount)}</span>
+              <span className="font-bold text-gray-900">
+                {formatCurrency(taxAmount)}
+              </span>
             </div>
             {/* Deep Royal Blue Total Box */}
             <div className="bg-[#0D3C8C] rounded-md px-4 py-3 text-white flex justify-between items-center mt-3 shadow-xs">
@@ -348,15 +399,43 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
 
         {/* ================= 6. TERMS AND CONDITIONS ================= */}
         <div className="mt-8">
-          <h5 className="text-[9px] font-bold text-gray-500 mb-1">Terms and Conditions</h5>
+          <h5 className="text-[9px] font-bold text-gray-500 mb-1">
+            Terms and Conditions
+          </h5>
           <ol className="text-[8px] leading-[1.38] text-gray-400 space-y-0.5 list-decimal pl-3.5">
-            <li>This order is based on the items, quantities, prices, delivery date and payment terms stated on this Purchase Order.</li>
-            <li>The Vendor confirms acceptance of this order by signing and returning a copy, or by confirming in writing.</li>
-            <li>Any change to price, quantity, specification or delivery date should be agreed with {companyName || "FastraSuite"} in writing before it takes effect.</li>
-            <li>Goods or services should be delivered as stated on this order. The Vendor should tell {companyName || "FastraSuite"} promptly if delivery will be late or if any part of the order cannot be supplied as specified.</li>
-            <li>Deliveries are checked on receipt, and any difference from this order is raised with the Vendor.</li>
-            <li>Invoices should quote this Purchase Order number and match the items, quantities and prices on it. Any difference should be explained in writing.</li>
-            <li>Payment is made against this Purchase Order, to the Vendor&apos;s bank account on record, in line with the payment terms stated on it.</li>
+            <li>
+              This order is based on the items, quantities, prices, delivery
+              date and payment terms stated on this Purchase Order.
+            </li>
+            <li>
+              The Vendor confirms acceptance of this order by signing and
+              returning a copy, or by confirming in writing.
+            </li>
+            <li>
+              Any change to price, quantity, specification or delivery date
+              should be agreed with {companyName || "FastraSuite"} in writing
+              before it takes effect.
+            </li>
+            <li>
+              Goods or services should be delivered as stated on this order. The
+              Vendor should tell {companyName || "FastraSuite"} promptly if
+              delivery will be late or if any part of the order cannot be
+              supplied as specified.
+            </li>
+            <li>
+              Deliveries are checked on receipt, and any difference from this
+              order is raised with the Vendor.
+            </li>
+            <li>
+              Invoices should quote this Purchase Order number and match the
+              items, quantities and prices on it. Any difference should be
+              explained in writing.
+            </li>
+            <li>
+              Payment is made against this Purchase Order, to the Vendor&apos;s
+              bank account on record, in line with the payment terms stated on
+              it.
+            </li>
           </ol>
         </div>
 
@@ -388,12 +467,11 @@ export const PurchaseOrderDocumentTemplate: React.FC<PurchaseOrderDocumentTempla
         </div>
 
         <div className="tracking-wider uppercase font-medium text-[8px] text-gray-400">
-          GENERATED VIA FASTRASUITE—NIGERIA&apos;S TRUSTED PROJECT COSTING PLATFORM.
+          GENERATED VIA FASTRASUITE—NIGERIA&apos;S TRUSTED PROJECT COSTING
+          PLATFORM.
         </div>
 
-        <div className="font-medium text-gray-400">
-          Page 1 of 1
-        </div>
+        <div className="font-medium text-gray-400">Page 1 of 1</div>
       </div>
     </div>
   );
