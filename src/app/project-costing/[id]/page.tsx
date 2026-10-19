@@ -931,30 +931,37 @@ export default function ProjectDashboardPage() {
             {/* Right Column */}
             <div className="col-span-1 flex flex-col gap-6">
               {/* Budget Utilization */}
-              <div className="bg-white p-6 rounded shadow-sm border border-gray-100 flex flex-col gap-4">
-                <Skeleton className="h-5 w-36 bg-gray-200" />
-                <Skeleton className="h-4 w-28 bg-gray-200" />
-                <Skeleton className="h-8 w-full bg-gray-100 rounded mt-2" />
-                <Skeleton className="h-4 w-3/4 bg-gray-200" />
+              <div className="bg-white p-5 rounded shadow-sm border border-gray-100 flex flex-col gap-3">
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-5 w-32 bg-gray-200" />
+                  <Skeleton className="h-4 w-16 bg-gray-200" />
+                </div>
+                <Skeleton className="h-3 w-28 bg-gray-200 ml-auto" />
+                <Skeleton className="h-5 w-full bg-gray-100 rounded" />
+                <div className="flex gap-2">
+                  <Skeleton className="h-3 w-14 bg-gray-200" />
+                  <Skeleton className="h-3 w-14 bg-gray-200" />
+                  <Skeleton className="h-3 w-14 bg-gray-200" />
+                </div>
               </div>
 
               {/* Pending Requests */}
-              <div className="bg-white p-6 rounded shadow-sm border border-gray-100 flex flex-col gap-3">
-                <Skeleton className="h-5 w-40 bg-gray-200" />
-                <Skeleton className="h-8 w-16 bg-gray-200 mt-2" />
-                <Skeleton className="h-8 w-32 bg-gray-200" />
+              <div className="bg-white p-5 rounded shadow-sm border border-gray-100 flex flex-col gap-3">
+                <Skeleton className="h-5 w-36 bg-gray-200" />
+                <Skeleton className="h-6 w-16 bg-gray-200 mt-1" />
+                <Skeleton className="h-6 w-32 bg-gray-200" />
               </div>
 
               {/* Spend by Category */}
-              <div className="bg-white p-6 rounded shadow-sm border border-gray-100 flex flex-col items-center gap-4">
+              <div className="bg-white p-5 rounded shadow-sm border border-gray-100 flex flex-col items-center gap-4">
                 <div className="w-full flex justify-between">
                   <Skeleton className="h-5 w-36 bg-gray-200" />
                 </div>
                 <Skeleton className="h-36 w-36 bg-gray-200 rounded-full" />
                 <div className="grid grid-cols-3 gap-2 w-full pt-2">
-                  <Skeleton className="h-6 w-full bg-gray-200" />
-                  <Skeleton className="h-6 w-full bg-gray-200" />
-                  <Skeleton className="h-6 w-full bg-gray-200" />
+                  <Skeleton className="h-5 w-full bg-gray-200" />
+                  <Skeleton className="h-5 w-full bg-gray-200" />
+                  <Skeleton className="h-5 w-full bg-gray-200" />
                 </div>
               </div>
             </div>
@@ -2467,7 +2474,7 @@ export default function ProjectDashboardPage() {
                   ))}
                 </div>
               </div>
-              <div className="w-full flex-1 min-h-[340px] relative">
+              <div className="w-full flex-1 min-h-[380px] relative">
                 <ResponsiveContainer width="100%" height="100%" className="absolute inset-0">
                   <AreaChart data={dynamicLineChartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
                     <defs>
@@ -2588,61 +2595,64 @@ export default function ProjectDashboardPage() {
           {/* Right Column (1/3 width) */}
           <div className="col-span-1 flex flex-col gap-6">
             
-            {/* Budget Utilization */}
-            <div className="bg-white p-6 rounded shadow-sm border border-gray-100">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-[#3B7CED]">Budget Utilization</h3>
-              </div>
-              <div className="flex items-center gap-2 mb-6">
-                <span className="text-sm text-gray-500">Budget Health:</span>
-                {fin?.budget_health === "ON_TRACK" ? (
-                  <Badge className="bg-green-100 text-green-600 border-transparent hover:bg-green-100 text-xs py-0.5">On Track</Badge>
-                ) : (fin?.budget_health === "AT_RISK" || fin?.budget_health === "OVER_BUDGET" || finPercent > 0.8) ? (
-                  <Badge className="bg-orange-100 text-orange-600 border-transparent hover:bg-orange-100 text-xs py-0.5">At Risk</Badge>
-                ) : (
-                  <Badge className="bg-green-100 text-green-600 border-transparent hover:bg-green-100 text-xs py-0.5">On Track</Badge>
-                )}
+            {/* Budget Utilization (Shrunk a little to make space) */}
+            <div className="bg-white p-5 rounded shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h3 className="text-base font-medium text-[#3B7CED]">Budget Utilization</h3>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs text-gray-400">Health:</span>
+                  {fin?.budget_health === "ON_TRACK" ? (
+                    <Badge className="bg-green-100 text-green-600 border-transparent hover:bg-green-100 text-[11px] py-0 px-2 font-medium">On Track</Badge>
+                  ) : (fin?.budget_health === "AT_RISK" || fin?.budget_health === "OVER_BUDGET" || finPercent > 0.8) ? (
+                    <Badge className="bg-orange-100 text-orange-600 border-transparent hover:bg-orange-100 text-[11px] py-0 px-2 font-medium">At Risk</Badge>
+                  ) : (
+                    <Badge className="bg-green-100 text-green-600 border-transparent hover:bg-green-100 text-[11px] py-0 px-2 font-medium">On Track</Badge>
+                  )}
+                </div>
               </div>
 
-              <div className="text-right text-xs text-gray-500 mb-2">₦{actualSpend.toLocaleString()} / ₦{budgetNum.toLocaleString()} ({(finPercent * 100).toFixed(1)}%)</div>
+              <div className="text-right text-xs text-gray-500 mb-1.5">
+                <span className="font-semibold text-gray-700">₦{actualSpend.toLocaleString()}</span> / ₦{budgetNum.toLocaleString()}{" "}
+                <span className="text-gray-500 font-normal">({(finPercent * 100).toFixed(1)}%)</span>
+              </div>
               
               {/* Stacked Progress Bar */}
-              <div className="w-full h-8 flex rounded overflow-hidden mb-6">
+              <div className="w-full h-5 flex rounded-md overflow-hidden mb-3.5 bg-gray-100">
                 <div className="bg-[#2BA24D] h-full transition-all" style={{ width: `${actualPercent * 100}%` }}></div>
                 <div className="bg-[#F59E0B] h-full transition-all" style={{ width: `${committedPercent * 100}%` }}></div>
                 <div className="bg-[#E5E7EB] h-full transition-all" style={{ width: `${availablePercent * 100}%` }}></div>
               </div>
 
               {/* Progress Bar Legend */}
-              <div className="flex flex-wrap gap-4 text-xs">
+              <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-[11px]">
                 <div className="flex items-center gap-1.5 text-gray-600">
-                  <div className="w-3 h-3 rounded bg-[#2BA24D]"></div>
-                  Actual Spent ({(actualPercent * 100).toFixed(1)}%)
+                  <div className="w-2.5 h-2.5 rounded-xs bg-[#2BA24D] shrink-0"></div>
+                  <span>Actual ({(actualPercent * 100).toFixed(1)}%)</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-gray-600">
-                  <div className="w-3 h-3 rounded bg-[#F59E0B]"></div>
-                  Committed Spent ({(committedPercent * 100).toFixed(1)}%)
+                  <div className="w-2.5 h-2.5 rounded-xs bg-[#F59E0B] shrink-0"></div>
+                  <span>Committed ({(committedPercent * 100).toFixed(1)}%)</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-gray-600">
-                  <div className="w-3 h-3 rounded bg-[#E5E7EB]"></div>
-                  Available ({(availablePercent * 100).toFixed(1)}%)
+                  <div className="w-2.5 h-2.5 rounded-xs bg-[#E5E7EB] border border-gray-300 shrink-0"></div>
+                  <span>Available ({(availablePercent * 100).toFixed(1)}%)</span>
                 </div>
               </div>
             </div>
 
             {/* Pending Requests */}
-            <div className="bg-white p-6 rounded shadow-sm border border-gray-100">
-              <h3 className="text-lg font-medium text-[#3B7CED] mb-6">Pending Requests</h3>
-              <div className="flex flex-col gap-4">
+            <div className="bg-white p-5 rounded shadow-sm border border-gray-100">
+              <h3 className="text-base font-medium text-[#3B7CED] mb-3">Pending Requests</h3>
+              <div className="flex flex-col gap-3">
                 <div>
-                  <div className="text-sm text-gray-500 mb-1">Awaiting Approval</div>
-                  <div className="text-2xl font-bold text-gray-800">
+                  <div className="text-xs text-gray-500 mb-0.5">Awaiting Approval</div>
+                  <div className="text-xl font-bold text-gray-800">
                     {isLoadingPendingSummary ? "-" : (summaryPendingCount ?? pendingAdjsList.length)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-500 mb-1">Total Value</div>
-                  <div className="text-2xl font-bold text-gray-800">
+                  <div className="text-xs text-gray-500 mb-0.5">Total Value</div>
+                  <div className="text-xl font-bold text-gray-800">
                     {isLoadingPendingSummary ? "-" : `₦${(summaryPendingValue ?? pendingAdjsTotal).toLocaleString()}`}
                   </div>
                 </div>
@@ -2650,9 +2660,9 @@ export default function ProjectDashboardPage() {
             </div>
 
             {/* Spend by Category - Complete Filled Pie Chart */}
-            <div className="bg-white p-6 rounded shadow-sm border border-gray-100">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-medium text-[#3B7CED]">Spend by Category</h3>
+            <div className="bg-white p-5 rounded shadow-sm border border-gray-100">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-base font-medium text-[#3B7CED]">Spend by Category</h3>
                 <span className="text-xs text-gray-400 font-medium">Breakdown</span>
               </div>
               <div className="flex flex-col items-center justify-center gap-4 relative min-h-[180px]">
