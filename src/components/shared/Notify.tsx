@@ -26,7 +26,7 @@ function NotificationButton() {
   return (
     <Button
       aria-label="Open notifications"
-      className="relative h-9 w-9 flex-shrink-0 rounded-full bg-white border border-transparent hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4169FF] transition-all duration-150 flex items-center justify-center"
+      className="relative h-9 w-9 shrink-0 rounded-full bg-white border border-transparent hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4169FF] transition-all duration-150 flex items-center justify-center"
     >
       {/* Bell icon (stroke) */}
       <HiMiniBell color={"black"} />

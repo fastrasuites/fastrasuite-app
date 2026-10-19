@@ -390,12 +390,14 @@ export default function DisbursementDetailPage() {
   const { data: companyData } = useGetCompanyQuery();
   const { data: pcrData } = useGetPettyCashRequestQuery(
     (d?.petty_cash_request as number) || 0,
-    { skip: !d?.petty_cash_request }
+    { skip: !d?.petty_cash_request },
   );
 
   const user = useSelector((state: RootState) => (state as any).auth?.user);
   const tenant_company_name =
-    useSelector((state: RootState) => (state as any).auth?.tenant_company_name) ||
+    useSelector(
+      (state: RootState) => (state as any).auth?.tenant_company_name,
+    ) ||
     user?.company_name ||
     user?.tenant_name;
 
@@ -405,7 +407,12 @@ export default function DisbursementDetailPage() {
     (companyData as any)?.company_name ||
     "FastraSuite";
   const companyAddress = companyData?.street_address
-    ? [companyData.street_address, companyData.city, companyData.state, companyData.country]
+    ? [
+        companyData.street_address,
+        companyData.city,
+        companyData.state,
+        companyData.country,
+      ]
         .filter(Boolean)
         .join(", ")
     : (companyData as any)?.address || "";
@@ -467,7 +474,10 @@ export default function DisbursementDetailPage() {
         return await toJpeg(el, { ...options, quality: 0.95 });
       }
     } catch (primaryErr) {
-      console.warn("Primary html-to-image capture encountered an issue, running fallback:", primaryErr);
+      console.warn(
+        "Primary html-to-image capture encountered an issue, running fallback:",
+        primaryErr,
+      );
       try {
         const html2canvas = (await import("html2canvas")).default;
         const canvas = await html2canvas(el, {
@@ -485,12 +495,17 @@ export default function DisbursementDetailPage() {
           windowWidth: width,
           windowHeight: height,
         });
-        return canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", 0.95);
+        return canvas.toDataURL(
+          format === "png" ? "image/png" : "image/jpeg",
+          0.95,
+        );
       } catch (fallbackErr: any) {
         console.error("html2canvas fallback also failed:", fallbackErr);
         throw new Error(
           fallbackErr?.message ||
-            (primaryErr instanceof Error ? primaryErr.message : "Document rendering failed. Please retry.")
+            (primaryErr instanceof Error
+              ? primaryErr.message
+              : "Document rendering failed. Please retry."),
         );
       }
     }
@@ -504,7 +519,9 @@ export default function DisbursementDetailPage() {
     setExportStatusText("Preparing...");
 
     try {
-      setExportStatusText(format === "pdf" ? "Generating PDF..." : "Capturing visual...");
+      setExportStatusText(
+        format === "pdf" ? "Generating PDF..." : "Capturing visual...",
+      );
 
       let element: HTMLElement | null = null;
       for (let i = 0; i < 15; i++) {
@@ -556,13 +573,27 @@ export default function DisbursementDetailPage() {
           finalWidth = finalWidth * scale;
           finalHeight = usableHeight;
           const xOffset = margin + (usableWidth - finalWidth) / 2;
-          pdf.addImage(dataUrl, "JPEG", xOffset, margin, finalWidth, finalHeight);
+          pdf.addImage(
+            dataUrl,
+            "JPEG",
+            xOffset,
+            margin,
+            finalWidth,
+            finalHeight,
+          );
         } else if (finalHeight > usableHeight) {
           let position = margin;
           let remainingHeight = finalHeight;
 
           while (remainingHeight > 0) {
-            pdf.addImage(dataUrl, "JPEG", margin, position, finalWidth, finalHeight);
+            pdf.addImage(
+              dataUrl,
+              "JPEG",
+              margin,
+              position,
+              finalWidth,
+              finalHeight,
+            );
             remainingHeight -= usableHeight;
             position -= usableHeight;
             if (remainingHeight > 0) {
@@ -570,7 +601,14 @@ export default function DisbursementDetailPage() {
             }
           }
         } else {
-          pdf.addImage(dataUrl, "JPEG", margin, margin, finalWidth, finalHeight);
+          pdf.addImage(
+            dataUrl,
+            "JPEG",
+            margin,
+            margin,
+            finalWidth,
+            finalHeight,
+          );
         }
 
         setExportStatusText("Downloading...");
@@ -586,8 +624,8 @@ export default function DisbursementDetailPage() {
         err instanceof Error
           ? err.message
           : typeof err === "string"
-          ? err
-          : "Failed to export disbursement.";
+            ? err
+            : "Failed to export disbursement.";
       showToast(errorMsg, "error");
     } finally {
       setIsExporting(false);
@@ -893,7 +931,7 @@ export default function DisbursementDetailPage() {
 
                         {/* Hairline animated progress bar */}
                         {isExporting && (
-                          <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-100 overflow-hidden">
+                          <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-100 overflow-hidden">
                             <motion.div
                               initial={{ x: "-100%" }}
                               animate={{ x: "100%" }}

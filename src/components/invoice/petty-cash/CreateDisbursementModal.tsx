@@ -326,8 +326,8 @@ export default function CreateDisbursementModal({
         );
         return;
       }
-      if (file.size > 8 * 1024 * 1024) {
-        showToast("error", "File is too large. Maximum size is 8 MB.");
+      if (file.size > 20 * 1024 * 1024) {
+        showToast("error", "File is too large. Maximum size is 20 MB.");
         return;
       }
       setVoucherFile(file);
@@ -932,8 +932,8 @@ export default function CreateDisbursementModal({
                             Upload photo of signed voucher
                           </p>
                           <p className="text-xs text-gray-400">
-                            Drag & drop or click · JPG, PNG, WebP or PDF · max 8
-                            MB
+                            Drag & drop or click · JPG, PNG, WebP or PDF · max
+                            20 MB
                           </p>
                           <input
                             ref={fileInputRef}
