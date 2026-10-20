@@ -1,9 +1,9 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, AlertTriangle, X, Loader2, ArrowRight, Download, Layers, Users, Warehouse, RefreshCw } from "lucide-react";
+import { Check, AlertTriangle, X, Loader2, ArrowRight, Download, Layers, Users, Warehouse, RefreshCw, Mail, Building2, Copy, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useStatusModal, StatusModal, extractErrorMessage } from "@/components/shared/StatusModal";
 import { useSelector } from "react-redux";
@@ -44,8 +44,8 @@ const PLAN_FEATURES: Record<string, PlanFeature[]> = {
   ],
   professional: [
     { text: "Everything in Starter", isHeader: true },
-    { text: "Up to 15 active projects" },
-    { text: "Up to 25 users" },
+    { text: "Up to 10 active projects" },
+    { text: "Up to 15 users" },
     { text: "Up to 3 warehouses" },
     { text: "Advanced approval workflows" },
     { text: "Advanced procurement and inventory" },
@@ -103,6 +103,8 @@ export default function BillingPage() {
   const [modalStep, setModalStep] = useState<1 | 2>(1);
   const [selectedPlanTier, setSelectedPlanTier] = useState<"starter" | "professional" | "enterprise">("starter");
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isEnterpriseModalOpen, setIsEnterpriseModalOpen] = useState(false);
+  const [isEmailCopied, setIsEmailCopied] = useState(false);
   const [receiptInvoice, setReceiptInvoice] = useState<SubscriptionInvoice | null>(null);
 
   const statusModal = useStatusModal();
@@ -142,17 +144,47 @@ export default function BillingPage() {
     const reference = searchParams.get("reference") || searchParams.get("trxref");
     if (!reference || verifiedRefs.current.has(reference)) return;
 
+    // 1. Try URL parameters
     const invoiceIdParam = searchParams.get("verify_invoice") || searchParams.get("invoice_id");
     let invoiceId = invoiceIdParam ? parseInt(invoiceIdParam, 10) : undefined;
+
+    // 2. Try sessionStorage pending checkout cache
+    if (!invoiceId && typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem("fastra_pending_payment");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.reference === reference && parsed?.invoice_id) {
+            invoiceId = Number(parsed.invoice_id);
+          }
+        }
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
+
+    // 3. Fallback to invoice list (prioritizing exact reference match)
     if (!invoiceId && invoices.length > 0) {
-      const matched = invoices.find(
-        (inv) => inv.reference === reference || inv.status === "pending"
-      );
-      if (matched) invoiceId = matched.id;
+      const exactMatch = invoices.find((inv) => inv.reference === reference);
+      if (exactMatch) {
+        invoiceId = exactMatch.id;
+      } else {
+        const pendingMatch = invoices.find(
+          (inv) => inv.status === "pending" || inv.status === "overdue" || inv.is_overdue
+        );
+        if (pendingMatch) invoiceId = pendingMatch.id;
+      }
     }
 
     if (invoiceId) {
       verifiedRefs.current.add(reference);
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.removeItem("fastra_pending_payment");
+        } catch (e) {
+          // ignore
+        }
+      }
       verifyInvoice({ invoice_id: invoiceId, reference })
         .unwrap()
         .then(() => {
@@ -179,20 +211,37 @@ export default function BillingPage() {
     }
   }, [searchParams, invoices, verifyInvoice, refetchStatus, refetchInvoices, router, statusModal]);
 
-  // Current Subscription Properties
-  const isTrial = subStatus?.status === "trialing" || !subStatus?.plan;
-  const currentStatus = subStatus?.status || "trialing";
-  const currentPlanTier = subStatus?.plan?.tier || (isTrial ? "trial" : "starter");
-  const currentPlanName = isTrial ? "Free Trial" : subStatus?.plan?.name || "Starter";
-  const currentInterval = subStatus?.plan?.interval || "monthly";
-  const trialDaysRemaining = subStatus?.trial_days_remaining ?? 14;
-  const daysToRenewal = subStatus?.days_to_renewal ?? 30;
-
   // Format dates
   const expiresOrRenewsDate = subStatus?.current_period_end || subStatus?.trial_end || "2026-09-01";
   const formattedExpiry = expiresOrRenewsDate
     ? new Date(expiresOrRenewsDate).toISOString().split("T")[0]
     : "2026-09-01";
+
+  // Check if subscription period has ended or access is revoked (even if backend status is still 'active')
+  const isPeriodEnded = useMemo(() => {
+    if (!subStatus?.current_period_end) return false;
+    const end = new Date(subStatus.current_period_end).getTime();
+    return !isNaN(end) && end < Date.now();
+  }, [subStatus?.current_period_end]);
+
+  const isExpired = Boolean(
+    subStatus?.status === "expired" ||
+    isPeriodEnded ||
+    (subStatus && subStatus.is_access_granted === false && subStatus.status !== "trialing") ||
+    (subStatus?.days_to_renewal !== undefined && subStatus.days_to_renewal !== null && Number(subStatus.days_to_renewal) <= 0 && subStatus?.is_access_granted === false)
+  );
+
+  // Current Subscription Properties
+  const isTrial = subStatus?.status === "trialing" || !subStatus?.plan;
+  const currentStatus = isExpired
+    ? "expired"
+    : subStatus?.status || "trialing";
+  const isActiveSub = Boolean(subStatus?.status === "active" && !isExpired);
+  const currentPlanTier = subStatus?.plan?.tier || (isTrial ? "trial" : "starter");
+  const currentPlanName = isTrial ? "Free Trial" : subStatus?.plan?.name || "Starter";
+  const currentInterval = subStatus?.plan?.interval || "monthly";
+  const trialDaysRemaining = subStatus?.trial_days_remaining ?? 14;
+  const daysToRenewal = subStatus?.days_to_renewal ?? 30;
 
   // Helpers for plan actions
   const getPlanByTierAndInterval = (tier: string, interval: "monthly" | "annually"): Plan | undefined => {
@@ -201,12 +250,23 @@ export default function BillingPage() {
 
   const [createdInvoice, setCreatedInvoice] = useState<any>(null);
 
+  // Downgrade quota conflict checking for the modal
+  const targetPlanTierLimits = useMemo(() => {
+    if (selectedPlanTier === "enterprise") return { maxProjects: 9999, maxUsers: 9999 };
+    if (selectedPlanTier === "professional") return { maxProjects: 10, maxUsers: 15 };
+    return { maxProjects: 3, maxUsers: 5 }; // starter
+  }, [selectedPlanTier]);
+
+  const downgradeProjectsLocked = Math.max(0, currentProjects - targetPlanTierLimits.maxProjects);
+  const downgradeUsersLocked = Math.max(0, currentUsers - targetPlanTierLimits.maxUsers);
+  const hasDowngradeQuotaConflict = downgradeProjectsLocked > 0 || downgradeUsersLocked > 0;
+
   const handleOpenPlanModal = (defaultTier?: "starter" | "professional" | "enterprise") => {
     const targetTier = defaultTier || selectedPlanTier;
     const currentTierRank = TIER_ORDER[currentPlanTier] || 0;
     const targetTierRank = TIER_ORDER[targetTier] || 0;
 
-    if (subStatus?.status === "active" && targetTierRank < currentTierRank) {
+    if (isActiveSub && targetTierRank < currentTierRank) {
       statusModal.showError(
         "Downgrade Not Allowed",
         "You cannot downgrade your plan while you have an active subscription. You can change your plan after your current subscription expires."
@@ -317,6 +377,19 @@ export default function BillingPage() {
 
   const handleExecuteCheckout = () => {
     if (createdInvoice?.payment_url) {
+      if (typeof window !== "undefined" && createdInvoice.reference) {
+        try {
+          sessionStorage.setItem(
+            "fastra_pending_payment",
+            JSON.stringify({
+              reference: createdInvoice.reference,
+              invoice_id: createdInvoice.invoice_id,
+            })
+          );
+        } catch (e) {
+          // ignore
+        }
+      }
       setIsPlanModalOpen(false);
       window.location.href = createdInvoice.payment_url;
     } else {
@@ -336,7 +409,21 @@ export default function BillingPage() {
   };
 
   const handlePayInvoice = async (invoiceId: number, existingPaymentUrl?: string) => {
+    const inv = invoices.find((i) => i.id === invoiceId);
     if (existingPaymentUrl) {
+      if (typeof window !== "undefined" && inv?.reference) {
+        try {
+          sessionStorage.setItem(
+            "fastra_pending_payment",
+            JSON.stringify({
+              reference: inv.reference,
+              invoice_id: invoiceId,
+            })
+          );
+        } catch (e) {
+          // ignore
+        }
+      }
       window.location.href = existingPaymentUrl;
       return;
     }
@@ -353,6 +440,19 @@ export default function BillingPage() {
       }).unwrap();
 
       if (res.payment_url) {
+        if (typeof window !== "undefined" && (res.reference || inv?.reference)) {
+          try {
+            sessionStorage.setItem(
+              "fastra_pending_payment",
+              JSON.stringify({
+                reference: res.reference || inv?.reference,
+                invoice_id: invoiceId,
+              })
+            );
+          } catch (e) {
+            // ignore
+          }
+        }
         window.location.href = res.payment_url;
       } else {
         statusModal.showError("Payment Failed", "Payment authorization URL could not be generated.");
@@ -364,7 +464,12 @@ export default function BillingPage() {
 
   const handleVerifyPendingInvoice = async (invoiceId: number, reference?: string) => {
     try {
-      await verifyInvoice({ invoice_id: invoiceId, reference: reference || "" }).unwrap();
+      let refToUse = reference;
+      if (!refToUse) {
+        const inv = invoices.find((i) => i.id === invoiceId);
+        refToUse = inv?.reference || "";
+      }
+      await verifyInvoice({ invoice_id: invoiceId, reference: refToUse || "" }).unwrap();
       statusModal.showSuccess(
         "Payment Confirmed!",
         "Your payment has been verified with Paystack. Your plan quotas and subscription status have been updated."
@@ -407,9 +512,13 @@ export default function BillingPage() {
     const invIssue = inv.issue_date || formattedToday;
     const invDue = inv.due_date || formattedToday;
     const invPeriod = inv.billing_period || billingPeriodString;
-    const teamName = auth?.tenant_company_name || "Workspace";
-    const userEmail = auth?.user?.email || "support@fastrasuite.com";
-    const companyAddress = companyData?.street_address || "123, Lagos st";
+    const teamName =
+      auth?.tenant_company_name ||
+      (companyData as any)?.name ||
+      (companyData as any)?.company_name ||
+      "Workspace";
+    const userEmail = auth?.user?.email || "billing@organization.com";
+    const companyAddress = companyData?.street_address || "Address not provided";
     const companyCity = companyData?.city || "Lagos";
     const companyCountry = companyData?.country || "Nigeria";
 
@@ -488,16 +597,15 @@ export default function BillingPage() {
   <div class="addr-grid">
     <div>
       <div class="addr-heading">Fastra Suite, Inc</div>
-      <div>123, Lagos st</div>
-      <div>Lagos st</div>
-      <div>Nigeria</div>
-      <div>support@Fastra.com</div>
+      <div>Lagos, Nigeria</div>
+      <div>support@fastrasuite.com</div>
+      <div>+234 808 989 2733</div>
     </div>
     <div>
       <div class="addr-heading">Bill to</div>
       <div>${teamName}</div>
       <div>${companyAddress}</div>
-      <div>${companyCity}, ${companyCountry}</div>
+      <div>${companyCity ? `${companyCity}, ${companyCountry}` : companyCountry}</div>
       <div>${userEmail}</div>
     </div>
   </div>
@@ -649,7 +757,19 @@ export default function BillingPage() {
             className="space-y-6"
           >
             {/* Top Card: Current Plan Banner */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-2xs space-y-6">
+            {isStatusLoading ? (
+              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-2xs space-y-4 animate-pulse">
+                <div className="flex justify-between items-start">
+                  <div className="space-y-2">
+                    <div className="h-6 bg-gray-200 rounded w-48"></div>
+                    <div className="h-4 bg-gray-100 rounded w-36"></div>
+                  </div>
+                  <div className="h-6 bg-gray-200 rounded-full w-20"></div>
+                </div>
+                <div className="h-14 bg-gray-50 rounded-lg"></div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-2xs space-y-6">
               <div className="flex justify-between items-start">
                 <div>
                   <h1 className="text-xl font-bold text-gray-900">
@@ -739,7 +859,7 @@ export default function BillingPage() {
                     </p>
                   </div>
                   <Button
-                    onClick={() => handleOpenPlanModal("starter")}
+                    onClick={() => handleOpenPlanModal(currentPlanTier === "trial" ? "starter" : (currentPlanTier as any))}
                     className="bg-white hover:bg-red-50 text-red-700 border border-red-400 text-xs font-medium h-9 shadow-2xs"
                   >
                     Renew
@@ -747,6 +867,7 @@ export default function BillingPage() {
                 </div>
               ) : null}
             </div>
+            )}
 
             {/* Metrics 4-Column Bar */}
             <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-2xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -1007,11 +1128,12 @@ export default function BillingPage() {
                   const currentRank = TIER_ORDER[currentPlanTier] || 0;
                   const thisRank = TIER_ORDER[tier] || 0;
                   const isDowngrade = !isTrial && thisRank < currentRank;
-                  const isActiveSub = subStatus?.status === "active";
                   const isDowngradeDisabled = isDowngrade && isActiveSub;
 
                   const buttonText = isCurrent
-                    ? "Current Plan"
+                    ? isExpired
+                      ? "Renew Plan"
+                      : "Current Plan"
                     : isDowngradeDisabled
                     ? "Downgrade Unavailable"
                     : isTrial || thisRank > currentRank
@@ -1088,10 +1210,10 @@ export default function BillingPage() {
                           </Link>
                         ) : (
                           <Button
-                            disabled={isCurrent || isDowngradeDisabled}
+                            disabled={(isCurrent && !isExpired) || isDowngradeDisabled}
                             onClick={() => handleOpenPlanModal(tier)}
                             className={`w-full h-11 text-xs font-semibold rounded-lg transition-all ${
-                              isCurrent
+                              isCurrent && !isExpired
                                 ? "bg-slate-400 text-white cursor-default"
                                 : isDowngradeDisabled
                                 ? "bg-slate-200 text-slate-500 cursor-not-allowed border border-slate-300 shadow-none"
@@ -1263,13 +1385,19 @@ export default function BillingPage() {
                   >
                     Change Plan
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setIsCancelModalOpen(true)}
-                    className="border-red-300 text-red-600 hover:bg-red-50 text-xs font-medium h-9 px-4"
-                  >
-                    Cancel Subscription
-                  </Button>
+                  {currentStatus === "canceled" ? (
+                    <span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">
+                      Cancellation Scheduled
+                    </span>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsCancelModalOpen(true)}
+                      className="border-red-300 text-red-600 hover:bg-red-50 text-xs font-medium h-9 px-4"
+                    >
+                      Cancel Subscription
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
@@ -1293,7 +1421,19 @@ export default function BillingPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {invoices.length === 0 ? (
+                      {isInvoicesLoading ? (
+                        [1, 2, 3].map((skeletonIdx) => (
+                          <tr key={skeletonIdx} className="animate-pulse">
+                            <td className="py-4 px-5"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                            <td className="py-4 px-5"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
+                            <td className="py-4 px-5"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
+                            <td className="py-4 px-5"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
+                            <td className="py-4 px-5"><div className="h-4 bg-gray-200 rounded w-16"></div></td>
+                            <td className="py-4 px-5 text-center"><div className="h-5 bg-gray-200 rounded-full w-16 mx-auto"></div></td>
+                            <td className="py-4 px-5 text-center"><div className="h-4 bg-gray-200 rounded w-24 mx-auto"></div></td>
+                          </tr>
+                        ))
+                      ) : invoices.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="py-8 text-center text-gray-400">
                             No billing invoice records found.
@@ -1301,8 +1441,10 @@ export default function BillingPage() {
                         </tr>
                       ) : (
                         invoices.map((inv) => {
-                          const isPending = inv.status === "pending";
                           const isPaid = inv.status === "paid";
+                          const isOverdue = Boolean(inv.is_overdue || inv.status === "overdue");
+                          const isPending = (inv.status === "pending" || !inv.status) && !isOverdue;
+                          const canPayOrVerify = isPending || isOverdue;
 
                           return (
                             <tr key={inv.id} className="hover:bg-gray-50/60 transition-colors">
@@ -1322,17 +1464,17 @@ export default function BillingPage() {
                                   className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold capitalize ${
                                     isPaid
                                       ? "bg-emerald-100 text-emerald-700"
-                                      : isPending
-                                      ? "bg-amber-100 text-amber-800"
-                                      : "bg-red-100 text-red-700"
+                                      : isOverdue
+                                      ? "bg-red-100 text-red-700"
+                                      : "bg-amber-100 text-amber-800"
                                   }`}
                                 >
-                                  {inv.status}
+                                  {isOverdue ? "Overdue" : inv.status}
                                 </span>
                               </td>
                               <td className="py-4 px-5 text-center">
                                 <div className="flex items-center justify-center gap-2.5">
-                                  {isPending ? (
+                                  {canPayOrVerify ? (
                                     <div className="flex items-center gap-2 justify-center">
                                       <Button
                                         size="sm"
@@ -1514,6 +1656,22 @@ export default function BillingPage() {
                     })}
                   </div>
 
+                  {/* Over-quota downgrade warning banner */}
+                  {hasDowngradeQuotaConflict && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5 text-amber-900 text-xs shadow-2xs">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block text-amber-950">Resource Quota Notice:</span>
+                        Your organization currently has <strong>{currentProjects} active project{currentProjects !== 1 ? "s" : ""}</strong> and <strong>{currentUsers} team member{currentUsers !== 1 ? "s" : ""}</strong>.
+                        Choosing the <strong>{selectedPlanTier.charAt(0).toUpperCase() + selectedPlanTier.slice(1)}</strong> plan will cause{" "}
+                        {downgradeProjectsLocked > 0 && <span><strong>{downgradeProjectsLocked} project{downgradeProjectsLocked !== 1 ? "s" : ""}</strong></span>}
+                        {downgradeProjectsLocked > 0 && downgradeUsersLocked > 0 && " and "}
+                        {downgradeUsersLocked > 0 && <span><strong>{downgradeUsersLocked} user{downgradeUsersLocked !== 1 ? "s" : ""}</strong></span>}
+                        {" "}to be restricted from access until upgraded or archived.
+                      </div>
+                    </div>
+                  )}
+
                   {/* Step Footer */}
                   <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                     <div className="flex items-center gap-2 text-xs font-semibold text-gray-700">
@@ -1558,6 +1716,19 @@ export default function BillingPage() {
               {/* STEP 2: A4 INVOICE SHEET (MATCHING A4 - 2.PNG) */}
               {modalStep === 2 && (
                 <div className="space-y-6">
+                  {/* Over-quota downgrade warning banner for Step 2 */}
+                  {hasDowngradeQuotaConflict && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5 text-amber-900 text-xs shadow-2xs max-w-[580px] mx-auto">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block text-amber-950">Plan Limit Notice:</span>
+                        Proceeding with this plan will lock {downgradeProjectsLocked > 0 && `${downgradeProjectsLocked} project(s)`}
+                        {downgradeProjectsLocked > 0 && downgradeUsersLocked > 0 && " and "}
+                        {downgradeUsersLocked > 0 && `${downgradeUsersLocked} user(s)`}.
+                      </div>
+                    </div>
+                  )}
+
                   {/* A4 Document Card */}
                   <div className="bg-white rounded-xl border border-gray-200 p-6 sm:p-7 shadow-sm font-sans space-y-5 max-w-[580px] mx-auto text-gray-900">
                     {/* Invoice Top Header */}
@@ -1589,29 +1760,26 @@ export default function BillingPage() {
 
                         <span className="font-semibold text-gray-900">Team name</span>
                         <span className="text-gray-900 font-medium">
-                          {auth?.tenant_company_name || "Workspace"}
+                          {auth?.tenant_company_name || (companyData as any)?.name || "Workspace"}
                         </span>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-2 text-xs text-gray-800 leading-relaxed">
                         <div>
-                          <p className="font-bold text-gray-900">Fastra Suite, Inc</p>
-                          <p>123, Lagos st</p>
-                          <p>123, Lagos st</p>
-                          <p>Lagos st</p>
-                          <p>Nigeria</p>
-                          <p>support@Fastra.com</p>
+                          <p className="font-bold text-gray-900 mb-0.5">Fastra Suite, Inc</p>
+                          <p>Lagos, Nigeria</p>
+                          <p>support@fastrasuite.com</p>
+                          <p>+234 808 989 2733</p>
                         </div>
 
                         <div>
                           <p className="font-bold text-gray-900 mb-0.5">Bill to</p>
                           <p className="font-medium text-gray-900">
-                            {auth?.tenant_company_name || "WorkAll"}
+                            {auth?.tenant_company_name || (companyData as any)?.name || "Workspace"}
                           </p>
-                          <p>{companyData?.street_address || "234, Abuja st"}</p>
-                          <p>{companyData?.city || "Abuja st"}</p>
-                          <p>{companyData?.country || "Nigeria"}</p>
-                          <p>{auth?.user?.email || "support@workall.com"}</p>
+                          <p>{companyData?.street_address || "Address not provided"}</p>
+                          <p>{companyData?.city ? `${companyData.city}, ${companyData.country || "Nigeria"}` : (companyData?.country || "Nigeria")}</p>
+                          <p>{auth?.user?.email || "billing@organization.com"}</p>
                         </div>
                       </div>
                     </div>
@@ -1883,22 +2051,19 @@ export default function BillingPage() {
                   <div className="grid grid-cols-2 gap-5 text-[10px] text-gray-900 mb-5 leading-relaxed">
                     <div>
                       <p className="font-bold text-gray-900 mb-0.5 text-[10.5px]">Fastra Suite, Inc</p>
-                      <p>123, Lagos st</p>
-                      <p>123, Lagos st</p>
-                      <p>Lagos st</p>
-                      <p>Nigeria</p>
-                      <p>support@Fastra.com</p>
+                      <p>Lagos, Nigeria</p>
+                      <p>support@fastrasuite.com</p>
+                      <p>+234 808 989 2733</p>
                     </div>
 
                     <div>
                       <p className="font-bold text-gray-900 mb-0.5 text-[10.5px]">Bill to</p>
                       <p className="font-medium text-gray-900">
-                        {receiptInvoice.tenant_name || auth?.tenant_company_name || (companyData as any)?.name || (companyData as any)?.company_name || "WorkAll"}
+                        {receiptInvoice.tenant_name || auth?.tenant_company_name || (companyData as any)?.name || "Workspace"}
                       </p>
-                      <p>{companyData?.street_address || "234, Abuja st"}</p>
-                      <p>{companyData?.city || "Abuja st"}</p>
-                      <p>{companyData?.country || "Nigeria"}</p>
-                      <p>{auth?.user?.email || "support@workall.com"}</p>
+                      <p>{companyData?.street_address || "Address not provided"}</p>
+                      <p>{companyData?.city ? `${companyData.city}, ${companyData.country || "Nigeria"}` : (companyData?.country || "Nigeria")}</p>
+                      <p>{auth?.user?.email || "billing@organization.com"}</p>
                     </div>
                   </div>
 

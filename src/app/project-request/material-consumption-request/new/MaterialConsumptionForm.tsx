@@ -331,6 +331,29 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
     }, 0);
   }, [productLines]);
 
+  const selectedPhase = useMemo(() => {
+    return phases.find((p: any) => String(p.id) === String(phaseId));
+  }, [phases, phaseId]);
+
+  const selectedPhaseApprovedBudget = useMemo(() => {
+    if (!selectedPhase) return 0;
+    if (selectedPhase.current_budget !== undefined && selectedPhase.current_budget !== null) {
+      return Number(selectedPhase.current_budget);
+    }
+    if (selectedPhase.original_amount !== undefined && selectedPhase.original_amount !== null) {
+      return Number(selectedPhase.original_amount || 0) + Number(selectedPhase.approved_adjustment || 0);
+    }
+    return 0;
+  }, [selectedPhase]);
+
+  const selectedPhaseAvailableBudget = useMemo(() => {
+    if (!selectedPhase) return 0;
+    if (selectedPhase.available_budget !== undefined && selectedPhase.available_budget !== null) {
+      return Number(selectedPhase.available_budget);
+    }
+    return selectedPhaseApprovedBudget;
+  }, [selectedPhase, selectedPhaseApprovedBudget]);
+
   const selectedActivity = useMemo(() => {
     return activities.find((a: any) => String(a.id) === String(wbsElement));
   }, [activities, wbsElement]);
@@ -619,11 +642,17 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                       <FormControl>
                         <NativeSelect value={field.value} onChange={field.onChange} disabled={!projectId || phases.length === 0} className={form.formState.errors.phase ? "border-red-500 focus:ring-red-500/20" : ""}>
                           <option value="" disabled>{!projectId ? "Select a project first" : "Select a phase"}</option>
-                          {phases.map((p) => (
-                            <option key={p.id} value={String(p.id)}>
-                              {p.name}
-                            </option>
-                          ))}
+                          {phases.map((p: any) => {
+                            const bal = p.available_budget !== undefined && p.available_budget !== null ? p.available_budget : p.current_budget;
+                            const balText = bal !== undefined && bal !== null
+                              ? ` (Bal: ₦${Number(bal).toLocaleString("en-NG", { minimumFractionDigits: 2 })})`
+                              : "";
+                            return (
+                              <option key={p.id} value={String(p.id)}>
+                                {p.name}{balText}
+                              </option>
+                            );
+                          })}
                         </NativeSelect>
                       </FormControl>
                     ) : (
@@ -639,19 +668,54 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent className="max-h-72">
-                          {phases.map((p: any) => (
-                            <SelectItem
-                              key={p.id}
-                              value={String(p.id)}
-                              className="py-2.5 cursor-pointer"
-                            >
-                              <span className="font-medium text-gray-800 truncate">
-                                {p.name}
-                              </span>
-                            </SelectItem>
-                          ))}
+                          {phases.map((p: any) => {
+                            const bal = p.available_budget !== undefined && p.available_budget !== null ? p.available_budget : p.current_budget;
+                            return (
+                              <SelectItem
+                                key={p.id}
+                                value={String(p.id)}
+                                className="py-2.5 cursor-pointer [&>span:last-child]:w-full [&>span:last-child]:min-w-0"
+                              >
+                                <span className="flex items-center justify-between gap-3 w-full min-w-0">
+                                  <span className="font-medium text-gray-800 truncate min-w-0">
+                                    {p.name}
+                                  </span>
+                                  {bal !== undefined && bal !== null && (
+                                    <span
+                                      className={cn(
+                                        "font-semibold text-xs px-2 py-0.5 rounded border shrink-0 ml-auto",
+                                        Number(bal) < 0
+                                          ? "text-red-700 bg-red-50 border-red-200"
+                                          : "text-[#3B7CED] bg-blue-50 border-blue-100"
+                                      )}
+                                    >
+                                      Bal: ₦{Number(bal).toLocaleString("en-NG", {
+                                        minimumFractionDigits: 2,
+                                      })}
+                                    </span>
+                                  )}
+                                </span>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
+                    )}
+                    {phaseId && selectedPhase && !wbsElement && (
+                      <div className="pt-2 mt-2 border-t border-gray-100 flex justify-between items-center text-xs text-gray-600">
+                        <span className="font-medium">Phase Available Budget:</span>
+                        <span
+                          className={cn(
+                            "font-bold",
+                            selectedPhaseAvailableBudget < 0 ? "text-red-600" : "text-[#3B7CED]"
+                          )}
+                        >
+                          ₦{selectedPhaseAvailableBudget.toLocaleString("en-NG", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>
+                      </div>
                     )}
                     <FormMessage />
                   </FormItem>
@@ -758,8 +822,13 @@ export default function MaterialConsumptionForm({ requestId }: { requestId?: num
                     {wbsElement && selectedActivity && (
                       <div className="pt-2 mt-2 border-t border-gray-100 flex flex-col gap-1.5 text-xs">
                         <div className="flex justify-between items-center text-gray-600">
-                          <span className="font-medium">Available Budget:</span>
-                          <span className="font-bold text-[#3B7CED]">
+                          <span className="font-medium">Activity Available Budget:</span>
+                          <span
+                            className={cn(
+                              "font-bold",
+                              selectedActivityAvailableBudget < 0 ? "text-red-600" : "text-[#3B7CED]"
+                            )}
+                          >
                             ₦{selectedActivityAvailableBudget.toLocaleString("en-NG", {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,

@@ -423,11 +423,25 @@ export function RequestForm<T extends Record<string, any>>({
   const phaseOptionsList = Array.isArray(rawPhaseOptions)
     ? rawPhaseOptions
     : (rawPhaseOptions as any)?.results || [];
-  const phaseSelectOptions = phaseOptionsList.map((ph: any) => ({
-    label: ph.name,
-    value: String(ph.id),
-    amount: ph.current_budget ?? ph.original_amount,
-  }));
+  const phaseSelectOptions = phaseOptionsList.map((ph: any) => {
+    const approvedBudget =
+      ph.current_budget !== undefined && ph.current_budget !== null
+        ? Number(ph.current_budget)
+        : Number(ph.original_amount || 0) + Number(ph.approved_adjustment || 0);
+    const balance =
+      ph.available_budget !== undefined && ph.available_budget !== null
+        ? Number(ph.available_budget)
+        : approvedBudget;
+    return {
+      label: ph.name,
+      value: String(ph.id),
+      amount: balance,
+      approvedBudget,
+      balance,
+      committed: Number(ph.committed || 0),
+      actual_spent: Number(ph.actual_spent || 0),
+    };
+  });
 
   const { data: rawActivityOptions = [] } = useGetActivityOptionsQuery(
     { project_id: numericProjectId, phase_id: String(phaseVal) },
@@ -467,20 +481,39 @@ export function RequestForm<T extends Record<string, any>>({
     { skip: !isValidProjectId || !taskVal }
   );
 
+  const selectedPhase = phaseOptionsList.find((p: any) => String(p.id) === String(phaseVal));
   const selectedActivity = activityOptionsList.find((a: any) => String(a.id) === String(taskVal));
-  const approvedBudgetAmount =
+
+  const phaseApprovedBudget =
+    selectedPhase?.current_budget !== undefined && selectedPhase.current_budget !== null
+      ? Number(selectedPhase.current_budget)
+      : selectedPhase?.original_amount !== undefined && selectedPhase.original_amount !== null
+      ? Number(selectedPhase.original_amount || 0) + Number(selectedPhase.approved_adjustment || 0)
+      : 0;
+
+  const phaseAvailableBudget =
+    selectedPhase?.available_budget !== undefined && selectedPhase.available_budget !== null
+      ? Number(selectedPhase.available_budget)
+      : phaseApprovedBudget;
+
+  const activityApprovedBudget =
     selectedActivity?.current_budget !== undefined && selectedActivity.current_budget !== null
       ? Number(selectedActivity.current_budget)
       : selectedActivity?.original_amount !== undefined && selectedActivity.original_amount !== null
       ? Number(selectedActivity.original_amount || 0) + Number(selectedActivity.approved_adjustment || 0)
       : 0;
 
+  const approvedBudgetAmount =
+    selectedActivity ? activityApprovedBudget : phaseApprovedBudget;
+
   const fallbackBudget = Number((config as any)?.defaultBudget) || 0;
   const availableBudgetAmount =
     selectedActivity?.available_budget !== undefined && selectedActivity.available_budget !== null
       ? Number(selectedActivity.available_budget)
-      : approvedBudgetAmount > 0
-      ? approvedBudgetAmount
+      : selectedActivity
+      ? (activityApprovedBudget > 0 ? activityApprovedBudget : fallbackBudget)
+      : selectedPhase
+      ? phaseAvailableBudget
       : budgetData?.available_budget !== undefined && budgetData.available_budget !== null
       ? Number(budgetData.available_budget)
       : fallbackBudget;
@@ -790,7 +823,14 @@ export function RequestForm<T extends Record<string, any>>({
                                               {opt.label}
                                             </span>
                                             <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-                                              <span className="font-semibold text-[11px] text-[#3B7CED] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                              <span
+                                                className={cn(
+                                                  "font-semibold text-[11px] px-1.5 py-0.5 rounded border",
+                                                  Number((opt as any).balance || 0) < 0
+                                                    ? "text-red-700 bg-red-50 border-red-200"
+                                                    : "text-[#3B7CED] bg-blue-50 border-blue-100"
+                                                )}
+                                              >
                                                 Bal: ₦{Number((opt as any).balance || 0).toLocaleString("en-NG", {
                                                   minimumFractionDigits: 2,
                                                 })}

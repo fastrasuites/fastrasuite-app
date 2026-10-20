@@ -29,28 +29,39 @@ export default function SubscriptionGuard({
     pathname.startsWith("/resend-email-verification");
 
   const isSettingsPage = pathname.startsWith("/settings");
+  const isContactPage = pathname.startsWith("/contact");
+
+  // Check if subscription period has ended
+  const isPeriodEnded = Boolean(
+    subStatus?.current_period_end &&
+      !isNaN(new Date(subStatus.current_period_end).getTime()) &&
+      new Date(subStatus.current_period_end).getTime() < Date.now() &&
+      subStatus.status !== "trialing"
+  );
 
   // Determine if subscription is expired
-  // Note: 'trialing', 'active', and 'past_due' (grace period) grant access.
+  // Note: 'trialing' and 'past_due' (grace period) grant access.
   const isExpired =
     !isAuthPage &&
+    !isContactPage &&
     isAuthenticated &&
     !isLoading &&
     (subStatus?.status === "expired" ||
+      isPeriodEnded ||
       (subStatus &&
         subStatus.is_access_granted === false &&
         subStatus.status !== "trialing" &&
         subStatus.status !== "past_due"));
 
   useEffect(() => {
-    // If expired and user is trying to access anything outside of /settings
-    if (isExpired && !isSettingsPage) {
+    // If expired and user is trying to access anything outside of /settings and /contact
+    if (isExpired && !isSettingsPage && !isContactPage) {
       router.replace("/settings/billing?expired=true");
     }
-  }, [isExpired, isSettingsPage, router]);
+  }, [isExpired, isSettingsPage, isContactPage, router]);
 
-  // If on an auth page, render immediately without restrictions
-  if (isAuthPage) {
+  // If on an auth page or contact page, render immediately without restrictions
+  if (isAuthPage || isContactPage) {
     return <>{children}</>;
   }
 

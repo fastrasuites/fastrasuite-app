@@ -32,9 +32,10 @@ function isTokenExpired(token: string): boolean {
 export default function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
-  // 1. Allow public auth pages and verification routes
+  // 1. Allow public auth pages, contact page, and verification routes
   if (
     pathname.startsWith("/auth") ||
+    pathname.startsWith("/contact") ||
     pathname.startsWith("/verify-email") ||
     pathname.startsWith("/resend-email-verification") ||
     pathname.startsWith("/project-costing/dashboard-preview")

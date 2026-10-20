@@ -77,6 +77,9 @@ export interface PhaseOption {
   original_amount?: number;
   approved_adjustment?: number;
   current_budget?: number;
+  committed?: number;
+  actual_spent?: number;
+  available_budget?: number;
 }
 
 export interface ActivityOption {

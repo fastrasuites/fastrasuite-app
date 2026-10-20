@@ -6,6 +6,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Bell, Pencil, Trash, X, Plus, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -204,6 +205,9 @@ export default function NewPurchaseRequestPage() {
       }
     }
     if (selectedPhaseObj) {
+      if (selectedPhaseObj.available_budget !== undefined && selectedPhaseObj.available_budget !== null) {
+        return Number(selectedPhaseObj.available_budget);
+      }
       if (selectedPhaseObj.current_budget !== undefined && selectedPhaseObj.current_budget !== null) {
         return Number(selectedPhaseObj.current_budget);
       }
@@ -713,6 +717,12 @@ export default function NewPurchaseRequestPage() {
                   ) : (
                     phases.map((ph: any) => {
                       const phaseBudget = ph.current_budget ?? ph.original_amount;
+                      const phaseBalance =
+                        ph.available_budget !== undefined && ph.available_budget !== null
+                          ? Number(ph.available_budget)
+                          : phaseBudget !== undefined && phaseBudget !== null
+                          ? Number(phaseBudget)
+                          : undefined;
                       return (
                         <SelectItem
                           key={ph.id}
@@ -723,9 +733,16 @@ export default function NewPurchaseRequestPage() {
                             <span className="font-medium text-gray-800 truncate min-w-0">
                               {ph.name}
                             </span>
-                            {phaseBudget !== undefined && phaseBudget !== null && (
-                              <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100 shrink-0 ml-auto">
-                                ₦{Number(phaseBudget).toLocaleString("en-NG", {
+                            {phaseBalance !== undefined && (
+                              <span
+                                className={cn(
+                                  "font-semibold text-xs px-2 py-0.5 rounded border shrink-0 ml-auto",
+                                  phaseBalance < 0
+                                    ? "text-red-700 bg-red-50 border-red-200"
+                                    : "text-[#3B7CED] bg-blue-50 border-blue-100"
+                                )}
+                              >
+                                Bal: ₦{Number(phaseBalance).toLocaleString("en-NG", {
                                   minimumFractionDigits: 2,
                                 })}
                               </span>
@@ -774,7 +791,14 @@ export default function NewPurchaseRequestPage() {
                             </span>
                             <span className="flex items-center gap-1.5 shrink-0 ml-auto">
                               {taskBalance !== undefined && taskBalance !== null && (
-                                <span className="font-semibold text-xs text-[#3B7CED] bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                                <span
+                                  className={cn(
+                                    "font-semibold text-xs px-2 py-0.5 rounded border shrink-0",
+                                    taskBalance < 0
+                                      ? "text-red-700 bg-red-50 border-red-200"
+                                      : "text-[#3B7CED] bg-blue-50 border-blue-100"
+                                  )}
+                                >
                                   Bal: ₦{Number(taskBalance).toLocaleString("en-NG", {
                                     minimumFractionDigits: 2,
                                   })}
@@ -795,7 +819,12 @@ export default function NewPurchaseRequestPage() {
                 <span className="text-xs font-semibold text-gray-900">
                   Available Budget
                 </span>
-                <span className="text-xs font-bold text-[#3B7CED]">
+                <span
+                  className={cn(
+                    "text-xs font-bold",
+                    availableBudget < 0 ? "text-red-600" : "text-[#3B7CED]"
+                  )}
+                >
                   ₦{availableBudget.toLocaleString("en-NG", {
                     minimumFractionDigits: 2,
                   })}

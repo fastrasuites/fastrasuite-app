@@ -212,8 +212,16 @@ const Sidebar: React.FC<SidebarProps> = ({
   const { hasAccess, canDo } = useModulePermissions();
   const { data: subStatus } = useGetSubscriptionStatusQuery();
 
+  const isPeriodEnded = Boolean(
+    subStatus?.current_period_end &&
+      !isNaN(new Date(subStatus.current_period_end).getTime()) &&
+      new Date(subStatus.current_period_end).getTime() < Date.now() &&
+      subStatus.status !== "trialing"
+  );
+
   const isExpired =
     subStatus?.status === "expired" ||
+    isPeriodEnded ||
     (subStatus &&
       subStatus.is_access_granted === false &&
       subStatus.status !== "trialing" &&
@@ -262,7 +270,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const handleNavigate = (route: string) => {
     setFlyout(null);
     if (onClose) onClose();
-    if (isExpired && !route.startsWith("/settings")) {
+    if (isExpired && !route.startsWith("/settings") && !route.startsWith("/contact")) {
       router.push("/settings/billing?expired=true");
       return;
     }
