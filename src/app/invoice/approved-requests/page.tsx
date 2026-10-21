@@ -747,7 +747,8 @@ export default function ApprovedRequestsPage() {
                                 onClick={() =>
                                   handleProcessLabourDisbursement(request)
                                 }
-                                className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700"
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors whitespace-nowrap"
+                                aria-label={`Process disbursement for ${request.id}`}
                               >
                                 Process Disbursement
                               </button>
