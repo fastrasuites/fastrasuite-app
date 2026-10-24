@@ -144,7 +144,9 @@ export default function PurchaseOrderDetailPage() {
   const { data: companyData } = useGetCompanyQuery();
   const user = useSelector((state: RootState) => (state as any).auth?.user);
   const tenant_company_name =
-    useSelector((state: RootState) => (state as any).auth?.tenant_company_name) ||
+    useSelector(
+      (state: RootState) => (state as any).auth?.tenant_company_name,
+    ) ||
     user?.company_name ||
     user?.tenant_name;
 
@@ -154,7 +156,12 @@ export default function PurchaseOrderDetailPage() {
     (companyData as any)?.company_name ||
     "FastraSuite";
   const companyAddress = companyData?.street_address
-    ? [companyData.street_address, companyData.city, companyData.state, companyData.country]
+    ? [
+        companyData.street_address,
+        companyData.city,
+        companyData.state,
+        companyData.country,
+      ]
         .filter(Boolean)
         .join(", ")
     : (companyData as any)?.address || "";
@@ -254,173 +261,204 @@ export default function PurchaseOrderDetailPage() {
   const totalAmount = Number(poDetail?.total_amount || 0);
 
   // Robust DOM to Image capture helper with font-skipping & html2canvas fallback
-  const captureElementToDataUrl = async (
-    el: HTMLElement,
-    format: "jpeg" | "png" = "jpeg"
-  ): Promise<string> => {
-    const blankPlaceholder =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAEDEB1CQAAAElFTkSuQmCC";
+  // const captureElementToDataUrl = async (
+  //   el: HTMLElement,
+  //   format: "jpeg" | "png" = "jpeg",
+  // ): Promise<string> => {
+  //   const blankPlaceholder =
+  //     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAEDEB1CQAAAElFTkSuQmCC";
 
-    const width = el.offsetWidth || 820;
-    const height = el.offsetHeight || 1160;
+  //   const width = el.offsetWidth || 820;
+  //   const height = el.offsetHeight || 1160;
 
-    try {
-      const options = {
-        width,
-        height,
-        canvasWidth: width * 2,
-        canvasHeight: height * 2,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        skipFonts: true,
-        fontEmbedCSS: "",
-        cacheBust: false,
-        imagePlaceholder: blankPlaceholder,
-        style: {
-          transform: "none",
-          position: "relative",
-          top: "0px",
-          left: "0px",
-          right: "auto",
-          bottom: "auto",
-          opacity: "1",
-          visibility: "visible",
-          display: "block",
-        },
-        onImageErrorHandler: (err: any) => {
-          console.warn("Handled image load failure in export capture:", err);
-        },
-      };
+  //   try {
+  //     const options = {
+  //       width,
+  //       height,
+  //       canvasWidth: width * 2,
+  //       canvasHeight: height * 2,
+  //       pixelRatio: 2,
+  //       backgroundColor: "#ffffff",
+  //       skipFonts: true,
+  //       fontEmbedCSS: "",
+  //       cacheBust: false,
+  //       imagePlaceholder: blankPlaceholder,
+  //       style: {
+  //         transform: "none",
+  //         position: "relative",
+  //         top: "0px",
+  //         left: "0px",
+  //         right: "auto",
+  //         bottom: "auto",
+  //         opacity: "1",
+  //         visibility: "visible",
+  //         display: "block",
+  //       },
+  //       onImageErrorHandler: (err: any) => {
+  //         console.warn("Handled image load failure in export capture:", err);
+  //       },
+  //     };
 
-      if (format === "png") {
-        return await toPng(el, options);
-      } else {
-        return await toJpeg(el, { ...options, quality: 0.95 });
-      }
-    } catch (primaryErr) {
-      console.warn("Primary html-to-image capture encountered an issue, running fallback:", primaryErr);
-      try {
-        const html2canvas = (await import("html2canvas")).default;
-        const canvas = await html2canvas(el, {
-          scale: 2,
-          backgroundColor: "#ffffff",
-          useCORS: true,
-          logging: false,
-          allowTaint: true,
-          scrollX: 0,
-          scrollY: 0,
-          x: 0,
-          y: 0,
-          width,
-          height,
-          windowWidth: width,
-          windowHeight: height,
-        });
-        return canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", 0.95);
-      } catch (fallbackErr: any) {
-        console.error("html2canvas fallback also failed:", fallbackErr);
-        throw new Error(
-          fallbackErr?.message ||
-            (primaryErr instanceof Error ? primaryErr.message : "Document rendering failed. Please retry.")
-        );
-      }
-    }
-  };
+  //     if (format === "png") {
+  //       return await toPng(el, options);
+  //     } else {
+  //       return await toJpeg(el, { ...options, quality: 0.95 });
+  //     }
+  //   } catch (primaryErr) {
+  //     console.warn(
+  //       "Primary html-to-image capture encountered an issue, running fallback:",
+  //       primaryErr,
+  //     );
+  //     try {
+  //       const html2canvas = (await import("html2canvas")).default;
+  //       const canvas = await html2canvas(el, {
+  //         scale: 2,
+  //         backgroundColor: "#ffffff",
+  //         useCORS: true,
+  //         logging: false,
+  //         allowTaint: true,
+  //         scrollX: 0,
+  //         scrollY: 0,
+  //         x: 0,
+  //         y: 0,
+  //         width,
+  //         height,
+  //         windowWidth: width,
+  //         windowHeight: height,
+  //       });
+  //       return canvas.toDataURL(
+  //         format === "png" ? "image/png" : "image/jpeg",
+  //         0.95,
+  //       );
+  //     } catch (fallbackErr: any) {
+  //       console.error("html2canvas fallback also failed:", fallbackErr);
+  //       throw new Error(
+  //         fallbackErr?.message ||
+  //           (primaryErr instanceof Error
+  //             ? primaryErr.message
+  //             : "Document rendering failed. Please retry."),
+  //       );
+  //     }
+  //   }
+  // };
 
-  const handleExportPo = async (format: "pdf" | "png" = "pdf") => {
-    if (isExporting || !poDetail) return;
-    setIsExporting(true);
-    setExportStatusText("Preparing...");
+  // const handleExportPo = async (format: "pdf" | "png" = "pdf") => {
+  //   if (isExporting || !poDetail) return;
+  //   setIsExporting(true);
+  //   setExportStatusText("Preparing...");
 
-    try {
-      setExportStatusText(format === "pdf" ? "Generating PDF..." : "Capturing visual...");
+  //   try {
+  //     setExportStatusText(
+  //       format === "pdf" ? "Generating PDF..." : "Capturing visual...",
+  //     );
 
-      // Wait for DOM paint and confirm the element is rendered and non-empty
-      let element: HTMLElement | null = null;
-      for (let i = 0; i < 15; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        element = exportContainerRef.current;
-        if (element && element.offsetHeight > 200) {
-          break;
-        }
-      }
+  //     // Wait for DOM paint and confirm the element is rendered and non-empty
+  //     let element: HTMLElement | null = null;
+  //     for (let i = 0; i < 15; i++) {
+  //       await new Promise((resolve) => setTimeout(resolve, 80));
+  //       element = exportContainerRef.current;
+  //       if (element && element.offsetHeight > 200) {
+  //         break;
+  //       }
+  //     }
 
-      if (!element || element.offsetHeight < 100) {
-        throw new Error("Document template could not be rendered for export.");
-      }
+  //     if (!element || element.offsetHeight < 100) {
+  //       throw new Error("Document template could not be rendered for export.");
+  //     }
 
-      const cleanPoNumber = (
-        poDetail.po_number || `PO-${poDetail.id || "document"}`
-      ).replace(/[^a-zA-Z0-9_-]/g, "_");
+  //     const cleanPoNumber = (
+  //       poDetail.po_number || `PO-${poDetail.id || "document"}`
+  //     ).replace(/[^a-zA-Z0-9_-]/g, "_");
 
-      if (format === "png") {
-        const dataUrl = await captureElementToDataUrl(element, "png");
-        setExportStatusText("Downloading...");
-        const link = document.createElement("a");
-        link.href = dataUrl;
-        link.download = `${cleanPoNumber}_Purchase_Order.png`;
-        link.click();
-        showToast(
-          `Purchase Order ${poDetail.po_number || poDetail.id} exported as PNG image.`,
-          "success"
-        );
-      } else {
-        const dataUrl = await captureElementToDataUrl(element, "jpeg");
-        setExportStatusText("Formatting PDF...");
+  //     if (format === "png") {
+  //       const dataUrl = await captureElementToDataUrl(element, "png");
+  //       setExportStatusText("Downloading...");
+  //       const link = document.createElement("a");
+  //       link.href = dataUrl;
+  //       link.download = `${cleanPoNumber}_Purchase_Order.png`;
+  //       link.click();
+  //       showToast(
+  //         `Purchase Order ${poDetail.po_number || poDetail.id} exported as PNG image.`,
+  //         "success",
+  //       );
+  //     } else {
+  //       const dataUrl = await captureElementToDataUrl(element, "jpeg");
+  //       setExportStatusText("Formatting PDF...");
 
-        const pdf = new jsPDF("p", "mm", "a4");
-        const pageWidth = 210;
-        const pageHeight = 297;
-        const margin = 6;
-        const usableWidth = pageWidth - margin * 2;
-        const usableHeight = pageHeight - margin * 2;
+  //       const pdf = new jsPDF("p", "mm", "a4");
+  //       const pageWidth = 210;
+  //       const pageHeight = 297;
+  //       const margin = 6;
+  //       const usableWidth = pageWidth - margin * 2;
+  //       const usableHeight = pageHeight - margin * 2;
 
-        const elWidth = element.offsetWidth || 820;
-        const elHeight = element.offsetHeight || 1160;
+  //       const elWidth = element.offsetWidth || 820;
+  //       const elHeight = element.offsetHeight || 1160;
 
-        let finalWidth = usableWidth;
-        let finalHeight = (elHeight * usableWidth) / elWidth;
+  //       let finalWidth = usableWidth;
+  //       let finalHeight = (elHeight * usableWidth) / elWidth;
 
-        if (finalHeight > usableHeight && finalHeight <= usableHeight * 1.15) {
-          const scale = usableHeight / finalHeight;
-          finalWidth = finalWidth * scale;
-          finalHeight = usableHeight;
-          const xOffset = margin + (usableWidth - finalWidth) / 2;
-          pdf.addImage(dataUrl, "JPEG", xOffset, margin, finalWidth, finalHeight);
-        } else if (finalHeight > usableHeight) {
-          let position = margin;
-          let remainingHeight = finalHeight;
+  //       if (finalHeight > usableHeight && finalHeight <= usableHeight * 1.15) {
+  //         const scale = usableHeight / finalHeight;
+  //         finalWidth = finalWidth * scale;
+  //         finalHeight = usableHeight;
+  //         const xOffset = margin + (usableWidth - finalWidth) / 2;
+  //         pdf.addImage(
+  //           dataUrl,
+  //           "JPEG",
+  //           xOffset,
+  //           margin,
+  //           finalWidth,
+  //           finalHeight,
+  //         );
+  //       } else if (finalHeight > usableHeight) {
+  //         let position = margin;
+  //         let remainingHeight = finalHeight;
 
-          while (remainingHeight > 0) {
-            pdf.addImage(dataUrl, "JPEG", margin, position, finalWidth, finalHeight);
-            remainingHeight -= usableHeight;
-            position -= usableHeight;
-            if (remainingHeight > 0) {
-              pdf.addPage();
-            }
-          }
-        } else {
-          pdf.addImage(dataUrl, "JPEG", margin, margin, finalWidth, finalHeight);
-        }
+  //         while (remainingHeight > 0) {
+  //           pdf.addImage(
+  //             dataUrl,
+  //             "JPEG",
+  //             margin,
+  //             position,
+  //             finalWidth,
+  //             finalHeight,
+  //           );
+  //           remainingHeight -= usableHeight;
+  //           position -= usableHeight;
+  //           if (remainingHeight > 0) {
+  //             pdf.addPage();
+  //           }
+  //         }
+  //       } else {
+  //         pdf.addImage(
+  //           dataUrl,
+  //           "JPEG",
+  //           margin,
+  //           margin,
+  //           finalWidth,
+  //           finalHeight,
+  //         );
+  //       }
 
-        setExportStatusText("Downloading...");
-        pdf.save(`${cleanPoNumber}_Purchase_Order.pdf`);
-        showToast(
-          `Purchase Order ${poDetail.po_number || poDetail.id} exported as PDF.`,
-          "success"
-        );
-      }
-    } catch (err: any) {
-      console.error("Purchase order export error:", err);
-      showToast(
-        extractErrorMessage(err, "Failed to generate export document."),
-        "error"
-      );
-    } finally {
-      setIsExporting(false);
-      setExportStatusText("Export");
-    }
-  };
+  //       setExportStatusText("Downloading...");
+  //       pdf.save(`${cleanPoNumber}_Purchase_Order.pdf`);
+  //       showToast(
+  //         `Purchase Order ${poDetail.po_number || poDetail.id} exported as PDF.`,
+  //         "success",
+  //       );
+  //     }
+  //   } catch (err: any) {
+  //     console.error("Purchase order export error:", err);
+  //     showToast(
+  //       extractErrorMessage(err, "Failed to generate export document."),
+  //       "error",
+  //     );
+  //   } finally {
+  //     setIsExporting(false);
+  //     setExportStatusText("Export");
+  //   }
+  // };
 
   /* -------------------------------- Render -------------------------------- */
 
@@ -496,7 +534,7 @@ export default function PurchaseOrderDetailPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Export Dropdown Button with sleek animated loading UI */}
-          <DropdownMenu>
+          {/* <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
@@ -539,7 +577,7 @@ export default function PurchaseOrderDetailPage() {
                   )}
                 </AnimatePresence>
 
-                {/* Hairline animated progress bar along the bottom edge while exporting */}
+                
                 {isExporting && (
                   <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-blue-100 overflow-hidden">
                     <motion.div
@@ -594,7 +632,7 @@ export default function PurchaseOrderDetailPage() {
                 </div>
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu> */}
           {/* <button
             type="button"
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"

@@ -268,7 +268,9 @@ export default function PurchaseOrderPage() {
   const { data: companyData } = useGetCompanyQuery();
   const user = useSelector((state: RootState) => (state as any).auth?.user);
   const tenant_company_name =
-    useSelector((state: RootState) => (state as any).auth?.tenant_company_name) ||
+    useSelector(
+      (state: RootState) => (state as any).auth?.tenant_company_name,
+    ) ||
     user?.company_name ||
     user?.tenant_name;
 
@@ -278,14 +280,21 @@ export default function PurchaseOrderPage() {
     (companyData as any)?.company_name ||
     "FastraSuite";
   const companyAddress = companyData?.street_address
-    ? [companyData.street_address, companyData.city, companyData.state, companyData.country]
+    ? [
+        companyData.street_address,
+        companyData.city,
+        companyData.state,
+        companyData.country,
+      ]
         .filter(Boolean)
         .join(", ")
     : (companyData as any)?.address || "";
   const companyPhone = companyData?.phone || "";
   const companyLogo = companyData?.logo || "";
 
-  const [exportingPoId, setExportingPoId] = useState<string | number | null>(null);
+  const [exportingPoId, setExportingPoId] = useState<string | number | null>(
+    null,
+  );
   const [exportFormat, setExportFormat] = useState<"pdf" | "png" | null>(null);
   const [exportStatusText, setExportStatusText] = useState("Export");
   const [activeExportOrder, setActiveExportOrder] = useState<any>(null);
@@ -393,205 +402,249 @@ export default function PurchaseOrderPage() {
   const colCount = showWbsColumn ? 7 : 6;
 
   // Robust DOM to Image capture helper with font-skipping & html2canvas fallback
-  const captureElementToDataUrl = async (
-    el: HTMLElement,
-    format: "jpeg" | "png" = "jpeg"
-  ): Promise<string> => {
-    const blankPlaceholder =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAEDEB1CQAAAElFTkSuQmCC";
+  // const captureElementToDataUrl = async (
+  //   el: HTMLElement,
+  //   format: "jpeg" | "png" = "jpeg",
+  // ): Promise<string> => {
+  //   const blankPlaceholder =
+  //     "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAEDEB1CQAAAElFTkSuQmCC";
 
-    const width = el.offsetWidth || 820;
-    const height = el.offsetHeight || 1160;
+  //   const width = el.offsetWidth || 820;
+  //   const height = el.offsetHeight || 1160;
 
-    try {
-      const options = {
-        width,
-        height,
-        canvasWidth: width * 2,
-        canvasHeight: height * 2,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        skipFonts: true,
-        fontEmbedCSS: "",
-        cacheBust: false,
-        imagePlaceholder: blankPlaceholder,
-        style: {
-          transform: "none",
-          position: "relative",
-          top: "0px",
-          left: "0px",
-          right: "auto",
-          bottom: "auto",
-          opacity: "1",
-          visibility: "visible",
-          display: "block",
-        },
-        onImageErrorHandler: (err: any) => {
-          console.warn("Handled image load failure in export capture:", err);
-        },
-      };
+  //   try {
+  //     const options = {
+  //       width,
+  //       height,
+  //       canvasWidth: width * 2,
+  //       canvasHeight: height * 2,
+  //       pixelRatio: 2,
+  //       backgroundColor: "#ffffff",
+  //       skipFonts: true,
+  //       fontEmbedCSS: "",
+  //       cacheBust: false,
+  //       imagePlaceholder: blankPlaceholder,
+  //       style: {
+  //         transform: "none",
+  //         position: "relative",
+  //         top: "0px",
+  //         left: "0px",
+  //         right: "auto",
+  //         bottom: "auto",
+  //         opacity: "1",
+  //         visibility: "visible",
+  //         display: "block",
+  //       },
+  //       onImageErrorHandler: (err: any) => {
+  //         console.warn("Handled image load failure in export capture:", err);
+  //       },
+  //     };
 
-      if (format === "png") {
-        return await toPng(el, options);
-      } else {
-        return await toJpeg(el, { ...options, quality: 0.95 });
-      }
-    } catch (primaryErr) {
-      console.warn("Primary html-to-image capture encountered an issue, running fallback:", primaryErr);
-      try {
-        const html2canvas = (await import("html2canvas")).default;
-        const canvas = await html2canvas(el, {
-          scale: 2,
-          backgroundColor: "#ffffff",
-          useCORS: true,
-          logging: false,
-          allowTaint: true,
-          scrollX: 0,
-          scrollY: 0,
-          x: 0,
-          y: 0,
-          width,
-          height,
-          windowWidth: width,
-          windowHeight: height,
-        });
-        return canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", 0.95);
-      } catch (fallbackErr: any) {
-        console.error("html2canvas fallback also failed:", fallbackErr);
-        throw new Error(
-          fallbackErr?.message ||
-            (primaryErr instanceof Error ? primaryErr.message : "Document rendering failed. Please retry.")
-        );
-      }
-    }
-  };
+  //     if (format === "png") {
+  //       return await toPng(el, options);
+  //     } else {
+  //       return await toJpeg(el, { ...options, quality: 0.95 });
+  //     }
+  //   } catch (primaryErr) {
+  //     console.warn(
+  //       "Primary html-to-image capture encountered an issue, running fallback:",
+  //       primaryErr,
+  //     );
+  //     try {
+  //       const html2canvas = (await import("html2canvas")).default;
+  //       const canvas = await html2canvas(el, {
+  //         scale: 2,
+  //         backgroundColor: "#ffffff",
+  //         useCORS: true,
+  //         logging: false,
+  //         allowTaint: true,
+  //         scrollX: 0,
+  //         scrollY: 0,
+  //         x: 0,
+  //         y: 0,
+  //         width,
+  //         height,
+  //         windowWidth: width,
+  //         windowHeight: height,
+  //       });
+  //       return canvas.toDataURL(
+  //         format === "png" ? "image/png" : "image/jpeg",
+  //         0.95,
+  //       );
+  //     } catch (fallbackErr: any) {
+  //       console.error("html2canvas fallback also failed:", fallbackErr);
+  //       throw new Error(
+  //         fallbackErr?.message ||
+  //           (primaryErr instanceof Error
+  //             ? primaryErr.message
+  //             : "Document rendering failed. Please retry."),
+  //       );
+  //     }
+  //   }
+  // };
 
-  const handleExportPo = async (order: any, format: "pdf" | "png" = "pdf") => {
-    if (exportingPoId !== null) return;
-    if (!order) {
-      statusModal.showError("Export Error", "No purchase order selected for export.");
-      return;
-    }
+  // const handleExportPo = async (order: any, format: "pdf" | "png" = "pdf") => {
+  //   if (exportingPoId !== null) return;
+  //   if (!order) {
+  //     statusModal.showError(
+  //       "Export Error",
+  //       "No purchase order selected for export.",
+  //     );
+  //     return;
+  //   }
 
-    setExportingPoId(order.id);
-    setExportFormat(format);
-    setExportStatusText("Preparing...");
+  //   setExportingPoId(order.id);
+  //   setExportFormat(format);
+  //   setExportStatusText("Preparing...");
 
-    try {
-      let fullOrder = order;
-      // Fetch full line details if lines are missing or empty
-      if (!order.lines || !Array.isArray(order.lines) || order.lines.length === 0) {
-        setExportStatusText("Fetching items...");
-        try {
-          const fetched = await fetchPoDetail(order.id).unwrap();
-          if (fetched) {
-            fullOrder = fetched;
-          }
-        } catch (fetchErr) {
-          console.warn("Could not fetch full PO detail, proceeding with summary:", fetchErr);
-        }
-      }
+  //   try {
+  //     let fullOrder = order;
+  //     // Fetch full line details if lines are missing or empty
+  //     if (
+  //       !order.lines ||
+  //       !Array.isArray(order.lines) ||
+  //       order.lines.length === 0
+  //     ) {
+  //       setExportStatusText("Fetching items...");
+  //       try {
+  //         const fetched = await fetchPoDetail(order.id).unwrap();
+  //         if (fetched) {
+  //           fullOrder = fetched;
+  //         }
+  //       } catch (fetchErr) {
+  //         console.warn(
+  //           "Could not fetch full PO detail, proceeding with summary:",
+  //           fetchErr,
+  //         );
+  //       }
+  //     }
 
-      setActiveExportOrder(fullOrder);
+  //     setActiveExportOrder(fullOrder);
 
-      setExportStatusText(format === "pdf" ? "Generating PDF..." : "Capturing visual...");
+  //     setExportStatusText(
+  //       format === "pdf" ? "Generating PDF..." : "Capturing visual...",
+  //     );
 
-      // Wait for DOM paint and confirm the element is rendered and non-empty
-      let element: HTMLElement | null = null;
-      for (let i = 0; i < 15; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        element = exportContainerRef.current;
-        if (element && element.offsetHeight > 200) {
-          break;
-        }
-      }
+  //     // Wait for DOM paint and confirm the element is rendered and non-empty
+  //     let element: HTMLElement | null = null;
+  //     for (let i = 0; i < 15; i++) {
+  //       await new Promise((resolve) => setTimeout(resolve, 80));
+  //       element = exportContainerRef.current;
+  //       if (element && element.offsetHeight > 200) {
+  //         break;
+  //       }
+  //     }
 
-      if (!element || element.offsetHeight < 100) {
-        throw new Error("Document template could not be rendered for export.");
-      }
+  //     if (!element || element.offsetHeight < 100) {
+  //       throw new Error("Document template could not be rendered for export.");
+  //     }
 
-      const cleanPoNumber = (
-        fullOrder.po_number || `PO-${fullOrder.id || "document"}`
-      ).replace(/[^a-zA-Z0-9_-]/g, "_");
+  //     const cleanPoNumber = (
+  //       fullOrder.po_number || `PO-${fullOrder.id || "document"}`
+  //     ).replace(/[^a-zA-Z0-9_-]/g, "_");
 
-      if (format === "png") {
-        const dataUrl = await captureElementToDataUrl(element, "png");
-        setExportStatusText("Downloading...");
-        const link = document.createElement("a");
-        link.href = dataUrl;
-        link.download = `${cleanPoNumber}_Purchase_Order.png`;
-        link.click();
-        statusModal.showSuccess(
-          "Export Successful",
-          `Purchase Order ${fullOrder.po_number || fullOrder.id} has been downloaded as an image.`
-        );
-      } else {
-        const dataUrl = await captureElementToDataUrl(element, "jpeg");
-        setExportStatusText("Formatting PDF...");
+  //     if (format === "png") {
+  //       const dataUrl = await captureElementToDataUrl(element, "png");
+  //       setExportStatusText("Downloading...");
+  //       const link = document.createElement("a");
+  //       link.href = dataUrl;
+  //       link.download = `${cleanPoNumber}_Purchase_Order.png`;
+  //       link.click();
+  //       statusModal.showSuccess(
+  //         "Export Successful",
+  //         `Purchase Order ${fullOrder.po_number || fullOrder.id} has been downloaded as an image.`,
+  //       );
+  //     } else {
+  //       const dataUrl = await captureElementToDataUrl(element, "jpeg");
+  //       setExportStatusText("Formatting PDF...");
 
-        const pdf = new jsPDF("p", "mm", "a4");
-        const pageWidth = 210;
-        const pageHeight = 297;
-        const margin = 6;
-        const usableWidth = pageWidth - margin * 2;
-        const usableHeight = pageHeight - margin * 2;
+  //       const pdf = new jsPDF("p", "mm", "a4");
+  //       const pageWidth = 210;
+  //       const pageHeight = 297;
+  //       const margin = 6;
+  //       const usableWidth = pageWidth - margin * 2;
+  //       const usableHeight = pageHeight - margin * 2;
 
-        const elWidth = element.offsetWidth || 820;
-        const elHeight = element.offsetHeight || 1160;
+  //       const elWidth = element.offsetWidth || 820;
+  //       const elHeight = element.offsetHeight || 1160;
 
-        let finalWidth = usableWidth;
-        let finalHeight = (elHeight * usableWidth) / elWidth;
+  //       let finalWidth = usableWidth;
+  //       let finalHeight = (elHeight * usableWidth) / elWidth;
 
-        if (finalHeight > usableHeight && finalHeight <= usableHeight * 1.15) {
-          const scale = usableHeight / finalHeight;
-          finalWidth = finalWidth * scale;
-          finalHeight = usableHeight;
-          const xOffset = margin + (usableWidth - finalWidth) / 2;
-          pdf.addImage(dataUrl, "JPEG", xOffset, margin, finalWidth, finalHeight);
-        } else if (finalHeight > usableHeight) {
-          let position = margin;
-          let remainingHeight = finalHeight;
+  //       if (finalHeight > usableHeight && finalHeight <= usableHeight * 1.15) {
+  //         const scale = usableHeight / finalHeight;
+  //         finalWidth = finalWidth * scale;
+  //         finalHeight = usableHeight;
+  //         const xOffset = margin + (usableWidth - finalWidth) / 2;
+  //         pdf.addImage(
+  //           dataUrl,
+  //           "JPEG",
+  //           xOffset,
+  //           margin,
+  //           finalWidth,
+  //           finalHeight,
+  //         );
+  //       } else if (finalHeight > usableHeight) {
+  //         let position = margin;
+  //         let remainingHeight = finalHeight;
 
-          while (remainingHeight > 0) {
-            pdf.addImage(dataUrl, "JPEG", margin, position, finalWidth, finalHeight);
-            remainingHeight -= usableHeight;
-            position -= usableHeight;
-            if (remainingHeight > 0) {
-              pdf.addPage();
-            }
-          }
-        } else {
-          pdf.addImage(dataUrl, "JPEG", margin, margin, finalWidth, finalHeight);
-        }
+  //         while (remainingHeight > 0) {
+  //           pdf.addImage(
+  //             dataUrl,
+  //             "JPEG",
+  //             margin,
+  //             position,
+  //             finalWidth,
+  //             finalHeight,
+  //           );
+  //           remainingHeight -= usableHeight;
+  //           position -= usableHeight;
+  //           if (remainingHeight > 0) {
+  //             pdf.addPage();
+  //           }
+  //         }
+  //       } else {
+  //         pdf.addImage(
+  //           dataUrl,
+  //           "JPEG",
+  //           margin,
+  //           margin,
+  //           finalWidth,
+  //           finalHeight,
+  //         );
+  //       }
 
-        setExportStatusText("Downloading...");
-        pdf.save(`${cleanPoNumber}_Purchase_Order.pdf`);
-        statusModal.showSuccess(
-          "Export Successful",
-          `Purchase Order ${fullOrder.po_number || fullOrder.id} has been downloaded as a PDF.`
-        );
-      }
-    } catch (err: any) {
-      console.error("Purchase order export error:", err);
-      let errorMsg = "An unexpected error occurred during export.";
-      if (err instanceof Error) {
-        errorMsg = err.message;
-      } else if (typeof err === "string") {
-        errorMsg = err;
-      } else if (err && typeof err === "object") {
-        if ("message" in err && typeof err.message === "string") {
-          errorMsg = err.message;
-        } else if (err.type || err.target) {
-          errorMsg = "Resource rendering error. Please try again.";
-        }
-      }
-      statusModal.showError("Export Failed", `Failed to generate export document: ${errorMsg}`);
-    } finally {
-      setExportingPoId(null);
-      setExportFormat(null);
-      setExportStatusText("Export");
-    }
-  };
+  //       setExportStatusText("Downloading...");
+  //       pdf.save(`${cleanPoNumber}_Purchase_Order.pdf`);
+  //       statusModal.showSuccess(
+  //         "Export Successful",
+  //         `Purchase Order ${fullOrder.po_number || fullOrder.id} has been downloaded as a PDF.`,
+  //       );
+  //     }
+  //   } catch (err: any) {
+  //     console.error("Purchase order export error:", err);
+  //     let errorMsg = "An unexpected error occurred during export.";
+  //     if (err instanceof Error) {
+  //       errorMsg = err.message;
+  //     } else if (typeof err === "string") {
+  //       errorMsg = err;
+  //     } else if (err && typeof err === "object") {
+  //       if ("message" in err && typeof err.message === "string") {
+  //         errorMsg = err.message;
+  //       } else if (err.type || err.target) {
+  //         errorMsg = "Resource rendering error. Please try again.";
+  //       }
+  //     }
+  //     statusModal.showError(
+  //       "Export Failed",
+  //       `Failed to generate export document: ${errorMsg}`,
+  //     );
+  //   } finally {
+  //     setExportingPoId(null);
+  //     setExportFormat(null);
+  //     setExportStatusText("Export");
+  //   }
+  // };
 
   return (
     <PageGuard module="invoice" entitlement="view_purchase_orders">
@@ -625,7 +678,8 @@ export default function PurchaseOrderPage() {
               Refresh
             </button>
 
-            {filteredOrders.length > 0 && (
+            {/* Export PO button */}
+            {/* {filteredOrders.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -726,7 +780,7 @@ export default function PurchaseOrderPage() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
+            )} */}
           </div>
         </div>
 
@@ -746,7 +800,7 @@ export default function PurchaseOrderPage() {
                   key={card.key}
                   type="button"
                   onClick={() => handleCardClick(card)}
-                  className={`flex min-h-[96px] flex-col items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
+                  className={`flex min-h-24 flex-col items-start gap-3 px-5 py-4 text-left transition-colors hover:bg-gray-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
                     isActive ? "bg-blue-50/60" : ""
                   }`}
                   aria-pressed={isActive}
@@ -820,7 +874,7 @@ export default function PurchaseOrderPage() {
 
           {showFilters && (
             <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:flex-row sm:items-end">
-              <div className="min-w-[160px] flex-1">
+              <div className="min-w-40 flex-1">
                 <label className="mb-1.5 block text-xs font-medium text-gray-500">
                   Status
                 </label>
@@ -836,7 +890,7 @@ export default function PurchaseOrderPage() {
                   ))}
                 </select>
               </div>
-              <div className="min-w-[160px] flex-1">
+              <div className="min-w-40 flex-1">
                 <label className="mb-1.5 block text-xs font-medium text-gray-500">
                   Request type
                 </label>
@@ -881,7 +935,7 @@ export default function PurchaseOrderPage() {
 
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table data-wizard="inv-po-table" className="w-full min-w-[820px]">
+            <table data-wizard="inv-po-table" className="w-full min-w-205">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50/80">
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -904,7 +958,7 @@ export default function PurchaseOrderPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Status
                   </th>
-                  <th className="w-48 min-w-[180px] px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="w-48 min-w-45 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500">
                     Actions
                   </th>
                 </tr>
@@ -999,7 +1053,7 @@ export default function PurchaseOrderPage() {
                         </td>
 
                         {showWbsColumn && (
-                          <td className="max-w-[200px] px-4 py-3.5 text-sm text-gray-600">
+                          <td className="max-w-50 px-4 py-3.5 text-sm text-gray-600">
                             {wbsLabel ? (
                               <span
                                 className="block truncate"
@@ -1031,7 +1085,7 @@ export default function PurchaseOrderPage() {
                               View
                             </Link>
 
-                            <DropdownMenu>
+                            {/* <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button
                                   variant="outline"
@@ -1041,7 +1095,7 @@ export default function PurchaseOrderPage() {
                                     "relative overflow-hidden h-8 px-2.5 text-xs font-medium border-gray-200 text-gray-700 transition-all select-none shadow-2xs",
                                     exportingPoId === order.id
                                       ? "border-blue-400 bg-blue-50/80 text-blue-700 pointer-events-none cursor-wait"
-                                      : "hover:border-blue-300 hover:bg-blue-50/50 hover:text-blue-700"
+                                      : "hover:border-blue-300 hover:bg-blue-50/50 hover:text-blue-700",
                                   )}
                                 >
                                   <AnimatePresence mode="wait" initial={false}>
@@ -1075,9 +1129,9 @@ export default function PurchaseOrderPage() {
                                     )}
                                   </AnimatePresence>
 
-                                  {/* Hairline animated progress bar along the bottom edge while exporting */}
+                                  
                                   {exportingPoId === order.id && (
-                                    <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-blue-100 overflow-hidden">
+                                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-100 overflow-hidden">
                                       <motion.div
                                         initial={{ x: "-100%" }}
                                         animate={{ x: "100%" }}
@@ -1130,7 +1184,7 @@ export default function PurchaseOrderPage() {
                                   </div>
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
-                            </DropdownMenu>
+                            </DropdownMenu> */}
                           </div>
                         </td>
                       </tr>
