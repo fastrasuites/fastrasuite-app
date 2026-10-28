@@ -44,6 +44,7 @@ import {
 import { useGetCompanyQuery } from "@/api/settings/companyApi";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { PurchaseOrderDocumentTemplate } from "@/components/invoice/export/PurchaseOrderDocumentTemplate";
+import { formatCompanyLogo } from "@/components/project-costing/export/ExecutiveProjectReportTemplate";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
@@ -283,7 +284,15 @@ export default function PurchaseOrderPage() {
         .join(", ")
     : (companyData as any)?.address || "";
   const companyPhone = companyData?.phone || "";
-  const companyLogo = companyData?.logo || "";
+  const rawCompanyLogo =
+    companyData?.logo ||
+    (companyData as any)?.company_logo ||
+    (companyData as any)?.logo_url ||
+    user?.company_logo ||
+    (user as any)?.logo ||
+    (user as any)?.tenant_logo ||
+    "";
+  const companyLogo = formatCompanyLogo(rawCompanyLogo);
 
   const [exportingPoId, setExportingPoId] = useState<string | number | null>(null);
   const [exportFormat, setExportFormat] = useState<"pdf" | "png" | null>(null);
@@ -508,6 +517,25 @@ export default function PurchaseOrderPage() {
 
       if (!element || element.offsetHeight < 100) {
         throw new Error("Document template could not be rendered for export.");
+      }
+
+      // Ensure all images (e.g. company logo, badges) are loaded and decoded before capture
+      const imgs = Array.from(element.querySelectorAll("img"));
+      if (imgs.length > 0) {
+        await Promise.all(
+          imgs.map(
+            (img) =>
+              new Promise<void>((res) => {
+                if (img.complete && img.naturalHeight !== 0) {
+                  res();
+                } else {
+                  img.onload = () => res();
+                  img.onerror = () => res();
+                  setTimeout(res, 600);
+                }
+              })
+          )
+        );
       }
 
       const cleanPoNumber = (

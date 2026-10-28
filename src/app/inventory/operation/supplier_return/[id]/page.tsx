@@ -97,8 +97,10 @@ export default function SupplierReturnDetailPage({ params }: { params: Promise<{
                   <div className="text-sm font-semibold text-gray-800">{returnData.unique_id || id}</div>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <label className="text-gray-700 font-medium text-sm">Receipt ID</label>
-                  <div className="text-sm font-semibold text-[#3B7CED]">{returnData.source_document || "N/A"}</div>
+                  <label className="text-gray-700 font-medium text-sm">Record ID</label>
+                  <div className="text-sm font-semibold text-[#3B7CED]">
+                    {(returnData as any).source_document_details?.incoming_product_id || returnData.source_document || "N/A"}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-2">
                   <label className="text-gray-700 font-medium text-sm">Vendor</label>
@@ -121,7 +123,7 @@ export default function SupplierReturnDetailPage({ params }: { params: Promise<{
                   <TableHeader className="bg-[#F6F7F8]">
                     <TableRow>
                       <TableHead className="w-80 border border-gray-200 px-4 py-3 text-left text-sm text-gray-600 font-medium">
-                        Product Description
+                        Product Name
                       </TableHead>
                       <TableHead className="w-24 border border-gray-200 px-4 py-3 text-center text-sm text-gray-600 font-medium">
                         Unit
@@ -139,7 +141,9 @@ export default function SupplierReturnDetailPage({ params }: { params: Promise<{
                       returnData.items.map((item, index) => (
                         <TableRow key={item.id || index} className="group hover:bg-[#FBFBFB] focus-within:bg-[#FBFBFB] transition-colors duration-150">
                           <TableCell className="border border-gray-200 px-4 align-middle">
-                            <div className="text-sm text-gray-800 font-medium line-clamp-2">{item.product_details?.product_name || "Unknown Product"}</div>
+                            <div className="text-sm text-gray-800 font-medium line-clamp-2">
+                              {(item as any).product_name || item.product_details?.product_name || (item as any).name || (item as any).product_description || "Unknown Product"}
+                            </div>
                           </TableCell>
                           <TableCell className="border border-gray-200 px-4 align-middle text-center">
                             <div className="text-sm text-gray-700">{item.unit_of_measure_details?.unit_name || "Units"}</div>

@@ -26,6 +26,7 @@ type ReturnLine = {
   id: string;
   incoming_product_item: number; // ID of the specific line item
   product: number; // The actual product ID
+  product_name: string;
   product_description: string;
   unit_of_measure: string;
   received_quantity: number;
@@ -35,7 +36,7 @@ type ReturnLine = {
 export default function NewSupplierReturnPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const receiptId = searchParams?.get("receiptId");
+  const receiptId = searchParams?.get("receiptId") || searchParams?.get("id") || searchParams?.get("recordId") || searchParams?.get("record_id");
 
   const [items, setItems] = useState<ReturnLine[]>([]);
   const [reasonForReturn, setReasonForReturn] = useState("");
@@ -48,15 +49,19 @@ export default function NewSupplierReturnPage() {
   useEffect(() => {
     if (receiptData?.incoming_product_items) {
       setItems(
-        receiptData.incoming_product_items.map((it: any) => ({
-          id: it.id.toString(),
-          incoming_product_item: it.id,
-          product: it.product,
-          product_description: it.product_details?.product_name || `Product ${it.product}`,
-          unit_of_measure: it.product_details?.unit_of_measure_details?.unit_symbol || "Units",
-          received_quantity: it.quantity_received,
-          return_quantity: 0,
-        }))
+        receiptData.incoming_product_items.map((it: any) => {
+          const name = it.product_name || it.product_details?.product_name || it.name || (it as any).product_title || `Product ${it.product}`;
+          return {
+            id: it.id.toString(),
+            incoming_product_item: it.id,
+            product: it.product,
+            product_name: name,
+            product_description: name,
+            unit_of_measure: it.product_details?.unit_of_measure_details?.unit_symbol || it.unit_name || it.unit_symbol || "Units",
+            received_quantity: it.quantity_received,
+            return_quantity: 0,
+          };
+        })
       );
     }
   }, [receiptData]);
@@ -105,7 +110,8 @@ export default function NewSupplierReturnPage() {
       return;
     }
 
-    if (!receiptData?.incoming_product_id) {
+    const sourceDoc = receiptData?.incoming_product_id || (receiptData as any)?.record_id || (receiptData as any)?.id || (receiptId ? decodeURIComponent(receiptId) : "");
+    if (!sourceDoc) {
       statusModal.showError("Validation Error", "Original receipt data is missing.");
       return;
     }
@@ -118,7 +124,7 @@ export default function NewSupplierReturnPage() {
       }));
       
       const payload = {
-        source_document: receiptData.incoming_product_id,
+        source_document: sourceDoc,
         reason_for_return: reasonForReturn,
         items: returnItems,
       };
@@ -181,9 +187,9 @@ export default function NewSupplierReturnPage() {
               <h2 className="text-[#3B7CED] text-xl mb-6 font-medium">Original Receipt Details</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="flex flex-col gap-2">
-                  <label className="text-gray-700 font-medium text-sm">Receipt ID</label>
-                  <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-600">
-                    {receiptData?.incoming_product_id || "N/A"}
+                  <label className="text-gray-700 font-medium text-sm">Record ID</label>
+                  <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-800 font-mono font-medium">
+                    {receiptData?.incoming_product_id || (receiptData as any)?.record_id || (receiptData as any)?.id || (receiptId ? decodeURIComponent(receiptId) : "N/A")}
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -222,7 +228,7 @@ export default function NewSupplierReturnPage() {
                   <TableHeader className="bg-[#F6F7F8]">
                     <TableRow>
                       <TableHead className="w-80 border border-gray-200 px-4 py-3 text-left text-sm text-gray-600 font-medium">
-                        Product Description
+                        Product Name
                       </TableHead>
                       <TableHead className="w-24 border border-gray-200 px-4 py-3 text-center text-sm text-gray-600 font-medium">
                         Unit
@@ -246,7 +252,7 @@ export default function NewSupplierReturnPage() {
                     ) : items.map((it) => (
                       <TableRow key={it.id} className="group hover:bg-[#FBFBFB] focus-within:bg-[#FBFBFB] transition-colors duration-150">
                         <TableCell className="border border-gray-200 px-4 align-middle">
-                          <div className="text-sm text-gray-600 line-clamp-2">{it.product_description}</div>
+                          <div className="text-sm text-gray-800 font-medium line-clamp-2">{it.product_name}</div>
                         </TableCell>
                         <TableCell className="border border-gray-200 px-4 align-middle text-center">
                           <div className="text-sm text-gray-700">{it.unit_of_measure}</div>

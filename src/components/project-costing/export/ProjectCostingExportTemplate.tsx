@@ -32,7 +32,7 @@ import {
   Clock
 } from "lucide-react";
 import { ProjectCostingProject } from "@/types/projectCosting";
-import { FASTRASUITE_LOGO_BASE64 } from "./ExecutiveProjectReportTemplate";
+import { FASTRASUITE_LOGO_BASE64, formatCompanyLogo } from "./ExecutiveProjectReportTemplate";
 
 export type ExportDocType = "all" | "costing" | "wbs" | "po" | "bills" | "disbursements" | "ledger" | "executive";
 
@@ -305,6 +305,10 @@ interface ExportTemplateProps {
   lineChartData?: any[];
   pieChartData?: any[];
   docType?: ExportDocType;
+  companyName?: string;
+  companyAddress?: string;
+  companyPhone?: string;
+  companyLogo?: string;
 }
 
 const formatDisplayDate = (dateStr?: string) => {
@@ -340,7 +344,11 @@ export const ProjectCostingExportTemplate = ({
   committedSpend = 0,
   lineChartData = [],
   pieChartData = [],
-  docType = "all"
+  docType = "all",
+  companyName = "",
+  companyAddress = "",
+  companyPhone = "",
+  companyLogo = "",
 }: ExportTemplateProps) => {
   const today = new Date().toLocaleDateString("en-US", { year: 'numeric', month: 'long', day: 'numeric' });
   const fin = typeof project?.financials === "string" ? JSON.parse(project.financials) : project?.financials;
@@ -475,8 +483,16 @@ export const ProjectCostingExportTemplate = ({
   const renderHeader = () => (
     <div className="flex justify-between items-start bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
       <div className="flex items-center gap-6">
-        <div className="h-14 w-auto flex-shrink-0 border-r border-gray-200 pr-6">
-          <img src={FASTRASUITE_LOGO_BASE64} alt="Fastra Suite Logo" className="h-full object-contain" />
+        <div className="h-14 w-auto flex-shrink-0 border-r border-gray-200 pr-6 flex items-center">
+          {companyLogo ? (
+            <img 
+              src={formatCompanyLogo(companyLogo)} 
+              alt={companyName || "Company Logo"} 
+              className="h-12 w-auto max-w-[200px] object-contain rounded" 
+            />
+          ) : (
+            <img src={FASTRASUITE_LOGO_BASE64} alt="Fastra Suite Logo" className="h-full object-contain" />
+          )}
         </div>
         <div>
           <div className="flex items-center gap-3">
@@ -580,10 +596,8 @@ export const ProjectCostingExportTemplate = ({
                 <LineChart width={830} height={250} data={effectiveLineData} margin={{ top: 10, right: 30, left: 10, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                   <XAxis dataKey="name" axisLine={{ stroke: '#E5E7EB' }} tickLine={false} tick={{fill: '#4B5563', fontSize: 11}} dy={6} />
-                  <YAxis axisLine={{ stroke: '#E5E7EB' }} tickLine={false} width={75} tick={{fill: '#4B5563', fontSize: 11}} tickFormatter={(val) => val === 0 ? "₦0" : (val >= 1000000 ? `₦${(val/1000000).toFixed(1)}M` : `₦${(val/1000).toFixed(0)}k`)} />
-                  <Legend verticalAlign="top" align="right" height={30} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: "11px", fontWeight: 600 }} />
                   <Line type="monotone" dataKey="planned" name="Planned Spend" stroke="#3B7CED" strokeWidth={2.5} dot={false} strokeDasharray="5 5" isAnimationActive={false} connectNulls={false} />
-                  <Line type="monotone" dataKey="actual" name="Actual Spent" stroke="#10B981" strokeWidth={2.5} dot={{ r: 4, fill: '#10B981' }} isAnimationActive={false} connectNulls={false} />
+                  <Line type="monotone" dataKey="actual" name="Actual Spent" stroke="#2BA24D" strokeWidth={2.5} dot={{ r: 4, fill: '#2BA24D' }} isAnimationActive={false} connectNulls={false} />
                   <Line type="monotone" dataKey="committed" name="Committed Spent" stroke="#F59E0B" strokeWidth={2.5} dot={{ r: 4, fill: '#F59E0B' }} isAnimationActive={false} connectNulls={false} />
                 </LineChart>
               ) : (
@@ -1158,7 +1172,12 @@ export const ProjectCostingExportTemplate = ({
   };
 
   return (
-    <div className="flex flex-col gap-10 bg-gray-50 font-sans text-gray-800 relative">
+    <div 
+      className="flex flex-col gap-10 bg-gray-50 text-gray-800 relative"
+      style={{
+        fontFamily: "var(--font-geist-sans), 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      }}
+    >
       {/* SECTION SELECTION BY DOC TYPE */}
       {docType === "all" ? (
         <>

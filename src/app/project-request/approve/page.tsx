@@ -45,17 +45,78 @@ export default function ApproveRequestPage() {
     refetch();
   }, [refetch]);
   
+  const getRequestTimestamp = (req: any): number => {
+    if (!req) return 0;
+    let detail: any = {};
+    if (req.detail) {
+      if (typeof req.detail === "string") {
+        try {
+          detail = JSON.parse(req.detail);
+        } catch (e) {
+          detail = {};
+        }
+      } else if (typeof req.detail === "object") {
+        detail = req.detail;
+      }
+    }
+    const raw =
+      req.created_at ||
+      req.created_date ||
+      req.date ||
+      req.date_requested ||
+      req.submitted_at ||
+      detail.created_at ||
+      detail.date_consumed ||
+      detail.required_by_date ||
+      detail.date;
+    if (!raw) return 0;
+    const time = new Date(raw).getTime();
+    return isNaN(time) ? 0 : time;
+  };
+
+  const formatRequestDate = (req: any): string => {
+    let detail: any = {};
+    if (req?.detail) {
+      if (typeof req.detail === "string") {
+        try {
+          detail = JSON.parse(req.detail);
+        } catch (e) {
+          detail = {};
+        }
+      } else if (typeof req.detail === "object") {
+        detail = req.detail;
+      }
+    }
+    const raw =
+      req?.created_at ||
+      req?.date ||
+      detail.created_at ||
+      detail.date_consumed ||
+      detail.required_by_date ||
+      detail.date;
+    if (!raw) return "";
+    try {
+      return new Date(raw).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "";
+    }
+  };
+
   const apiRequests = React.useMemo(() => {
     const list = Array.isArray(rawApiRequests) ? rawApiRequests : (rawApiRequests as any)?.results || [];
     return [...list]
       .filter((req: any) => !removedIds.includes(req.id))
       .sort((a: any, b: any) => {
-        const dateA = new Date(a.created_at || 0).getTime();
-        const dateB = new Date(b.created_at || 0).getTime();
-        if (dateB !== dateA) {
-          return dateB - dateA;
+        const timeA = getRequestTimestamp(a);
+        const timeB = getRequestTimestamp(b);
+        if (timeB !== timeA) {
+          return timeB - timeA; // Newest created date first
         }
-        return Number(b.id || 0) - Number(a.id || 0);
+        return Number(b.id || 0) - Number(a.id || 0); // Newest ID first
       });
   }, [rawApiRequests, removedIds]);
   const { data: rawProjects } = useGetProjectCostingProjectsQuery({});
@@ -264,13 +325,20 @@ export default function ApproveRequestPage() {
                 }
               >
                 <div className="flex flex-col gap-4">
-                  <div>
-                    <span className="text-xs font-bold text-[#3B7CED] mb-0.5 block">
-                      {getRequestReferenceId(request)}
-                    </span>
-                    <h3 className="text-base font-bold text-gray-900 leading-tight">
-                      {request.project_details?.name || (typeof request.detail === "object" ? request.detail?.project_details?.name : null) || getProjectName(request.project)}
-                    </h3>
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-[#3B7CED] mb-0.5 block">
+                        {getRequestReferenceId(request)}
+                      </span>
+                      <h3 className="text-base font-bold text-gray-900 leading-tight">
+                        {request.project_details?.name || (typeof request.detail === "object" ? request.detail?.project_details?.name : null) || getProjectName(request.project)}
+                      </h3>
+                    </div>
+                    {formatRequestDate(request) && (
+                      <span className="text-xs text-gray-500 font-medium whitespace-nowrap bg-gray-50 border border-gray-100 px-2 py-0.5 rounded">
+                        {formatRequestDate(request)}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex justify-between items-start">

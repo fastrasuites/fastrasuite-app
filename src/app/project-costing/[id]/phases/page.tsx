@@ -15,6 +15,7 @@ interface GroupedSubphase {
   orig?: number;
   revision?: number;
   budget: number;
+  available?: number;
 }
 
 interface GroupedPhase {
@@ -23,6 +24,7 @@ interface GroupedPhase {
   orig?: number;
   revision?: number;
   budget: number;
+  available?: number;
   subphases: GroupedSubphase[];
   directActivities: any[];
 }
@@ -254,6 +256,29 @@ export default function WorkBreakdownStructurePage() {
       "order",
       "sequence",
       "sort_order",
+      "actual_spent",
+      "actual spent",
+      "actual_spend",
+      "actual spend",
+      "actual_cost",
+      "actual cost",
+      "actual",
+      "spent",
+      "committed",
+      "committed_cost",
+      "committed cost",
+      "committed_spend",
+      "committed spend",
+      "committed_amount",
+      "committed amount",
+      "available_balance",
+      "available balance",
+      "available_budget",
+      "available budget",
+      "available",
+      "remaining_budget",
+      "remaining budget",
+      "remaining",
     ]);
     parsedPhases.forEach((phase: any) => {
       if (phase.activities && Array.isArray(phase.activities)) {
@@ -264,7 +289,13 @@ export default function WorkBreakdownStructurePage() {
               !standardKeys.has(lower) &&
               !lower.includes("revision") &&
               !lower.includes("budget") &&
-              !lower.includes("adjust")
+              !lower.includes("adjust") &&
+              !lower.includes("actual") &&
+              !lower.includes("spent") &&
+              !lower.includes("commit") &&
+              !lower.includes("available") &&
+              !lower.includes("balance") &&
+              !lower.includes("remain")
             ) {
               colSet.add(key);
             }
@@ -276,7 +307,13 @@ export default function WorkBreakdownStructurePage() {
                 !standardKeys.has(lower) &&
                 !lower.includes("revision") &&
                 !lower.includes("budget") &&
-                !lower.includes("adjust")
+                !lower.includes("adjust") &&
+                !lower.includes("actual") &&
+                !lower.includes("spent") &&
+                !lower.includes("commit") &&
+                !lower.includes("available") &&
+                !lower.includes("balance") &&
+                !lower.includes("remain")
               ) {
                 colSet.add(key);
               }
@@ -293,6 +330,7 @@ export default function WorkBreakdownStructurePage() {
     let phaseOrig = 0;
     let phaseRevision = 0;
     let phaseBudget = 0;
+    let phaseAvailable = 0;
     const directActivities: any[] = [];
     const subphasesMap: Record<string, GroupedSubphase> = {};
 
@@ -303,9 +341,20 @@ export default function WorkBreakdownStructurePage() {
         const orig = Number(act.original_budget || act.amount || (q * r) || 0);
         const rev = getActivityApprovedRevision(act);
         const curr = act.current_budget !== undefined && act.current_budget !== null ? Number(act.current_budget) : (orig + rev);
+        const actSpent = Number(act.actual_spent || act.actual || act.spent || act.actual_cost || 0);
+        const actCommitted = Number(act.committed || act.committed_cost || act.committed_amount || act.committed_spend || 0);
+        const actAvailable = act.available_balance !== undefined && act.available_balance !== null
+          ? Number(act.available_balance)
+          : act.available_budget !== undefined && act.available_budget !== null
+          ? Number(act.available_budget)
+          : act.remaining_budget !== undefined && act.remaining_budget !== null
+          ? Number(act.remaining_budget)
+          : (curr - actSpent - actCommitted);
+
         phaseOrig += orig;
         phaseRevision += rev;
         phaseBudget += curr;
+        phaseAvailable += actAvailable;
 
         const parts = (act.name || "").split(" - ");
         if (parts.length > 1) {
@@ -313,14 +362,15 @@ export default function WorkBreakdownStructurePage() {
           const activityName = parts.slice(1).join(" - ").trim();
           
           if (!subphasesMap[subphaseName]) {
-            subphasesMap[subphaseName] = { name: subphaseName, activities: [], orig: 0, revision: 0, budget: 0 };
+            subphasesMap[subphaseName] = { name: subphaseName, activities: [], orig: 0, revision: 0, budget: 0, available: 0 };
           }
-          subphasesMap[subphaseName].activities.push({ ...act, displayName: activityName, orig, revision: rev, budget: curr });
+          subphasesMap[subphaseName].activities.push({ ...act, displayName: activityName, orig, revision: rev, budget: curr, available: actAvailable });
           subphasesMap[subphaseName].orig = (subphasesMap[subphaseName].orig || 0) + orig;
           subphasesMap[subphaseName].revision = (subphasesMap[subphaseName].revision || 0) + rev;
           subphasesMap[subphaseName].budget += curr;
+          subphasesMap[subphaseName].available = (subphasesMap[subphaseName].available || 0) + actAvailable;
         } else {
-          directActivities.push({ ...act, displayName: act.name, orig, revision: rev, budget: curr });
+          directActivities.push({ ...act, displayName: act.name, orig, revision: rev, budget: curr, available: actAvailable });
         }
       });
     }
@@ -331,6 +381,7 @@ export default function WorkBreakdownStructurePage() {
       orig: phaseOrig,
       revision: phaseRevision,
       budget: phaseBudget,
+      available: phaseAvailable,
       subphases: Object.values(subphasesMap),
       directActivities,
     };
@@ -392,6 +443,7 @@ export default function WorkBreakdownStructurePage() {
                     <th className="py-3 px-4 font-semibold text-sm text-gray-600 w-[160px]">Current Budget</th>
                   </>
                 )}
+                <th className="py-3 px-4 font-semibold text-sm text-gray-600 w-[160px]">Available Balance</th>
                 {customColumns.map(col => (
                   <th key={col} className="py-3 px-4 font-semibold text-sm text-gray-600 whitespace-nowrap">{col}</th>
                 ))}
@@ -430,6 +482,9 @@ export default function WorkBreakdownStructurePage() {
                             </td>
                           </>
                         )}
+                        <td className="py-3 px-4 text-base font-bold text-gray-900 bg-[#EEF2FB]">
+                          ₦{(phase.available ?? 0).toLocaleString()}
+                        </td>
                         {customColumns.map(col => <td key={col} className="py-3 px-4 bg-[#EEF2FB]"></td>)}
                       </tr>
 
@@ -460,6 +515,9 @@ export default function WorkBreakdownStructurePage() {
                                     </td>
                                   </>
                                 )}
+                                <td className="py-3 px-4 text-sm font-semibold text-gray-900">
+                                  ₦{Number(act.available ?? 0).toLocaleString()}
+                                </td>
                                 {customColumns.map(col => (
                                   <td key={col} className="py-3 px-4 text-sm text-gray-600">{act[col] || act.custom_values?.[col] || ""}</td>
                                 ))}
@@ -498,6 +556,9 @@ export default function WorkBreakdownStructurePage() {
                                       </td>
                                     </>
                                   )}
+                                  <td className="py-3 px-4 text-sm font-bold text-gray-800 bg-[#F4F7FC]">
+                                    ₦{(sub.available ?? 0).toLocaleString()}
+                                  </td>
                                   {customColumns.map(col => <td key={col} className="py-3 px-4 bg-[#F4F7FC]"></td>)}
                                 </tr>
 
@@ -524,6 +585,9 @@ export default function WorkBreakdownStructurePage() {
                                           </td>
                                         </>
                                       )}
+                                      <td className="py-3 px-4 text-sm font-semibold text-gray-900">
+                                        ₦{Number(act.available ?? 0).toLocaleString()}
+                                      </td>
                                       {customColumns.map(col => (
                                         <td key={col} className="py-3 px-4 text-sm text-gray-600">{act[col] || act.custom_values?.[col] || ""}</td>
                                       ))}
@@ -542,7 +606,7 @@ export default function WorkBreakdownStructurePage() {
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={hasAdjustments ? 7 + customColumns.length : 5 + customColumns.length} className="py-4 px-6 text-right font-medium text-gray-600">
+                <td colSpan={hasAdjustments ? 8 + customColumns.length : 6 + customColumns.length} className="py-4 px-6 text-right font-medium text-gray-600">
                   <div className="flex items-center justify-end gap-6">
                     {hasAdjustments && (
                       <>

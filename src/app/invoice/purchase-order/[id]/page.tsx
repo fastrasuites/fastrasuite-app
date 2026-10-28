@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useSelector } from "react-redux";
@@ -40,9 +40,11 @@ import {
 } from "@/api/invoice/projectPurchaseOrdersApi";
 import { useGetAccountingSettingsQuery } from "@/api/invoice/accountingSettingsApi";
 import { useGetCompanyQuery } from "@/api/settings/companyApi";
+import { useGetProjectCostingProjectsQuery } from "@/api/projectCostingApi";
 import { PageGuard } from "@/components/auth/PageGuard";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { PurchaseOrderDocumentTemplate } from "@/components/invoice/export/PurchaseOrderDocumentTemplate";
+import { formatCompanyLogo } from "@/components/project-costing/export/ExecutiveProjectReportTemplate";
 
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
@@ -142,6 +144,7 @@ export default function PurchaseOrderDetailPage() {
     useGetAccountingSettingsQuery();
 
   const { data: companyData } = useGetCompanyQuery();
+  const { data: projectList } = useGetProjectCostingProjectsQuery({});
   const user = useSelector((state: RootState) => (state as any).auth?.user);
   const tenant_company_name =
     useSelector((state: RootState) => (state as any).auth?.tenant_company_name) ||
@@ -159,7 +162,102 @@ export default function PurchaseOrderDetailPage() {
         .join(", ")
     : (companyData as any)?.address || "";
   const companyPhone = companyData?.phone || "";
-  const companyLogo = companyData?.logo || "";
+  const rawCompanyLogo =
+    companyData?.logo ||
+    (companyData as any)?.company_logo ||
+    (companyData as any)?.logo_url ||
+    user?.company_logo ||
+    (user as any)?.logo ||
+    (user as any)?.tenant_logo ||
+    "";
+  const companyLogo = formatCompanyLogo(rawCompanyLogo);
+
+  // Accurately resolve project name across all potential backend fields
+  const resolvedProjectName = useMemo(() => {
+    if (!poDetail) return "";
+    const direct =
+      (poDetail as any).project_name ||
+      (poDetail as any).project_details?.name ||
+      (poDetail as any).project?.name ||
+      (poDetail as any).project_title ||
+      (poDetail as any).source_details?.project?.name ||
+      (poDetail as any).source_details?.project_details?.name ||
+      (poDetail as any).source_details?.project_name ||
+      (poDetail as any).project_request?.project_details?.name ||
+      (poDetail as any).project_request?.project_name ||
+      (poDetail as any).wbs_element_details?.phase?.project?.name ||
+      (poDetail as any).wbs_element_details?.phase?.project_details?.name ||
+      (poDetail as any).wbs_element_details?.phase?.project_name ||
+      (poDetail as any).wbs_element_details?.project_name;
+
+    if (
+      direct &&
+      typeof direct === "string" &&
+      direct.trim() &&
+      direct.trim().toLowerCase() !== "project"
+    ) {
+      return direct.trim();
+    }
+
+    // Check notes / description for Project: <name>
+    const rawNotes =
+      (poDetail as any)?.notes ||
+      (poDetail as any)?.description ||
+      (poDetail as any)?.purpose;
+    if (typeof rawNotes === "string" && rawNotes) {
+      const match = rawNotes.match(/(?:^|[|\n\r])\s*Project\s*:\s*([^|\n\r]+)/i);
+      if (
+        match &&
+        match[1]?.trim() &&
+        !/^(null|undefined|none|project)$/i.test(match[1].trim())
+      ) {
+        return match[1].trim();
+      }
+    }
+
+    // Match by project ID or WBS in projectList
+    if (Array.isArray(projectList) && projectList.length > 0) {
+      const rawProjectId = (poDetail as any).project || (poDetail as any).project_id;
+      if (rawProjectId) {
+        const match = projectList.find(
+          (p) =>
+            String(p.id) === String(rawProjectId) ||
+            String(p.project_code) === String(rawProjectId)
+        );
+        if (match?.name) return match.name;
+      }
+      if (poDetail.wbs_element) {
+        const match = projectList.find((p) =>
+          (p as any).phases?.some((ph: any) =>
+            ph.activities?.some(
+              (act: any) => String(act.id) === String(poDetail.wbs_element)
+            )
+          )
+        );
+        if (match?.name) return match.name;
+      }
+    }
+
+    const phaseName = (poDetail as any).wbs_element_details?.phase?.name;
+    if (phaseName && typeof phaseName === "string" && phaseName.trim()) {
+      return phaseName.trim();
+    }
+
+    const wbsName = (poDetail as any).wbs_element_details?.name;
+    if (wbsName && typeof wbsName === "string" && wbsName.trim()) {
+      return wbsName.trim();
+    }
+
+    if (
+      typeof (poDetail as any)?.project === "string" &&
+      (poDetail as any)?.project.trim() &&
+      !/^[0-9a-f-]{36}$/i.test((poDetail as any)?.project.trim())
+    ) {
+      return (poDetail as any)?.project.trim();
+    }
+
+    return (poDetail as any)?.project_code || "";
+  }, [poDetail, projectList]);
 
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatusText, setExportStatusText] = useState("Export");
@@ -347,6 +445,25 @@ export default function PurchaseOrderDetailPage() {
 
       if (!element || element.offsetHeight < 100) {
         throw new Error("Document template could not be rendered for export.");
+      }
+
+      // Ensure all images (e.g. company logo, badges) are loaded and decoded before capture
+      const imgs = Array.from(element.querySelectorAll("img"));
+      if (imgs.length > 0) {
+        await Promise.all(
+          imgs.map(
+            (img) =>
+              new Promise<void>((res) => {
+                if (img.complete && img.naturalHeight !== 0) {
+                  res();
+                } else {
+                  img.onload = () => res();
+                  img.onerror = () => res();
+                  setTimeout(res, 600);
+                }
+              })
+          )
+        );
       }
 
       const cleanPoNumber = (
@@ -1013,6 +1130,7 @@ export default function PurchaseOrderDetailPage() {
           {poDetail && (
             <PurchaseOrderDocumentTemplate
               order={poDetail}
+              projectName={resolvedProjectName}
               companyName={companyName}
               companyAddress={companyAddress}
               companyPhone={companyPhone}

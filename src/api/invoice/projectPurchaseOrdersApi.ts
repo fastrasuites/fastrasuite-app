@@ -56,6 +56,13 @@ export interface ProjectPurchaseOrder {
   updated_at: string;
   lines: PurchaseOrderLine[];
   site_location?: string;
+  project_name?: string;
+  project_code?: string;
+  project_details?: {
+    id: number;
+    name: string;
+    project_code?: string;
+  };
   equipment_hire?: EquipmentHire | null;
   wbs_element_details?: {
     id: string;

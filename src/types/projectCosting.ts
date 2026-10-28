@@ -121,3 +121,11 @@ export interface ImportXlsxRequest {
   file: File;
   [key: string]: any;
 }
+
+export interface ProjectCostingDetailsParams {
+  id: number;
+  from_date?: string;
+  to_date?: string;
+  category?: string;
+  [key: string]: any;
+}

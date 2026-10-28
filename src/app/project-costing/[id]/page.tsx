@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AddBudgetAdjustmentModal } from "@/components/project-costing/modals/AddBudgetAdjustmentModal";
 import { AddDocumentModal } from "@/components/project-costing/modals/AddDocumentModal";
 import { ProjectCostingExportTemplate, ExportDocType, categorizeTransactions } from "@/components/project-costing/export/ProjectCostingExportTemplate";
-import { ExecutiveProjectReportTemplate } from "@/components/project-costing/export/ExecutiveProjectReportTemplate";
+import { ExecutiveProjectReportTemplate, formatCompanyLogo } from "@/components/project-costing/export/ExecutiveProjectReportTemplate";
 import { useGetCompanyQuery } from "@/api/settings/companyApi";
 import { useSelector } from "react-redux";
 import type { RootState } from "@/lib/store/store";
@@ -211,10 +211,31 @@ export default function ProjectDashboardPage() {
   const { isProjectAccessible, planName } = useSubscriptionLimits();
   const isAccessible = !id || isProjectAccessible(Number(id));
 
-  const { data: project, isLoading, error, refetch } = useGetProjectCostingProjectQuery(
-    Number(id),
-    { skip: !id || !isAccessible }
-  );
+  const categoryParam = React.useMemo(() => {
+    if (!costCategoryFilter || costCategoryFilter === "all") return undefined;
+    if (costCategoryFilter === "sub_contractor") return "subcontractor";
+    return costCategoryFilter;
+  }, [costCategoryFilter]);
+
+  const projectQueryParams = React.useMemo(() => {
+    const params: { id: number; from_date?: string; to_date?: string; category?: string } = {
+      id: Number(id),
+    };
+    if (fromDate) params.from_date = fromDate;
+    if (toDate) params.to_date = toDate;
+    if (categoryParam) params.category = categoryParam;
+    return params;
+  }, [id, fromDate, toDate, categoryParam]);
+
+  const {
+    data: project,
+    isLoading,
+    isFetching: isFetchingProject,
+    error,
+    refetch,
+  } = useGetProjectCostingProjectQuery(projectQueryParams, {
+    skip: !id || !isAccessible,
+  });
 
   const { data: budgetAdjustments, isLoading: isLoadingAdjustments, refetch: refetchAdjustments } = useGetBudgetAdjustmentsQuery(
     Number(id),
@@ -234,18 +255,31 @@ export default function ProjectDashboardPage() {
       ? Number(pendingRequestsSummary.total_pending_value)
       : null;
 
-  const { data: rawTransactions, isLoading: isLoadingTransactions } = useGetProjectTransactionsQuery(
-    Number(id),
-    { skip: !id || !isAccessible }
-  );
+  const {
+    data: rawTransactions,
+    isLoading: isLoadingTransactions,
+    isFetching: isFetchingTransactions,
+  } = useGetProjectTransactionsQuery(projectQueryParams, {
+    skip: !id || !isAccessible,
+  });
 
-  const transactions = Array.isArray(rawTransactions)
+  const backendProjectTransactions =
+    project?.transactions ??
+    project?.financials?.transactions ??
+    project?.filtered_transactions ??
+    project?.recent_transactions;
+
+  const rawTxList = Array.isArray(rawTransactions)
     ? rawTransactions
     : Array.isArray((rawTransactions as any)?.results)
     ? (rawTransactions as any).results
     : Array.isArray((rawTransactions as any)?.data)
     ? (rawTransactions as any).data
     : [];
+
+  const transactions = Array.isArray(backendProjectTransactions)
+    ? backendProjectTransactions
+    : rawTxList;
 
   const { data: projectSettings, isLoading: isLoadingSettings, refetch: refetchSettings } = useGetProjectSettingsQuery(
     Number(id),
@@ -270,13 +304,26 @@ export default function ProjectDashboardPage() {
   const isExporting = isExportingPdf || isExportingImage;
 
   const tenant_company_name = useSelector((state: RootState) => (state.auth as any)?.tenant_company_name);
+  const authUser = useSelector((state: RootState) => (state.auth as any)?.user);
   const { data: companyData } = useGetCompanyQuery();
-  const companyName = tenant_company_name || (companyData as any)?.name || (companyData as any)?.company_name || "";
+  const companyName = 
+    tenant_company_name || 
+    (companyData as any)?.name || 
+    (companyData as any)?.company_name || 
+    authUser?.company_name || 
+    authUser?.tenant_name || 
+    "";
   const companyAddress = companyData?.street_address
     ? [companyData.street_address, companyData.city, companyData.state, companyData.country].filter(Boolean).join(", ")
-    : "";
+    : (companyData as any)?.address || "";
   const companyPhone = companyData?.phone || "";
-  const companyLogo = companyData?.logo || "";
+  const rawCompanyLogo = 
+    companyData?.logo || 
+    (companyData as any)?.company_logo || 
+    (companyData as any)?.logo_url || 
+    authUser?.company_logo || 
+    "";
+  const companyLogo = formatCompanyLogo(rawCompanyLogo);
 
   // Resolve accurate Project Manager name
   const resolvedProjectManager = React.useMemo(() => {
@@ -392,6 +439,9 @@ export default function ProjectDashboardPage() {
   // Robust DOM to Image capture helper with font-skipping, image-error safety & html2canvas fallback
   const captureElementToDataUrl = async (el: HTMLElement, format: "jpeg" | "png" = "jpeg"): Promise<string> => {
     const blankPlaceholder = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAEDEB1CQAAAElFTkSuQmCC";
+    if (el) {
+      el.style.fontFamily = "var(--font-geist-sans), 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+    }
     try {
       if (format === "png") {
         return await toPng(el, {
@@ -452,6 +502,25 @@ export default function ProjectDashboardPage() {
 
       if (!exportRef.current) return;
       const element = exportRef.current;
+      
+      // Ensure all images (e.g. company logo) are fully loaded and decoded before rasterization
+      const imgs = Array.from(element.querySelectorAll("img"));
+      if (imgs.length > 0) {
+        await Promise.all(
+          imgs.map(
+            (img) =>
+              new Promise<void>((res) => {
+                if (img.complete && img.naturalHeight !== 0) {
+                  res();
+                } else {
+                  img.onload = () => res();
+                  img.onerror = () => res();
+                  setTimeout(res, 500);
+                }
+              })
+          )
+        );
+      }
       
       const isPortrait = targetDocType === "executive";
       const pdf = new jsPDF(isPortrait ? "p" : "l", "mm", "a4");
@@ -557,6 +626,26 @@ export default function ProjectDashboardPage() {
 
       if (!exportRef.current) return;
       const element = exportRef.current;
+
+      // Ensure all images (e.g. company logo) are fully loaded and decoded before rasterization
+      const imgs = Array.from(element.querySelectorAll("img"));
+      if (imgs.length > 0) {
+        await Promise.all(
+          imgs.map(
+            (img) =>
+              new Promise<void>((res) => {
+                if (img.complete && img.naturalHeight !== 0) {
+                  res();
+                } else {
+                  img.onload = () => res();
+                  img.onerror = () => res();
+                  setTimeout(res, 500);
+                }
+              })
+          )
+        );
+      }
+
       const image = await captureElementToDataUrl(element, "png");
       setExportStatusText("Downloading image...");
       const cleanProjectName = (project?.name || "Project").replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -1061,6 +1150,29 @@ export default function ProjectDashboardPage() {
       "order",
       "sequence",
       "sort_order",
+      "actual_spent",
+      "actual spent",
+      "actual_spend",
+      "actual spend",
+      "actual_cost",
+      "actual cost",
+      "actual",
+      "spent",
+      "committed",
+      "committed_cost",
+      "committed cost",
+      "committed_spend",
+      "committed spend",
+      "committed_amount",
+      "committed amount",
+      "available_balance",
+      "available balance",
+      "available_budget",
+      "available budget",
+      "available",
+      "remaining_budget",
+      "remaining budget",
+      "remaining",
     ]);
     parsedPhases.forEach((phase: any) => {
       if (phase.activities && Array.isArray(phase.activities)) {
@@ -1071,7 +1183,13 @@ export default function ProjectDashboardPage() {
               !standardKeys.has(lower) &&
               !lower.includes("revision") &&
               !lower.includes("budget") &&
-              !lower.includes("adjust")
+              !lower.includes("adjust") &&
+              !lower.includes("actual") &&
+              !lower.includes("spent") &&
+              !lower.includes("commit") &&
+              !lower.includes("available") &&
+              !lower.includes("balance") &&
+              !lower.includes("remain")
             ) {
               colSet.add(key);
             }
@@ -1083,7 +1201,13 @@ export default function ProjectDashboardPage() {
                 !standardKeys.has(lower) &&
                 !lower.includes("revision") &&
                 !lower.includes("budget") &&
-                !lower.includes("adjust")
+                !lower.includes("adjust") &&
+                !lower.includes("actual") &&
+                !lower.includes("spent") &&
+                !lower.includes("commit") &&
+                !lower.includes("available") &&
+                !lower.includes("balance") &&
+                !lower.includes("remain")
               ) {
                 colSet.add(key);
               }
@@ -1211,12 +1335,14 @@ export default function ProjectDashboardPage() {
     );
   };
 
-  const hasActiveFilter = costCategoryFilter !== "all" || Boolean(fromDate) || Boolean(toDate);
+  const hasActiveFilter = (costCategoryFilter !== "all" && Boolean(costCategoryFilter)) || Boolean(fromDate) || Boolean(toDate);
 
-  // Filtered transactions based on currently active filters
-  const filteredTransactions = txList.filter((tx: any) => {
-    return isTxInDateRange(tx) && matchesCostCategory(tx, costCategoryFilter);
-  });
+  // Filtered transactions based on currently active filters (prefer backend-provided filtered list)
+  const filteredTransactions = Array.isArray(backendProjectTransactions)
+    ? backendProjectTransactions
+    : hasActiveFilter
+    ? txList.filter((tx: any) => isTxInDateRange(tx) && matchesCostCategory(tx, costCategoryFilter))
+    : txList;
 
   // Base overall project budget
   let totalProjectBudget = parseNumber(
@@ -1288,17 +1414,50 @@ export default function ProjectDashboardPage() {
     budgetNum = totalProjectBudget;
   }
 
-  // Determine Actual Spend & Committed Cost
-  if (hasActiveFilter) {
+  // Determine Actual Spend, Committed Cost, and Remaining Budget
+  // 1. Extract backend-provided recalculations
+  const beActual = fin?.actual !== undefined 
+    ? parseNumber(fin.actual) 
+    : fin?.spent !== undefined 
+    ? parseNumber(fin.spent) 
+    : fin?.actual_spend !== undefined
+    ? parseNumber(fin.actual_spend)
+    : project?.actual_spend !== undefined 
+    ? parseNumber(project.actual_spend) 
+    : (project as any)?.spent !== undefined 
+    ? parseNumber((project as any).spent) 
+    : null;
+
+  const beCommitted = fin?.committed !== undefined 
+    ? parseNumber(fin.committed) 
+    : fin?.committed_spend !== undefined
+    ? parseNumber(fin.committed_spend)
+    : fin?.committed_amount !== undefined
+    ? parseNumber(fin.committed_amount)
+    : project?.committed_spend !== undefined 
+    ? parseNumber(project.committed_spend) 
+    : (project as any)?.committed !== undefined 
+    ? parseNumber((project as any).committed) 
+    : null;
+
+  const beRemaining = fin?.remaining_budget !== undefined 
+    ? parseNumber(fin.remaining_budget) 
+    : fin?.remaining !== undefined 
+    ? parseNumber(fin.remaining) 
+    : fin?.available_budget !== undefined 
+    ? parseNumber(fin.available_budget) 
+    : (project as any)?.remaining_budget !== undefined
+    ? parseNumber((project as any).remaining_budget)
+    : null;
+
+  // Actual Spend: Prioritize backend recalculated actual spend
+  if (beActual !== null) {
+    actualSpend = beActual;
+  } else {
     let actSum = 0;
-    let comSum = 0;
     filteredTransactions.forEach((tx: any) => {
       const amt = extractAmount(tx);
-      if (isTxActual(tx)) {
-        actSum += amt;
-      } else if (isTxCommitted(tx)) {
-        comSum += amt;
-      }
+      if (isTxActual(tx)) actSum += amt;
     });
 
     if (actSum === 0 && costCategoryFilter !== "all" && !fromDate && !toDate && fin?.category_breakdown && Array.isArray(fin.category_breakdown)) {
@@ -1311,27 +1470,27 @@ export default function ProjectDashboardPage() {
         actSum = parseNumber(cat.amount || cat.spent || cat.value || 0);
       }
     }
-
     actualSpend = actSum;
-    committed = comSum;
-  } else {
-    let beActual = fin?.actual !== undefined ? parseNumber(fin.actual) : (fin?.spent !== undefined ? parseNumber(fin.spent) : parseNumber(project?.actual_spend ?? project?.spent ?? 0));
-    let beCommitted = fin?.committed !== undefined ? parseNumber(fin.committed) : parseNumber(project?.committed_spend ?? project?.committed ?? 0);
-
-    let txActSum = 0;
-    let txComSum = 0;
-    txList.forEach((tx: any) => {
-      const amt = extractAmount(tx);
-      if (isTxActual(tx)) txActSum += amt;
-      else if (isTxCommitted(tx)) txComSum += amt;
-    });
-
-    actualSpend = (fin && (fin.actual !== undefined || fin.spent !== undefined)) ? beActual : (beActual > 0 ? beActual : txActSum);
-    committed = (fin && fin.committed !== undefined) ? beCommitted : (beCommitted > 0 ? beCommitted : txComSum);
-
   }
 
-  remaining = Math.max(0, budgetNum - actualSpend - committed);
+  // Committed Spend: Prioritize backend recalculated committed spend
+  if (beCommitted !== null) {
+    committed = beCommitted;
+  } else {
+    let comSum = 0;
+    filteredTransactions.forEach((tx: any) => {
+      const amt = extractAmount(tx);
+      if (isTxCommitted(tx)) comSum += amt;
+    });
+    committed = comSum;
+  }
+
+  // Remaining: Prioritize backend recalculated remaining_budget
+  if (beRemaining !== null) {
+    remaining = beRemaining;
+  } else {
+    remaining = Math.max(0, budgetNum - actualSpend - committed);
+  }
 
   originalBudgetNum = parseNumber(fin?.original_budget || budgetNum);
   if (originalBudgetNum === 0) originalBudgetNum = budgetNum;
@@ -1400,9 +1559,11 @@ export default function ProjectDashboardPage() {
     return 0;
   };
 
-  variance = hasActiveFilter || fin?.consumed_percent === undefined
-    ? (budgetNum > 0 ? `${((actualSpend / budgetNum) * 100).toFixed(1)}%` : "0%")
-    : `${Number(fin.consumed_percent).toFixed(1)}%`;
+  variance = (fin?.variance !== undefined && fin.variance !== null)
+    ? (typeof fin.variance === "string" ? fin.variance : `${Number(fin.variance).toFixed(1)}%`)
+    : (fin?.consumed_percent !== undefined && fin.consumed_percent !== null)
+    ? `${Number(fin.consumed_percent).toFixed(1)}%`
+    : (budgetNum > 0 ? `${((actualSpend / budgetNum) * 100).toFixed(1)}%` : "0%");
 
   const finPercent = budgetNum > 0 ? actualSpend / budgetNum : 0;
   const actualPercent = budgetNum > 0 ? Math.min(1, actualSpend / budgetNum) : 0;
@@ -1812,6 +1973,7 @@ export default function ProjectDashboardPage() {
       let phaseOrig = 0;
       let phaseRevision = 0;
       let phaseBudget = 0;
+      let phaseAvailable = 0;
       
       if (phase.activities && Array.isArray(phase.activities)) {
         phase.activities.forEach((act: any) => {
@@ -1822,9 +1984,20 @@ export default function ProjectDashboardPage() {
           const curr = act.current_budget !== undefined && act.current_budget !== null 
             ? Number(act.current_budget) 
             : (orig + rev);
+          const actSpent = Number(act.actual_spent || act.actual || act.spent || act.actual_cost || 0);
+          const actCommitted = Number(act.committed || act.committed_cost || act.committed_amount || act.committed_spend || 0);
+          const actAvailable = act.available_balance !== undefined && act.available_balance !== null
+            ? Number(act.available_balance)
+            : act.available_budget !== undefined && act.available_budget !== null
+            ? Number(act.available_budget)
+            : act.remaining_budget !== undefined && act.remaining_budget !== null
+            ? Number(act.remaining_budget)
+            : (curr - actSpent - actCommitted);
+
           phaseOrig += orig;
           phaseRevision += rev;
           phaseBudget += curr;
+          phaseAvailable += actAvailable;
         });
       }
 
@@ -1851,6 +2024,9 @@ export default function ProjectDashboardPage() {
               </TableCell>
             </>
           )}
+          <TableCell className="py-3 font-bold text-base bg-[#EEF2FB] text-gray-900">
+            ₦{phaseAvailable.toLocaleString()}
+          </TableCell>
           {customColumns.map(col => <TableCell key={col} className="bg-[#EEF2FB]" />)}
         </TableRow>
       ];
@@ -1865,6 +2041,15 @@ export default function ProjectDashboardPage() {
           const actBudget = act.current_budget !== undefined && act.current_budget !== null
             ? Number(act.current_budget)
             : (origAmt + actRevision);
+          const actSpent = Number(act.actual_spent || act.actual || act.spent || act.actual_cost || 0);
+          const actCommitted = Number(act.committed || act.committed_cost || act.committed_amount || act.committed_spend || 0);
+          const actAvailable = act.available_balance !== undefined && act.available_balance !== null
+            ? Number(act.available_balance)
+            : act.available_budget !== undefined && act.available_budget !== null
+            ? Number(act.available_budget)
+            : act.remaining_budget !== undefined && act.remaining_budget !== null
+            ? Number(act.remaining_budget)
+            : (actBudget - actSpent - actCommitted);
           const currentSn = serialCounter++;
 
           rows.push(
@@ -1894,6 +2079,9 @@ export default function ProjectDashboardPage() {
                   </TableCell>
                 </>
               )}
+              <TableCell className="py-3 font-semibold text-sm text-gray-900">
+                ₦{actAvailable.toLocaleString()}
+              </TableCell>
               {customColumns.map(col => (
                 <TableCell key={col} className="py-3 text-sm text-gray-600">
                   {act[col] || act.custom_values?.[col] || ""}
@@ -2129,9 +2317,9 @@ export default function ProjectDashboardPage() {
                   <DropdownMenuItem 
                     onClick={() => handleExportPdf("executive")} 
                     disabled={isExportingPdf || isExportingImage} 
-                    className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-emerald-50 focus:bg-emerald-50"
+                    className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-red-50 focus:bg-red-50"
                   >
-                    <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <FileText className="w-4 h-4 text-red-600 shrink-0" />
                     <div className="flex flex-col flex-1 min-w-0">
                       <span className="font-semibold text-xs text-gray-900">Project Costing Report (PDF)</span>
                       <span className="text-[10px] text-gray-500">Executive portrait summary with charts & revisions</span>
@@ -2149,9 +2337,10 @@ export default function ProjectDashboardPage() {
                     </div>
                   </DropdownMenuItem>
 
+                  {/* Remaining export options commented out - leaving first 2 active
                   <DropdownMenuSeparator className="my-1.5" />
 
-                  {/* Master Reports */}
+                  Master Reports
                   <DropdownMenuLabel className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
                     Complete Master Report
                   </DropdownMenuLabel>
@@ -2180,7 +2369,7 @@ export default function ProjectDashboardPage() {
 
                   <DropdownMenuSeparator className="my-1.5" />
 
-                  {/* Individual Document Visuals (PDF) */}
+                  Individual Document Visuals (PDF)
                   <DropdownMenuLabel className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
                     Visual Documents (PDF)
                   </DropdownMenuLabel>
@@ -2235,7 +2424,7 @@ export default function ProjectDashboardPage() {
 
                   <DropdownMenuSeparator className="my-1.5" />
 
-                  {/* Data Spreadsheets (CSV) */}
+                  Data Spreadsheets (CSV)
                   <DropdownMenuLabel className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 py-1">
                     Data Spreadsheets (CSV)
                   </DropdownMenuLabel>
@@ -2274,6 +2463,7 @@ export default function ProjectDashboardPage() {
                     <FileSpreadsheet className="w-4 h-4 text-amber-600 shrink-0" />
                     <span className="text-xs font-medium text-gray-700">Account Ledger - CSV file</span>
                   </DropdownMenuItem>
+                  */}
                 </DropdownMenuContent>
               </DropdownMenu>
             </PermissionGuard>
@@ -2349,7 +2539,15 @@ export default function ProjectDashboardPage() {
           <div className="flex gap-8 items-center">
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-semibold text-gray-700">Date Range</label>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-semibold text-gray-700">Date Range</label>
+                  {(isFetchingProject || isFetchingTransactions) && (
+                    <div className="flex items-center gap-1 text-xs text-[#3B7CED] font-medium animate-pulse">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Updating...</span>
+                    </div>
+                  )}
+                </div>
                 {(fromDate || toDate || costCategoryFilter !== "all") && (
                   <button
                     type="button"
@@ -2377,7 +2575,7 @@ export default function ProjectDashboardPage() {
                   <SelectItem value="material_consumption">Material Consumption</SelectItem>
                   <SelectItem value="labour">Labour</SelectItem>
                   <SelectItem value="plant_equipment">Plant &amp; Equipment</SelectItem>
-                  <SelectItem value="sub_contractor">Sub Contractor</SelectItem>
+                  <SelectItem value="subcontractor">Sub Contractor</SelectItem>
                   <SelectItem value="petty_cash">Petty Cash</SelectItem>
                 </SelectContent>
               </Select>
@@ -2827,6 +3025,7 @@ export default function ProjectDashboardPage() {
                       <TableHead className="w-[160px] font-semibold text-gray-600 py-3">Current Budget</TableHead>
                     </>
                   )}
+                  <TableHead className="w-[160px] font-semibold text-gray-600 py-3">Available Balance</TableHead>
                   {customColumns.map(col => (
                     <TableHead key={col} className="font-semibold text-gray-600 py-3 whitespace-nowrap">{col}</TableHead>
                   ))}
@@ -2837,7 +3036,7 @@ export default function ProjectDashboardPage() {
                   renderPhaseRows(parsedPhases)
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={hasAdjustments ? 7 + customColumns.length : 5 + customColumns.length} className="text-center py-6 text-gray-500">
+                    <TableCell colSpan={hasAdjustments ? 8 + customColumns.length : 6 + customColumns.length} className="text-center py-6 text-gray-500">
                       No phases data available for this project.
                     </TableCell>
                   </TableRow>
@@ -3502,13 +3701,20 @@ export default function ProjectDashboardPage() {
             zIndex: -9999,
           }}
         >
-          <div ref={exportRef} style={{ width: exportDocType === "executive" ? "820px" : "1400px", backgroundColor: "#ffffff" }}>
+          <div 
+            ref={exportRef} 
+            style={{ 
+              width: exportDocType === "executive" ? "820px" : "1400px", 
+              backgroundColor: "#ffffff",
+              fontFamily: "var(--font-geist-sans), 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+            }}
+          >
             {exportDocType === "executive" ? (
               <ExecutiveProjectReportTemplate
                 project={project}
                 transactions={transactions}
                 parsedPhases={parsedPhases}
-                budgetAdjustments={budgetAdjustments}
+                budgetAdjustments={parsedBudgetAdjustments}
                 budgetNum={budgetNum}
                 actualSpend={actualSpend}
                 committedSpend={committed}
@@ -3532,6 +3738,10 @@ export default function ProjectDashboardPage() {
                 lineChartData={dynamicLineChartData}
                 pieChartData={pieChartData}
                 docType={exportDocType}
+                companyName={companyName}
+                companyAddress={companyAddress}
+                companyPhone={companyPhone}
+                companyLogo={companyLogo}
               />
             )}
           </div>

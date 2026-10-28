@@ -148,7 +148,7 @@ export default function SupplierReturnPage() {
                       VENDOR
                     </TableHead>
                     <TableHead className="py-3 px-4 font-semibold text-[#8898AA] text-[11.5px]">
-                      RELATED RECEIPT
+                      RECORD ID
                     </TableHead>
                     <TableHead className="py-3 px-4 font-semibold text-[#8898AA] text-[11.5px] text-center">
                       LINES
@@ -193,8 +193,8 @@ export default function SupplierReturnPage() {
                         </TableCell>
                         <TableCell className="px-4 py-3.5">
                           <span className="text-[#3B7CED] text-sm hover:underline font-medium">
-                            <Link href={`/inventory/operation/incoming_product/${encodeURIComponent(decodeURIComponent(ret.source_document))}`} onClick={(e) => e.stopPropagation()}>
-                              {ret.source_document || "N/A"}
+                            <Link href={`/inventory/operation/incoming_product/${encodeURIComponent(decodeURIComponent((ret as any).source_document_details?.incoming_product_id || ret.source_document))}`} onClick={(e) => e.stopPropagation()}>
+                              {(ret as any).source_document_details?.incoming_product_id || ret.source_document || "N/A"}
                             </Link>
                           </span>
                         </TableCell>

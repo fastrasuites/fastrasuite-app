@@ -16,6 +16,7 @@ import type {
   ProjectTransaction,
   Activity,
   Phase,
+  ProjectCostingDetailsParams,
 } from "@/types/projectCosting";
 
 // Helper function to get tenant-specific base URL
@@ -180,9 +181,30 @@ export const projectCostingApi = createApi({
       }),
       providesTags: ["ProjectCosting"],
     }),
-    getProjectCostingProject: builder.query<ProjectCostingProject, number>({
-      query: (id) => `/project-costing/projects/${id}/`,
-      providesTags: (result, error, id) => [{ type: "ProjectCosting", id }],
+    getProjectCostingProject: builder.query<
+      ProjectCostingProject,
+      number | ProjectCostingDetailsParams
+    >({
+      query: (arg) => {
+        if (typeof arg === "number") {
+          return `/project-costing/projects/${arg}/`;
+        }
+        const { id, ...params } = arg;
+        const cleanParams: Record<string, any> = {};
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "" && value !== "all") {
+            cleanParams[key] = value;
+          }
+        });
+        return {
+          url: `/project-costing/projects/${id}/`,
+          params: cleanParams,
+        };
+      },
+      providesTags: (result, error, arg) => {
+        const id = typeof arg === "number" ? arg : arg?.id;
+        return [{ type: "ProjectCosting", id }];
+      },
     }),
     createProjectCostingProject: builder.mutation<
       ProjectCostingProject,
@@ -463,9 +485,30 @@ export const projectCostingApi = createApi({
         { type: "ProjectCosting", id },
       ],
     }),
-    getProjectTransactions: builder.query<ProjectTransaction[], number>({
-      query: (id) => `/project-costing/projects/${id}/transactions/`,
-      providesTags: (result, error, id) => [{ type: "ProjectCosting", id }],
+    getProjectTransactions: builder.query<
+      ProjectTransaction[],
+      number | ProjectCostingDetailsParams
+    >({
+      query: (arg) => {
+        if (typeof arg === "number") {
+          return `/project-costing/projects/${arg}/transactions/`;
+        }
+        const { id, ...params } = arg;
+        const cleanParams: Record<string, any> = {};
+        Object.entries(params).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && value !== "" && value !== "all") {
+            cleanParams[key] = value;
+          }
+        });
+        return {
+          url: `/project-costing/projects/${id}/transactions/`,
+          params: cleanParams,
+        };
+      },
+      providesTags: (result, error, arg) => {
+        const id = typeof arg === "number" ? arg : arg?.id;
+        return [{ type: "ProjectCosting", id }];
+      },
     }),
     getProjectFinancials: builder.query<ProjectCostingProject, number>({
       query: (id) => `/project-costing/projects/${id}/financials/`,

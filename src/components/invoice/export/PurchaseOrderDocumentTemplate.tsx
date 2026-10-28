@@ -1,5 +1,8 @@
 import * as React from "react";
-import { FASTRASUITE_LOGO_BASE64 } from "@/components/project-costing/export/ExecutiveProjectReportTemplate";
+import {
+  FASTRASUITE_LOGO_BASE64,
+  formatCompanyLogo,
+} from "@/components/project-costing/export/ExecutiveProjectReportTemplate";
 import {
   ProjectPurchaseOrder,
   PurchaseOrderLine,
@@ -7,6 +10,7 @@ import {
 
 export interface PurchaseOrderDocumentTemplateProps {
   order?: ProjectPurchaseOrder | null;
+  projectName?: string;
   companyName?: string;
   companyAddress?: string;
   companyPhone?: string;
@@ -32,24 +36,90 @@ const formatDateDDMMYYYY = (dateStr?: string | null): string => {
   }
 };
 
+const extractProjectFromNotes = (text?: string | null): string | null => {
+  if (!text || typeof text !== "string") return null;
+  const match = text.match(/(?:^|[|\n\r])\s*Project\s*:\s*([^|\n\r]+)/i);
+  if (match && match[1]?.trim()) {
+    const val = match[1].trim();
+    if (!/^(null|undefined|none|project)$/i.test(val)) {
+      return val;
+    }
+  }
+  return null;
+};
+
 export const PurchaseOrderDocumentTemplate: React.FC<
   PurchaseOrderDocumentTemplateProps
 > = ({
   order,
+  projectName: projectNameProp = "",
   companyName = "FastraSuite",
   companyAddress = "",
   companyPhone = "",
   companyLogo = "",
 }) => {
-  // Resolve core header fields
-  const projectName =
-    (order as any)?.project_name ||
-    (order as any)?.project?.name ||
-    (order as any)?.project_code ||
-    "Project";
-  const poDate = formatDateDDMMYYYY(
-    order?.issued_at || order?.created_at || new Date().toISOString(),
-  );
+  const [logoFailed, setLogoFailed] = React.useState(false);
+
+  // Robust formatted logo with base64 prefix auto-detection
+  const formattedCompanyLogo = React.useMemo(() => {
+    return formatCompanyLogo(companyLogo);
+  }, [companyLogo]);
+
+  // Comprehensive Project Name Resolution
+  const projectName = React.useMemo(() => {
+    if (projectNameProp && typeof projectNameProp === "string" && projectNameProp.trim()) {
+      return projectNameProp.trim();
+    }
+    const direct =
+      (order as any)?.project_name ||
+      (order as any)?.project_details?.name ||
+      (order as any)?.project?.name ||
+      (order as any)?.project_title ||
+      (order as any)?.source_details?.project?.name ||
+      (order as any)?.source_details?.project_details?.name ||
+      (order as any)?.source_details?.project_name ||
+      (order as any)?.project_request?.project_details?.name ||
+      (order as any)?.project_request?.project_name ||
+      (order as any)?.wbs_element_details?.phase?.project?.name ||
+      (order as any)?.wbs_element_details?.phase?.project_details?.name ||
+      (order as any)?.wbs_element_details?.phase?.project_name ||
+      (order as any)?.wbs_element_details?.project_name;
+
+    if (
+      direct &&
+      typeof direct === "string" &&
+      direct.trim() &&
+      direct.trim().toLowerCase() !== "project"
+    ) {
+      return direct.trim();
+    }
+
+    const noteProject = extractProjectFromNotes(
+      (order as any)?.notes || (order as any)?.description || (order as any)?.purpose
+    );
+    if (noteProject) return noteProject;
+
+    const phaseName = (order as any)?.wbs_element_details?.phase?.name;
+    if (phaseName && typeof phaseName === "string" && phaseName.trim()) {
+      return phaseName.trim();
+    }
+
+    const wbsName = (order as any)?.wbs_element_details?.name;
+    if (wbsName && typeof wbsName === "string" && wbsName.trim()) {
+      return wbsName.trim();
+    }
+
+    if (
+      typeof (order as any)?.project === "string" &&
+      (order as any)?.project.trim() &&
+      !/^[0-9a-f-]{36}$/i.test((order as any)?.project.trim())
+    ) {
+      return (order as any)?.project.trim();
+    }
+
+    return (order as any)?.project_code || "";
+  }, [order, projectNameProp]);
+
   const requestDate = formatDateDDMMYYYY(order?.created_at || order?.issued_at);
   const expectedDeliveryDate = formatDateDDMMYYYY(
     order?.expected_delivery_date || order?.required_date,
@@ -75,7 +145,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
   const deliveryLocation =
     order?.site_location ||
     (order as any)?.delivery_location ||
-    (projectName !== "Project" ? `${projectName} Site` : "Project Site");
+    (projectName ? `${projectName} Site` : "Project Site");
 
   // Line items
   const lines: PurchaseOrderLine[] = React.useMemo(() => {
@@ -110,7 +180,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
     return [];
   }, [order]);
 
-  // Financial calculations
+  // Financial calculations without Tax
   const rawTotal = Number(order?.total_amount || 0);
   const subtotal =
     lines.length > 0
@@ -121,9 +191,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
         }, 0)
       : rawTotal;
 
-  const taxRate = 0.075;
-  const taxAmount = Math.round(subtotal * taxRate);
-  const grandTotal = rawTotal > 0 ? rawTotal : subtotal + taxAmount;
+  const grandTotal = rawTotal > 0 ? rawTotal : subtotal;
 
   // Payment & Delivery instructions
   const paymentTerms = order?.payment_term
@@ -143,7 +211,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
         backgroundColor: "#ffffff",
         color: "#111827",
         fontFamily:
-          "'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          "var(--font-geist-sans), 'Open Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
         padding: "40px 45px",
         boxSizing: "border-box",
         position: "relative",
@@ -157,23 +225,20 @@ export const PurchaseOrderDocumentTemplate: React.FC<
         <div className="flex items-start justify-between">
           {/* Company Brand Logo / Badge */}
           <div>
-            {companyLogo ? (
+            {formattedCompanyLogo && !logoFailed ? (
               <img
-                src={companyLogo}
+                src={formattedCompanyLogo}
                 alt={companyName}
-                className="h-10 w-auto object-contain"
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
-                }}
+                crossOrigin="anonymous"
+                className="h-10 max-w-[220px] w-auto object-contain"
+                onError={() => setLogoFailed(true)}
               />
-            ) : companyName ? (
-              <div className="h-10 px-3 bg-gray-900 text-white rounded-md flex items-center justify-center font-bold text-sm tracking-tight shadow-xs">
-                {companyName}
-              </div>
             ) : (
-              <div className="h-10 px-3 bg-gray-100 border border-gray-200 text-gray-700 rounded-md flex items-center justify-center font-bold text-sm tracking-tight shadow-xs">
-                FastraSuite
-              </div>
+              <img
+                src={FASTRASUITE_LOGO_BASE64}
+                alt={companyName || "FastraSuite"}
+                className="h-9 w-auto object-contain"
+              />
             )}
           </div>
 
@@ -203,11 +268,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
           <div className="flex items-center gap-6 mt-2.5 text-[12.5px] text-gray-700">
             <div>
               <span className="font-semibold text-gray-900">Project:</span>{" "}
-              <span>{projectName}</span>
-            </div>
-            <div>
-              <span className="font-semibold text-gray-900">PO date:</span>{" "}
-              <span>{poDate}</span>
+              <span className="font-medium text-gray-800">{projectName || "—"}</span>
             </div>
           </div>
         </div>
@@ -269,7 +330,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
           </div>
         </div>
 
-        {/* ================= 4. ORDER DETAILS TABLE ================= */}
+        {/* ================= 4. ORDER DETAILS TABLE (WITHOUT TAX) ================= */}
         <div className="mt-6">
           <h3 className="text-[10px] font-bold text-[#0D3C8C] tracking-wider uppercase mb-2">
             ORDER DETAILS
@@ -283,16 +344,13 @@ export const PurchaseOrderDocumentTemplate: React.FC<
                   <th className="py-2.5 px-3 text-center font-semibold w-16">
                     Qty
                   </th>
-                  <th className="py-2.5 px-3 text-left font-semibold w-20">
+                  <th className="py-2.5 px-3 text-left font-semibold w-24">
                     Unit
                   </th>
-                  <th className="py-2.5 px-4 text-right font-semibold w-28">
+                  <th className="py-2.5 px-4 text-right font-semibold w-32">
                     Unit price
                   </th>
-                  <th className="py-2.5 px-3 text-center font-semibold w-20">
-                    Tax
-                  </th>
-                  <th className="py-2.5 px-4 text-right font-semibold w-32">
+                  <th className="py-2.5 px-4 text-right font-semibold w-36">
                     Amount
                   </th>
                 </tr>
@@ -301,7 +359,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
                 {lines.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={5}
                       className="py-6 text-center text-gray-400 italic"
                     >
                       No line items specified for this purchase order.
@@ -311,9 +369,9 @@ export const PurchaseOrderDocumentTemplate: React.FC<
                   lines.map((item, idx) => {
                     const qty = Number(item.qty || 1);
                     const rate = Number(item.unit_price || 0);
-                    const lineTotal = Number(
-                      item.line_total || qty * rate * (1 + taxRate),
-                    );
+                    const lineTotal = item.line_total
+                      ? Number(item.line_total)
+                      : qty * rate;
 
                     return (
                       <tr key={idx} className="hover:bg-gray-50/50">
@@ -328,9 +386,6 @@ export const PurchaseOrderDocumentTemplate: React.FC<
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-gray-800">
                           {formatCurrency(rate)}
-                        </td>
-                        <td className="py-3 px-3 text-center text-gray-600">
-                          7.5%
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-gray-900">
                           {formatCurrency(lineTotal)}
@@ -371,18 +426,12 @@ export const PurchaseOrderDocumentTemplate: React.FC<
             </div>
           </div>
 
-          {/* Right: Summary Box with Blue Total Banner */}
+          {/* Right: Summary Box with Blue Total Banner (Tax removed) */}
           <div className="w-70">
             <div className="flex justify-between items-center text-[12px] py-1 border-b border-gray-100">
               <span className="text-gray-600 font-medium">Subtotal</span>
               <span className="font-bold text-gray-900">
                 {formatCurrency(subtotal)}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-[12px] py-1 mt-1">
-              <span className="text-gray-600 font-medium">Tax (7.5%)</span>
-              <span className="font-bold text-gray-900">
-                {formatCurrency(taxAmount)}
               </span>
             </div>
             {/* Deep Royal Blue Total Box */}
