@@ -548,6 +548,9 @@ export default function PurchaseOrderPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Status
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Bill Status
+                  </th>
                   <th className="w-48 min-w-45 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500">
                     Actions
                   </th>
@@ -663,6 +666,9 @@ export default function PurchaseOrderPage() {
 
                         <td className="whitespace-nowrap px-4 py-3.5">
                           {getStatusBadge(order.status)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          {getStatusBadge(order.billing_status)}
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-3.5">
