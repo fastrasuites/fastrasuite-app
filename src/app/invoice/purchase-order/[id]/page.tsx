@@ -147,7 +147,9 @@ export default function PurchaseOrderDetailPage() {
   const { data: projectList } = useGetProjectCostingProjectsQuery({});
   const user = useSelector((state: RootState) => (state as any).auth?.user);
   const tenant_company_name =
-    useSelector((state: RootState) => (state as any).auth?.tenant_company_name) ||
+    useSelector(
+      (state: RootState) => (state as any).auth?.tenant_company_name,
+    ) ||
     user?.company_name ||
     user?.tenant_name;
 
@@ -157,7 +159,12 @@ export default function PurchaseOrderDetailPage() {
     (companyData as any)?.company_name ||
     "FastraSuite";
   const companyAddress = companyData?.street_address
-    ? [companyData.street_address, companyData.city, companyData.state, companyData.country]
+    ? [
+        companyData.street_address,
+        companyData.city,
+        companyData.state,
+        companyData.country,
+      ]
         .filter(Boolean)
         .join(", ")
     : (companyData as any)?.address || "";
@@ -354,7 +361,7 @@ export default function PurchaseOrderDetailPage() {
   // Robust DOM to Image capture helper with font-skipping & html2canvas fallback
   const captureElementToDataUrl = async (
     el: HTMLElement,
-    format: "jpeg" | "png" = "jpeg"
+    format: "jpeg" | "png" = "jpeg",
   ): Promise<string> => {
     const blankPlaceholder =
       "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAEDEB1CQAAAElFTkSuQmCC";
@@ -396,7 +403,10 @@ export default function PurchaseOrderDetailPage() {
         return await toJpeg(el, { ...options, quality: 0.95 });
       }
     } catch (primaryErr) {
-      console.warn("Primary html-to-image capture encountered an issue, running fallback:", primaryErr);
+      console.warn(
+        "Primary html-to-image capture encountered an issue, running fallback:",
+        primaryErr,
+      );
       try {
         const html2canvas = (await import("html2canvas")).default;
         const canvas = await html2canvas(el, {
@@ -414,12 +424,17 @@ export default function PurchaseOrderDetailPage() {
           windowWidth: width,
           windowHeight: height,
         });
-        return canvas.toDataURL(format === "png" ? "image/png" : "image/jpeg", 0.95);
+        return canvas.toDataURL(
+          format === "png" ? "image/png" : "image/jpeg",
+          0.95,
+        );
       } catch (fallbackErr: any) {
         console.error("html2canvas fallback also failed:", fallbackErr);
         throw new Error(
           fallbackErr?.message ||
-            (primaryErr instanceof Error ? primaryErr.message : "Document rendering failed. Please retry.")
+            (primaryErr instanceof Error
+              ? primaryErr.message
+              : "Document rendering failed. Please retry."),
         );
       }
     }
@@ -431,7 +446,9 @@ export default function PurchaseOrderDetailPage() {
     setExportStatusText("Preparing...");
 
     try {
-      setExportStatusText(format === "pdf" ? "Generating PDF..." : "Capturing visual...");
+      setExportStatusText(
+        format === "pdf" ? "Generating PDF..." : "Capturing visual...",
+      );
 
       // Wait for DOM paint and confirm the element is rendered and non-empty
       let element: HTMLElement | null = null;
@@ -461,8 +478,8 @@ export default function PurchaseOrderDetailPage() {
                   img.onerror = () => res();
                   setTimeout(res, 600);
                 }
-              })
-          )
+              }),
+          ),
         );
       }
 
@@ -479,7 +496,7 @@ export default function PurchaseOrderDetailPage() {
         link.click();
         showToast(
           `Purchase Order ${poDetail.po_number || poDetail.id} exported as PNG image.`,
-          "success"
+          "success",
         );
       } else {
         const dataUrl = await captureElementToDataUrl(element, "jpeg");
@@ -503,13 +520,27 @@ export default function PurchaseOrderDetailPage() {
           finalWidth = finalWidth * scale;
           finalHeight = usableHeight;
           const xOffset = margin + (usableWidth - finalWidth) / 2;
-          pdf.addImage(dataUrl, "JPEG", xOffset, margin, finalWidth, finalHeight);
+          pdf.addImage(
+            dataUrl,
+            "JPEG",
+            xOffset,
+            margin,
+            finalWidth,
+            finalHeight,
+          );
         } else if (finalHeight > usableHeight) {
           let position = margin;
           let remainingHeight = finalHeight;
 
           while (remainingHeight > 0) {
-            pdf.addImage(dataUrl, "JPEG", margin, position, finalWidth, finalHeight);
+            pdf.addImage(
+              dataUrl,
+              "JPEG",
+              margin,
+              position,
+              finalWidth,
+              finalHeight,
+            );
             remainingHeight -= usableHeight;
             position -= usableHeight;
             if (remainingHeight > 0) {
@@ -517,21 +548,28 @@ export default function PurchaseOrderDetailPage() {
             }
           }
         } else {
-          pdf.addImage(dataUrl, "JPEG", margin, margin, finalWidth, finalHeight);
+          pdf.addImage(
+            dataUrl,
+            "JPEG",
+            margin,
+            margin,
+            finalWidth,
+            finalHeight,
+          );
         }
 
         setExportStatusText("Downloading...");
         pdf.save(`${cleanPoNumber}_Purchase_Order.pdf`);
         showToast(
           `Purchase Order ${poDetail.po_number || poDetail.id} exported as PDF.`,
-          "success"
+          "success",
         );
       }
     } catch (err: any) {
       console.error("Purchase order export error:", err);
       showToast(
         extractErrorMessage(err, "Failed to generate export document."),
-        "error"
+        "error",
       );
     } finally {
       setIsExporting(false);
@@ -622,7 +660,7 @@ export default function PurchaseOrderDetailPage() {
                   "relative overflow-hidden h-9 px-3.5 text-sm font-medium border-gray-200 text-gray-700 transition-all select-none shadow-2xs",
                   isExporting
                     ? "border-blue-400 bg-blue-50/80 text-blue-700 pointer-events-none cursor-wait"
-                    : "hover:border-blue-300 hover:bg-blue-50/50 hover:text-blue-700"
+                    : "hover:border-blue-300 hover:bg-blue-50/50 hover:text-blue-700",
                 )}
               >
                 <AnimatePresence mode="wait" initial={false}>
@@ -656,7 +694,6 @@ export default function PurchaseOrderDetailPage() {
                   )}
                 </AnimatePresence>
 
-                {/* Hairline animated progress bar along the bottom edge while exporting */}
                 {isExporting && (
                   <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-blue-100 overflow-hidden">
                     <motion.div
