@@ -102,10 +102,10 @@ const statusBadgeClass = (status?: string) => {
   const s = (status || "").toLowerCase();
   if (s === "draft") return "bg-gray-100 text-gray-700";
   if (s === "issued") return "bg-blue-100 text-blue-800";
+  if (s === "closed") return "bg-green-100 text-green-800";
+  if (s === "cancelled" || s === "canceled") return "bg-red-100 text-red-800";
   if (s.includes("received")) return "bg-teal-100 text-teal-800";
   if (s.includes("billed")) return "bg-indigo-100 text-indigo-800";
-  if (s === "cancelled" || s === "canceled") return "bg-red-100 text-red-800";
-  if (s === "closed") return "bg-green-100 text-green-800";
   return "bg-gray-100 text-gray-700";
 };
 
@@ -212,7 +212,9 @@ export default function PurchaseOrderDetailPage() {
       (poDetail as any)?.description ||
       (poDetail as any)?.purpose;
     if (typeof rawNotes === "string" && rawNotes) {
-      const match = rawNotes.match(/(?:^|[|\n\r])\s*Project\s*:\s*([^|\n\r]+)/i);
+      const match = rawNotes.match(
+        /(?:^|[|\n\r])\s*Project\s*:\s*([^|\n\r]+)/i,
+      );
       if (
         match &&
         match[1]?.trim() &&
@@ -224,12 +226,13 @@ export default function PurchaseOrderDetailPage() {
 
     // Match by project ID or WBS in projectList
     if (Array.isArray(projectList) && projectList.length > 0) {
-      const rawProjectId = (poDetail as any).project || (poDetail as any).project_id;
+      const rawProjectId =
+        (poDetail as any).project || (poDetail as any).project_id;
       if (rawProjectId) {
         const match = projectList.find(
           (p) =>
             String(p.id) === String(rawProjectId) ||
-            String(p.project_code) === String(rawProjectId)
+            String(p.project_code) === String(rawProjectId),
         );
         if (match?.name) return match.name;
       }
@@ -237,9 +240,9 @@ export default function PurchaseOrderDetailPage() {
         const match = projectList.find((p) =>
           (p as any).phases?.some((ph: any) =>
             ph.activities?.some(
-              (act: any) => String(act.id) === String(poDetail.wbs_element)
-            )
-          )
+              (act: any) => String(act.id) === String(poDetail.wbs_element),
+            ),
+          ),
         );
         if (match?.name) return match.name;
       }
@@ -634,6 +637,12 @@ export default function PurchaseOrderDetailPage() {
             Purchase Order — {poDetail.po_number}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
+            {poDetail.source_request_type && (
+              <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                {formatRequestTypeLabel(poDetail.source_request_type)}
+              </span>
+            )}
+            {/* Statuses */}
             <span
               className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${statusBadgeClass(
                 poDetail.status,
@@ -641,11 +650,20 @@ export default function PurchaseOrderDetailPage() {
             >
               {(poDetail.status || "—").replace(/_/g, " ")}
             </span>
-            {poDetail.source_request_type && (
-              <span className="inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
-                {formatRequestTypeLabel(poDetail.source_request_type)}
-              </span>
-            )}
+            <span
+              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${statusBadgeClass(
+                poDetail.receipt_status,
+              )}`}
+            >
+              {(poDetail.receipt_status || "—").replace(/_/g, " ")}
+            </span>
+            <span
+              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${statusBadgeClass(
+                poDetail.billing_status,
+              )}`}
+            >
+              {(poDetail.billing_status || "—").replace(/_/g, " ")}
+            </span>
           </div>
         </div>
 
@@ -870,6 +888,22 @@ export default function PurchaseOrderDetailPage() {
             </p>
             <p className="text-sm font-medium capitalize text-gray-900">
               {(poDetail.status || "—").replace(/_/g, " ")}
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 text-xs uppercase tracking-wider text-gray-500">
+              Receipt Status
+            </p>
+            <p className="text-sm font-medium capitalize text-gray-900">
+              {(poDetail.receipt_status || "—").replace(/_/g, " ")}
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 text-xs uppercase tracking-wider text-gray-500">
+              Bill Status
+            </p>
+            <p className="text-sm font-medium capitalize text-gray-900">
+              {(poDetail.billing_status || "—").replace(/_/g, " ")}
             </p>
           </div>
           {poDetail.expected_delivery_date && (

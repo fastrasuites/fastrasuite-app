@@ -48,6 +48,8 @@ export interface ProjectPurchaseOrder {
   required_date?: string;
   expected_return_date?: string | null;
   status: PurchaseOrderStatus;
+  receipt_status: string;
+  billing_status: string;
   is_billed?: boolean;
   issued_at: string | null;
   created_by: number;
