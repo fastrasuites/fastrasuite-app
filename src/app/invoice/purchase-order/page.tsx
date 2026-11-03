@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useGetPurchaseOrdersQuery } from "@/api/invoice/projectPurchaseOrdersApi";
 import { PageGuard } from "@/components/auth/PageGuard";
-
+import { useRouter } from "next/navigation";
 /* -------------------------------------------------------------------------- */
 /*                                   Helpers                                  */
 /* -------------------------------------------------------------------------- */
@@ -340,6 +340,8 @@ export default function PurchaseOrderPage() {
 
   const colCount = showWbsColumn ? 7 : 6;
 
+  const router = useRouter();
+
   return (
     <PageGuard module="invoice" entitlement="view_purchase_orders">
       <div className="min-h-screen bg-gray-50 p-4 sm:p-6">
@@ -549,6 +551,9 @@ export default function PurchaseOrderPage() {
                     Status
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                    Receipt Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                     Bill Status
                   </th>
                   <th className="w-48 min-w-45 px-4 py-3 text-center text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -615,7 +620,10 @@ export default function PurchaseOrderPage() {
                     return (
                       <tr
                         key={order.id}
-                        className="transition-colors hover:bg-gray-50/80"
+                        className="transition-colors hover:bg-gray-50/80 cursor-pointer"
+                        onClick={() =>
+                          router.push(`/invoice/purchase-order/${order.id}`)
+                        }
                       >
                         <td className="px-4 py-3.5 text-sm font-medium">
                           <Link
@@ -666,6 +674,9 @@ export default function PurchaseOrderPage() {
 
                         <td className="whitespace-nowrap px-4 py-3.5">
                           {getStatusBadge(order.status)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3.5">
+                          {getStatusBadge(order.receipt_status)}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3.5">
                           {getStatusBadge(order.billing_status)}
