@@ -204,7 +204,6 @@ export default function ProjectDashboardPage() {
   const [costCategoryFilter, setCostCategoryFilter] = useState("all");
   const [timeGranularity, setTimeGranularity] = useState<"monthly" | "weekly" | "daily">("monthly");
   const [commitmentViewMode, setCommitmentViewMode] = useState<"active" | "monthly">("active");
-  const [showCompletedDemo, setShowCompletedDemo] = useState(false);
 
   const { fullName: loggedInUserName } = useCurrentUser();
 
@@ -1565,6 +1564,7 @@ export default function ProjectDashboardPage() {
     ? `${Number(fin.consumed_percent).toFixed(1)}%`
     : (budgetNum > 0 ? `${((actualSpend / budgetNum) * 100).toFixed(1)}%` : "0%");
 
+  const isOverBudget = actualSpend > budgetNum;
   const finPercent = budgetNum > 0 ? actualSpend / budgetNum : 0;
   const actualPercent = budgetNum > 0 ? Math.min(1, actualSpend / budgetNum) : 0;
   const committedPercent = budgetNum > 0 ? Math.min(1 - actualPercent, committed / budgetNum) : 0;
@@ -1592,85 +1592,7 @@ export default function ProjectDashboardPage() {
   // 1. Check if backend provided a real time-series array in financials or project
   const backendTimeline = fin?.spend_over_time || fin?.monthly_spend || fin?.spend_history || project?.spend_over_time;
 
-  // COMPLETED PROJECT DEMO GENERATOR (Shows how the chart looks at 100% completion)
-  if (showCompletedDemo) {
-    const monthsRef = [
-      { period: "Sep 2026", date: "2026-09-01", short: "Sep", actual: 0,             monthlyPo: 45000000,   activePo: 45000000 },
-      { period: "Oct 2026", date: "2026-10-01", short: "Oct", actual: 20000000,      monthlyPo: 423821000,  activePo: 423821000 },
-      { period: "Nov 2026", date: "2026-11-01", short: "Nov", actual: 145000000,     monthlyPo: 180000000,  activePo: 265000000 },
-      { period: "Dec 2026", date: "2026-12-01", short: "Dec", actual: 165000000,     monthlyPo: 535000000,  activePo: 540000000 }, // Second major surge!
-      { period: "Jan 2027", date: "2027-01-01", short: "Jan", actual: 340000000,     monthlyPo: 220000000,  activePo: 345000000 },
-      { period: "Feb 2027", date: "2027-02-01", short: "Feb", actual: 445000000,     monthlyPo: 430000000,  activePo: 440000000 }, // Third surge!
-      { period: "Mar 2027", date: "2027-03-01", short: "Mar", actual: 595000000,     monthlyPo: 190000000,  activePo: 300000000 },
-      { period: "Apr 2027", date: "2027-04-01", short: "Apr", actual: 745000000,     monthlyPo: 140000000,  activePo: 210000000 },
-      { period: "May 2027", date: "2027-05-01", short: "May", actual: 885000000,     monthlyPo: 95000000,   activePo: 110000000 },
-      { period: "Jun 2027", date: "2027-06-01", short: "Jun", actual: 980000000,     monthlyPo: 195000000,  activePo: 195000000 }, // BREAKTHROUGH: Crosses ₦949.8M budget ceiling!
-      { period: "Jul 2027", date: "2027-07-01", short: "Jul", actual: 1065000000,    monthlyPo: 45000000,   activePo: 45000000 },  // 12% over budget (₦1.065 Billion)
-    ];
-
-    const filteredDemo = monthsRef.filter(m => isDateInRange(m.date));
-
-    if (timeGranularity === "daily") {
-      const dailyDemo: any[] = [];
-      filteredDemo.forEach((m, mIdx) => {
-        const nextActual = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].actual : m.actual;
-        const actualDelta = (nextActual - m.actual) / 30;
-        const nextActivePo = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].activePo : m.activePo;
-        const poDelta = (nextActivePo - m.activePo) / 30;
-
-        for (let d = 1; d <= 30; d++) {
-          const dActual = Math.round(m.actual + (actualDelta * d));
-          const dActivePo = Math.round(m.activePo + (poDelta * d));
-          const dMonthlyPo = d === 15 ? Math.round(m.monthlyPo * 0.7) : d === 28 ? Math.round(m.monthlyPo * 0.3) : 0;
-          const dayPad = String(d).padStart(2, "0");
-          const dateStr = `${m.date.slice(0, 7)}-${dayPad}`;
-
-          dailyDemo.push({
-            name: `${d} ${m.short}`,
-            fullName: `${d} ${m.period}`,
-            planned: chartBudget,
-            actual: dActual,
-            committed: commitmentViewMode === "active" ? dActivePo : dMonthlyPo,
-            date: dateStr,
-          });
-        }
-      });
-      dynamicLineChartData = dailyDemo;
-    } else if (timeGranularity === "weekly") {
-      const weeklyDemo: any[] = [];
-      filteredDemo.forEach((m, mIdx) => {
-        const nextActual = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].actual : m.actual;
-        const actualDelta = (nextActual - m.actual) / 4;
-        const nextActivePo = mIdx < filteredDemo.length - 1 ? filteredDemo[mIdx + 1].activePo : m.activePo;
-        const poDelta = (nextActivePo - m.activePo) / 4;
-
-        for (let w = 1; w <= 4; w++) {
-          const wActual = Math.round(m.actual + (actualDelta * w));
-          const wActivePo = Math.round(m.activePo + (poDelta * w));
-          const wMonthlyPo = w === 2 ? Math.round(m.monthlyPo * 0.7) : w === 4 ? Math.round(m.monthlyPo * 0.3) : 0;
-
-          weeklyDemo.push({
-            name: `W${w} ${m.short}`,
-            fullName: `Week ${w}, ${m.period}`,
-            planned: chartBudget,
-            actual: wActual,
-            committed: commitmentViewMode === "active" ? wActivePo : wMonthlyPo,
-            date: m.date,
-          });
-        }
-      });
-      dynamicLineChartData = weeklyDemo;
-    } else {
-      dynamicLineChartData = filteredDemo.map(m => ({
-        name: m.short,
-        fullName: m.period,
-        planned: chartBudget,
-        actual: m.actual,
-        committed: commitmentViewMode === "active" ? m.activePo : m.monthlyPo,
-        date: m.date,
-      }));
-    }
-  } else if (Array.isArray(backendTimeline) && backendTimeline.length > 0) {
+  if (Array.isArray(backendTimeline) && backendTimeline.length > 0) {
     const totalActualSpend = parseNumber(fin?.actual ?? fin?.spent ?? fin?.actual_spend ?? actualSpend);
     const sumRawActual = backendTimeline.reduce((sum: number, it: any) => sum + parseNumber(it.actual ?? it.spent ?? 0), 0);
     const lastItemActual = parseNumber(backendTimeline[backendTimeline.length - 1]?.actual ?? backendTimeline[backendTimeline.length - 1]?.spent ?? 0);
@@ -1949,20 +1871,18 @@ export default function ProjectDashboardPage() {
   }
 
   // Stop committed/actual lines at the current month/day (budget line continues)
-  if (!showCompletedDemo) {
-    const nowRef = new Date();
-    const currentKey = nowRef.getFullYear() * 12 + nowRef.getMonth();
-    const todayStr = nowRef.toISOString().split("T")[0];
-    dynamicLineChartData = dynamicLineChartData.map((pt: any) => {
-      const d = new Date(pt.date);
-      if (!pt.date || isNaN(d.getTime())) return pt;
-      if (timeGranularity === "daily") {
-        return pt.date > todayStr ? { ...pt, committed: null, actual: null } : pt;
-      }
-      const key = d.getFullYear() * 12 + d.getMonth();
-      return key > currentKey ? { ...pt, committed: null, actual: null } : pt;
-    });
-  }
+  const nowRef = new Date();
+  const currentKey = nowRef.getFullYear() * 12 + nowRef.getMonth();
+  const todayStr = nowRef.toISOString().split("T")[0];
+  dynamicLineChartData = dynamicLineChartData.map((pt: any) => {
+    const d = new Date(pt.date);
+    if (!pt.date || isNaN(d.getTime())) return pt;
+    if (timeGranularity === "daily") {
+      return pt.date > todayStr ? { ...pt, committed: null, actual: null } : pt;
+    }
+    const key = d.getFullYear() * 12 + d.getMonth();
+    return key > currentKey ? { ...pt, committed: null, actual: null } : pt;
+  });
 
   const renderPhaseRows = (phases: any[]): React.ReactNode => {
     if (!phases || !Array.isArray(phases)) return null;
@@ -2609,7 +2529,7 @@ export default function ProjectDashboardPage() {
               </div>
               <div className="p-4 border-r border-gray-100">
                 <div className="text-xs text-gray-500 font-medium mb-1">Actual Spent</div>
-                <div className="text-lg font-semibold text-gray-800">₦{actualSpend.toLocaleString()}</div>
+                <div className={cn("text-lg font-semibold", isOverBudget ? "text-red-600" : "text-gray-800")}>₦{actualSpend.toLocaleString()}</div>
               </div>
               <div className="p-4 border-r border-gray-100">
                 <div className="text-xs text-gray-500 font-medium mb-1">Committed Amount</div>
@@ -2799,9 +2719,11 @@ export default function ProjectDashboardPage() {
                 <h3 className="text-base font-medium text-[#3B7CED]">Budget Utilization</h3>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="text-xs text-gray-400">Health:</span>
-                  {fin?.budget_health === "ON_TRACK" ? (
+                  {isOverBudget || fin?.budget_health === "OVER_BUDGET" ? (
+                    <Badge className="bg-red-100 text-red-600 border-transparent hover:bg-red-100 text-[11px] py-0 px-2 font-medium">Over Budget</Badge>
+                  ) : fin?.budget_health === "ON_TRACK" ? (
                     <Badge className="bg-green-100 text-green-600 border-transparent hover:bg-green-100 text-[11px] py-0 px-2 font-medium">On Track</Badge>
-                  ) : (fin?.budget_health === "AT_RISK" || fin?.budget_health === "OVER_BUDGET" || finPercent > 0.8) ? (
+                  ) : (fin?.budget_health === "AT_RISK" || finPercent > 0.8) ? (
                     <Badge className="bg-orange-100 text-orange-600 border-transparent hover:bg-orange-100 text-[11px] py-0 px-2 font-medium">At Risk</Badge>
                   ) : (
                     <Badge className="bg-green-100 text-green-600 border-transparent hover:bg-green-100 text-[11px] py-0 px-2 font-medium">On Track</Badge>
@@ -2810,22 +2732,22 @@ export default function ProjectDashboardPage() {
               </div>
 
               <div className="text-right text-xs text-gray-500 mb-1.5">
-                <span className="font-semibold text-gray-700">₦{actualSpend.toLocaleString()}</span> / ₦{budgetNum.toLocaleString()}{" "}
-                <span className="text-gray-500 font-normal">({(finPercent * 100).toFixed(1)}%)</span>
+                <span className={cn("font-semibold", isOverBudget ? "text-red-600" : "text-gray-700")}>₦{actualSpend.toLocaleString()}</span> / ₦{budgetNum.toLocaleString()}{" "}
+                <span className={cn("font-normal", isOverBudget ? "text-red-600" : "text-gray-500")}>({(finPercent * 100).toFixed(1)}%)</span>
               </div>
               
               {/* Stacked Progress Bar */}
               <div className="w-full h-5 flex rounded-md overflow-hidden mb-3.5 bg-gray-100">
-                <div className="bg-[#2BA24D] h-full transition-all" style={{ width: `${actualPercent * 100}%` }}></div>
+                <div className={cn("h-full transition-all", isOverBudget ? "bg-red-600" : "bg-[#2BA24D]")} style={{ width: `${actualPercent * 100}%` }}></div>
                 <div className="bg-[#F59E0B] h-full transition-all" style={{ width: `${committedPercent * 100}%` }}></div>
                 <div className="bg-[#E5E7EB] h-full transition-all" style={{ width: `${availablePercent * 100}%` }}></div>
               </div>
 
               {/* Progress Bar Legend */}
               <div className="flex flex-wrap gap-x-3.5 gap-y-1.5 text-[11px]">
-                <div className="flex items-center gap-1.5 text-gray-600">
-                  <div className="w-2.5 h-2.5 rounded-xs bg-[#2BA24D] shrink-0"></div>
-                  <span>Actual ({(actualPercent * 100).toFixed(1)}%)</span>
+                <div className={cn("flex items-center gap-1.5", isOverBudget ? "text-red-600 font-medium" : "text-gray-600")}>
+                  <div className={cn("w-2.5 h-2.5 rounded-xs shrink-0", isOverBudget ? "bg-red-600" : "bg-[#2BA24D]")}></div>
+                  <span>Actual ({((isOverBudget ? finPercent : actualPercent) * 100).toFixed(1)}%)</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-gray-600">
                   <div className="w-2.5 h-2.5 rounded-xs bg-[#F59E0B] shrink-0"></div>

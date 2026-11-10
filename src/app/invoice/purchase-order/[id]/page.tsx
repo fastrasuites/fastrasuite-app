@@ -39,6 +39,7 @@ import {
   type ProjectPurchaseOrder,
 } from "@/api/invoice/projectPurchaseOrdersApi";
 import { useGetAccountingSettingsQuery } from "@/api/invoice/accountingSettingsApi";
+import { useGetPaymentTermsQuery } from "@/api/invoice/paymentTermsApi";
 import { useGetCompanyQuery } from "@/api/settings/companyApi";
 import { useGetProjectCostingProjectsQuery } from "@/api/projectCostingApi";
 import { PageGuard } from "@/components/auth/PageGuard";
@@ -144,6 +145,7 @@ export default function PurchaseOrderDetailPage() {
     useGetAccountingSettingsQuery();
 
   const { data: companyData } = useGetCompanyQuery();
+  const { data: paymentTermsList } = useGetPaymentTermsQuery();
   const { data: projectList } = useGetProjectCostingProjectsQuery({});
   const user = useSelector((state: RootState) => (state as any).auth?.user);
   const tenant_company_name =
@@ -265,6 +267,31 @@ export default function PurchaseOrderDetailPage() {
 
     return (poDetail as any)?.project_code || "";
   }, [poDetail, projectList]);
+
+  const resolvedPaymentTerm = useMemo(() => {
+    if (!poDetail) return "";
+    const directLabel =
+      (poDetail as any).payment_term_name ||
+      (poDetail as any).payment_term_details?.name ||
+      (poDetail as any).payment_terms;
+    if (typeof directLabel === "string" && directLabel.trim()) {
+      return directLabel.trim();
+    }
+    if (poDetail.payment_term && Array.isArray(paymentTermsList)) {
+      const matched = paymentTermsList.find(
+        (pt) => Number(pt.id) === Number(poDetail.payment_term)
+      );
+      if (matched) {
+        if (matched.name && matched.days_until_due !== undefined) {
+          return matched.name.toLowerCase().includes("day")
+            ? matched.name
+            : `${matched.name} (${matched.days_until_due} days)`;
+        }
+        return matched.name || matched.description || "";
+      }
+    }
+    return "";
+  }, [poDetail, paymentTermsList]);
 
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatusText, setExportStatusText] = useState("Export");
@@ -1168,6 +1195,7 @@ export default function PurchaseOrderDetailPage() {
             <PurchaseOrderDocumentTemplate
               order={poDetail}
               projectName={resolvedProjectName}
+              paymentTermLabel={resolvedPaymentTerm}
               companyName={companyName}
               companyAddress={companyAddress}
               companyPhone={companyPhone}

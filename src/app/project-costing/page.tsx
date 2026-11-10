@@ -27,6 +27,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ModuleWizard, WizardGuideButton } from "@/components/shared/wizard/ModuleWizard";
 import { useSubscriptionLimits } from "@/hooks/useSubscriptionLimits";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useGetTenantUsersQuery } from "@/api/settings/tenantUserApi";
 import { PlanLimitModal } from "@/components/shared/PlanLimitModal";
 import { ToastNotification } from "@/components/shared/ToastNotification";
 
@@ -38,29 +40,127 @@ const STATUS_TABS = [
   { label: "Draft", value: "DRAFT" },
 ];
 
-const getProjectManager = (project: any) => {
-  if (project.project_manager_details) {
-    const { first_name, last_name, username, email } = project.project_manager_details;
-    const combined = `${first_name || ""} ${last_name || ""}`.trim();
+const getProjectManager = (
+  project: any,
+  tenantUsers?: any[],
+  loggedInUserName?: string
+) => {
+  const pmDetails = project.project_manager_details;
+  if (pmDetails) {
+    const fName = (pmDetails.first_name || pmDetails.user?.first_name || "").trim();
+    const lName = (pmDetails.last_name || pmDetails.user?.last_name || "").trim();
+    const combined = `${fName} ${lName}`.trim();
     if (combined && combined.toLowerCase() !== "admin") {
       return combined;
     }
-    if (username && username.toLowerCase() !== "admin") {
-      return username;
+    const fullName = (pmDetails.full_name || pmDetails.name || pmDetails.user?.full_name || pmDetails.user?.name || "").trim();
+    if (fullName && fullName.toLowerCase() !== "admin") {
+      return fullName;
     }
-    if (email) {
-      const prefix = email.split("@")[0];
-      if (prefix.toLowerCase() !== "admin") {
-        return prefix;
+    const uName = (pmDetails.username || pmDetails.user?.username || "").trim();
+    if (uName && uName.toLowerCase() !== "admin") {
+      return uName;
+    }
+  }
+
+  const pmRaw = project.project_manager;
+  const pmId =
+    typeof pmRaw === "object" && pmRaw !== null
+      ? pmRaw.id ?? pmRaw.user_id ?? pmRaw.user?.id
+      : pmRaw ?? project.project_manager_id ?? pmDetails?.id ?? pmDetails?.user_id;
+  const pmEmail =
+    pmDetails?.email ||
+    pmDetails?.user?.email ||
+    (typeof pmRaw === "object" && pmRaw !== null ? pmRaw.email || pmRaw.user?.email : undefined);
+
+  if (
+    Array.isArray(tenantUsers) &&
+    tenantUsers.length > 0 &&
+    ((pmId !== undefined && pmId !== null && pmId !== "") || pmEmail)
+  ) {
+    const matchedUser = tenantUsers.find((tu: any) => {
+      if (!tu) return false;
+      if (pmId !== undefined && pmId !== null && pmId !== "") {
+        const idStr = String(pmId);
+        if (
+          String(tu.id) === idStr ||
+          String(tu.user_id) === idStr ||
+          String(tu.user?.id) === idStr
+        ) {
+          return true;
+        }
+      }
+      if (pmEmail) {
+        const emailLower = String(pmEmail).toLowerCase();
+        const tuEmail = (tu.user?.email || tu.email || "").toLowerCase();
+        if (tuEmail && tuEmail === emailLower) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (matchedUser) {
+      const fName = (matchedUser.user?.first_name || matchedUser.first_name || "").trim();
+      const lName = (matchedUser.user?.last_name || matchedUser.last_name || "").trim();
+      const combined = `${fName} ${lName}`.trim();
+      if (combined && combined.toLowerCase() !== "admin") {
+        return combined;
+      }
+      const uName = (matchedUser.user?.username || matchedUser.username || "").trim();
+      if (uName && uName.toLowerCase() !== "admin") {
+        return uName;
       }
     }
   }
-  if (typeof project.project_manager === "string" && project.project_manager.trim() && project.project_manager.toLowerCase() !== "admin") {
-    return project.project_manager.trim();
+
+  if (typeof pmRaw === "object" && pmRaw !== null) {
+    const fName = (pmRaw.first_name || pmRaw.user?.first_name || "").trim();
+    const lName = (pmRaw.last_name || pmRaw.user?.last_name || "").trim();
+    const combined = `${fName} ${lName}`.trim();
+    if (combined && combined.toLowerCase() !== "admin") {
+      return combined;
+    }
+    const nameStr = (pmRaw.full_name || pmRaw.name || pmRaw.username || "").trim();
+    if (nameStr && nameStr.toLowerCase() !== "admin") {
+      return nameStr;
+    }
   }
-  if (typeof project.project_manager_name === "string" && project.project_manager_name.trim() && project.project_manager_name.toLowerCase() !== "admin") {
+
+  if (
+    typeof pmRaw === "string" &&
+    pmRaw.trim() &&
+    isNaN(Number(pmRaw.trim())) &&
+    pmRaw.trim().toLowerCase() !== "admin"
+  ) {
+    return pmRaw.trim();
+  }
+  if (
+    typeof project.project_manager_name === "string" &&
+    project.project_manager_name.trim() &&
+    project.project_manager_name.trim().toLowerCase() !== "admin"
+  ) {
     return project.project_manager_name.trim();
   }
+
+  if (
+    loggedInUserName &&
+    loggedInUserName !== "Current User" &&
+    loggedInUserName.toLowerCase() !== "admin"
+  ) {
+    return loggedInUserName;
+  }
+
+  if (pmEmail) {
+    const prefix = String(pmEmail).split("@")[0];
+    if (prefix && prefix.toLowerCase() !== "admin") {
+      return prefix
+        .split(/[._-]/)
+        .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
+    }
+  }
+
   return "Unassigned";
 };
 
@@ -175,6 +275,8 @@ export default function ProjectCostingListPage() {
 
   const { canCreateProject, currentProjects, maxProjects, planName, isProjectAccessible } =
     useSubscriptionLimits();
+  const { fullName: loggedInUserName } = useCurrentUser();
+  const { data: tenantUsers } = useGetTenantUsersQuery({});
 
   const {
     data: projects = [],
@@ -215,7 +317,7 @@ export default function ProjectCostingListPage() {
         const q = search.toLowerCase();
         const code = (project.project_code || "").toLowerCase();
         const name = (project.name || "").toLowerCase();
-        const manager = getProjectManager(project).toLowerCase();
+        const manager = getProjectManager(project, tenantUsers, loggedInUserName).toLowerCase();
         const type = (project.project_type || "").toLowerCase();
         matchesSearch =
           code.includes(q) ||
@@ -226,7 +328,7 @@ export default function ProjectCostingListPage() {
 
       return matchesStatus && matchesSearch;
     });
-  }, [projects, selectedStatus, search]);
+  }, [projects, selectedStatus, search, tenantUsers, loggedInUserName]);
 
   const handleRowClick = (id: number) => {
     if (!isProjectAccessible(id)) {
@@ -379,9 +481,6 @@ export default function ProjectCostingListPage() {
                       <TableHead className="font-semibold text-[#8898AA] text-[11.5px] py-3.5 px-6 whitespace-nowrap">
                         Status
                       </TableHead>
-                      <TableHead className="font-semibold text-[#8898AA] text-[11.5px] py-3.5 px-6 whitespace-nowrap text-right">
-                        Actions
-                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -396,12 +495,11 @@ export default function ProjectCostingListPage() {
                           <TableCell className="py-3.5 px-6"><Skeleton className="h-4 w-20 bg-gray-100" /></TableCell>
                           <TableCell className="py-3.5 px-6"><Skeleton className="h-4 w-24 bg-gray-100" /></TableCell>
                           <TableCell className="py-3.5 px-6"><Skeleton className="h-6 w-20 bg-gray-100 rounded-full" /></TableCell>
-                          <TableCell className="py-3.5 px-6"><Skeleton className="h-6 w-8 ml-auto bg-gray-100 rounded-md" /></TableCell>
                         </TableRow>
                       ))
                     ) : isError ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="py-8">
+                        <TableCell colSpan={8} className="py-8">
                           <CustomMessage
                             variant="error"
                             title="We couldn't load your projects right now"
@@ -414,7 +512,7 @@ export default function ProjectCostingListPage() {
                       </TableRow>
                     ) : filteredProjects.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="py-8">
+                        <TableCell colSpan={8} className="py-8">
                           <CustomMessage
                             variant="empty"
                             title={
@@ -455,7 +553,7 @@ export default function ProjectCostingListPage() {
                               </div>
                             </TableCell>
                             <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
-                              {getProjectManager(project)}
+                              {getProjectManager(project, tenantUsers, loggedInUserName)}
                             </TableCell>
                             <TableCell className="text-[#525F7F] font-normal text-sm py-3.5 px-6 whitespace-nowrap">
                               {project.project_type || "Fixed Price"}
@@ -471,25 +569,6 @@ export default function ProjectCostingListPage() {
                             </TableCell>
                             <TableCell className="py-3.5 px-6 whitespace-nowrap">
                               {renderStatusBadge(project.status)}
-                            </TableCell>
-                            <TableCell className="py-3.5 px-6 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
-                              {(!project.status || project.status.toUpperCase() === "DRAFT") && (
-                                <PermissionGuard module="project_costing" action="delete" entitlement="delete_project">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    disabled={isDeletingProject}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteProject(project);
-                                    }}
-                                    className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                    title="Delete Draft Project"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </PermissionGuard>
-                              )}
                             </TableCell>
                           </TableRow>
                         );
@@ -621,7 +700,7 @@ export default function ProjectCostingListPage() {
                               Manager
                             </span>
                             <span className="font-medium text-gray-700 mt-0.5 block">
-                              {getProjectManager(project)}
+                              {getProjectManager(project, tenantUsers, loggedInUserName)}
                             </span>
                           </div>
                           <div className="text-right">
