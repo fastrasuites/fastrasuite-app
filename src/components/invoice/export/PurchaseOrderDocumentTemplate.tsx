@@ -11,6 +11,7 @@ import {
 export interface PurchaseOrderDocumentTemplateProps {
   order?: ProjectPurchaseOrder | null;
   projectName?: string;
+  paymentTermLabel?: string;
   companyName?: string;
   companyAddress?: string;
   companyPhone?: string;
@@ -53,6 +54,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
 > = ({
   order,
   projectName: projectNameProp = "",
+  paymentTermLabel = "",
   companyName = "FastraSuite",
   companyAddress = "",
   companyPhone = "",
@@ -120,7 +122,22 @@ export const PurchaseOrderDocumentTemplate: React.FC<
     return (order as any)?.project_code || "";
   }, [order, projectNameProp]);
 
-  const requestDate = formatDateDDMMYYYY(order?.created_at || order?.issued_at);
+  const wbsElementLabel = React.useMemo(() => {
+    const wbsName = order?.wbs_element_details?.name?.trim();
+    const phaseName = order?.wbs_element_details?.phase?.name?.trim();
+    if (wbsName && phaseName && wbsName !== projectName && phaseName !== projectName) {
+      return `${phaseName} — ${wbsName}`;
+    }
+    if (wbsName && wbsName !== projectName) {
+      return wbsName;
+    }
+    if (phaseName && phaseName !== projectName) {
+      return phaseName;
+    }
+    return "";
+  }, [order, projectName]);
+
+  const requestDate = formatDateDDMMYYYY(order?.issued_at || order?.created_at);
   const expectedDeliveryDate = formatDateDDMMYYYY(
     order?.expected_delivery_date || order?.required_date,
   );
@@ -131,11 +148,14 @@ export const PurchaseOrderDocumentTemplate: React.FC<
 
   const vendorDetailsLine = React.useMemo(() => {
     const parts = [
-      (order as any)?.vendor_address ||
+      order?.vendor_address ||
         (order as any)?.vendor_details?.address ||
         (order as any)?.vendor_details?.city,
-      (order as any)?.vendor_email || (order as any)?.vendor_details?.email,
-      (order as any)?.vendor_phone || (order as any)?.vendor_details?.phone,
+      order?.vendor_email || (order as any)?.vendor_details?.email,
+      order?.vendor_phone_number ||
+        (order as any)?.vendor_phone ||
+        (order as any)?.vendor_details?.phone ||
+        (order as any)?.vendor_details?.phone_number,
     ].filter(Boolean);
 
     if (parts.length > 0) return parts.join(" · ");
@@ -180,6 +200,11 @@ export const PurchaseOrderDocumentTemplate: React.FC<
     return [];
   }, [order]);
 
+  const isPlantAndEquipment =
+    order?.source_request_type === "plant_and_equipment";
+  const showUnitColumn =
+    !isPlantAndEquipment || lines.some((l) => Boolean(l.unit));
+
   // Financial calculations without Tax
   const rawTotal = Number(order?.total_amount || 0);
   const subtotal =
@@ -194,10 +219,12 @@ export const PurchaseOrderDocumentTemplate: React.FC<
   const grandTotal = rawTotal > 0 ? rawTotal : subtotal;
 
   // Payment & Delivery instructions
-  const paymentTerms = order?.payment_term
-    ? `${order.payment_term} days after delivery`
-    : (order as any)?.payment_terms ||
-      "In accordance with agreed contract terms";
+  const paymentTerms =
+    paymentTermLabel ||
+    (order as any)?.payment_term_name ||
+    (order as any)?.payment_term_details?.name ||
+    (order as any)?.payment_terms ||
+    "In accordance with agreed contract terms";
 
   const deliveryInstructions =
     (order as any)?.delivery_instructions ||
@@ -265,11 +292,17 @@ export const PurchaseOrderDocumentTemplate: React.FC<
           <h1 className="text-[26px] font-extrabold text-gray-900 tracking-tight leading-none">
             Purchase Order
           </h1>
-          <div className="flex items-center gap-6 mt-2.5 text-[12.5px] text-gray-700">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 mt-2.5 text-[12.5px] text-gray-700">
             <div>
               <span className="font-semibold text-gray-900">Project:</span>{" "}
               <span className="font-medium text-gray-800">{projectName || "—"}</span>
             </div>
+            {wbsElementLabel ? (
+              <div>
+                <span className="font-semibold text-gray-900">WBS Element:</span>{" "}
+                <span className="font-medium text-gray-800">{wbsElementLabel}</span>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -340,13 +373,15 @@ export const PurchaseOrderDocumentTemplate: React.FC<
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F5F8FF] border-b border-gray-200 text-gray-500 text-[10px] font-semibold">
-                  <th className="py-2.5 px-4 font-semibold">Description</th>
+                  <th className="py-2.5 px-4 font-semibold">Item / Description</th>
                   <th className="py-2.5 px-3 text-center font-semibold w-16">
                     Qty
                   </th>
-                  <th className="py-2.5 px-3 text-left font-semibold w-24">
-                    Unit
-                  </th>
+                  {showUnitColumn && (
+                    <th className="py-2.5 px-3 text-left font-semibold w-24">
+                      Unit
+                    </th>
+                  )}
                   <th className="py-2.5 px-4 text-right font-semibold w-32">
                     Unit price
                   </th>
@@ -359,7 +394,7 @@ export const PurchaseOrderDocumentTemplate: React.FC<
                 {lines.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={showUnitColumn ? 5 : 4}
                       className="py-6 text-center text-gray-400 italic"
                     >
                       No line items specified for this purchase order.
@@ -372,18 +407,37 @@ export const PurchaseOrderDocumentTemplate: React.FC<
                     const lineTotal = item.line_total
                       ? Number(item.line_total)
                       : qty * rate;
+                    const itemName = item.item_name?.trim() || "";
+                    const itemDesc = item.description?.trim() || "";
+                    const hasDistinctDesc =
+                      Boolean(itemName) &&
+                      Boolean(itemDesc) &&
+                      itemName.toLowerCase() !== itemDesc.toLowerCase();
 
                     return (
                       <tr key={idx} className="hover:bg-gray-50/50">
                         <td className="py-3 px-4 font-medium text-gray-800">
-                          {item.description || item.item_name || "—"}
+                          {hasDistinctDesc ? (
+                            <div>
+                              <div className="font-semibold text-gray-900">
+                                {itemName}
+                              </div>
+                              <div className="text-[10px] text-gray-500 font-normal mt-0.5 leading-snug">
+                                {itemDesc}
+                              </div>
+                            </div>
+                          ) : (
+                            itemName || itemDesc || "—"
+                          )}
                         </td>
                         <td className="py-3 px-3 text-center text-gray-800 font-medium">
                           {qty}
                         </td>
-                        <td className="py-3 px-3 text-left text-gray-600">
-                          {item.unit || "—"}
-                        </td>
+                        {showUnitColumn && (
+                          <td className="py-3 px-3 text-left text-gray-600">
+                            {item.unit || "—"}
+                          </td>
+                        )}
                         <td className="py-3 px-4 text-right font-semibold text-gray-800">
                           {formatCurrency(rate)}
                         </td>

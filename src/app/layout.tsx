@@ -4,6 +4,7 @@ import "./globals.css";
 import AppWrapper from "./AppWrapper";
 import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 import Script from "next/script";
+import { GA_MEASUREMENT_ID, GTM_ID } from "@/lib/analytics";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,6 +55,28 @@ export default function RootLayout({
           {children}
           <PwaInstallPrompt />
         </AppWrapper>
+        <Script
+          id="google-tag-manager"
+          src={`https://www.googletagmanager.com/gtm.js?id=${GTM_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script
+          id="google-analytics-gtag"
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            window.gtag = gtag;
+            gtag('js', new Date());
+            gtag('config', '${GA_MEASUREMENT_ID}', {
+              send_page_view: false,
+              cookie_flags: 'SameSite=None;Secure'
+            });
+          `}
+        </Script>
         <Script id="register-sw" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {

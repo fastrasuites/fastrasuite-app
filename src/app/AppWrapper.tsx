@@ -12,6 +12,7 @@ import SessionTimeoutWrapper from "@/components/SessionTimeoutWrapper";
 import dynamic from "next/dynamic";
 import SubscriptionGuard from "@/components/shared/SubscriptionGuard";
 import NetworkStatusNotifier from "@/components/shared/NetworkStatusNotifier";
+import GoogleAnalyticsTracker from "@/components/shared/GoogleAnalyticsTracker";
 
 const AdminOnboardingChecklist = dynamic(
   () =>
@@ -129,6 +130,7 @@ export default function AppWrapper({
     <Provider store={store}>
       <PersistGate loading={null} persistor={persistor}>
         <AuthCookieSync />
+        <GoogleAnalyticsTracker />
         <PermissionProvider>
           <NotificationProvider>
             <SidebarContext.Provider

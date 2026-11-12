@@ -41,6 +41,9 @@ export interface ProjectPurchaseOrder {
   object_id: number | null;
   vendor: number;
   vendor_name: string;
+  vendor_email?: string;
+  vendor_phone_number?: string;
+  vendor_address?: string;
   currency: number;
   wbs_element: string;
   payment_term: number | null;

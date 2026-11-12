@@ -46,6 +46,7 @@ import { vendorImportApi } from "../../api/invoice/vendorImportApi";
 
 import authReducer from "./authSlice";
 import viewModeReducer from "../../components/Settings/viewModeSlice";
+import { analyticsMiddleware } from "./analyticsMiddleware";
 
 import { stockLocationApi } from "@/api/inventory/stockLocationApi";
 import { incomingProductApi } from "@/api/inventory/incomingProductApi";
@@ -240,6 +241,7 @@ export const store = configureStore({
       subscriptionApi.middleware,
       dashboardApi.middleware,
       integrationsApi.middleware,
+      analyticsMiddleware,
     ),
 });
 
