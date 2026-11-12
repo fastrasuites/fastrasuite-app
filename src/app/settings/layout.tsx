@@ -23,7 +23,8 @@ type SettingsSection =
   | "permissiontemplates"
   | "multilocation"
   | "audittrail"
-  | "billing";
+  | "billing"
+  | "integrations";
 
 export default function SettingsLayout({
   children,
@@ -37,13 +38,8 @@ export default function SettingsLayout({
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("search") ?? "";
 
-  const {
-    canAddUser,
-    currentUsers,
-    maxUsers,
-    canCreateCustomRoles,
-    planName,
-  } = useSubscriptionLimits();
+  const { canAddUser, currentUsers, maxUsers, canCreateCustomRoles, planName } =
+    useSubscriptionLimits();
 
   const [limitModalConfig, setLimitModalConfig] = useState<{
     isOpen: boolean;
@@ -104,6 +100,11 @@ export default function SettingsLayout({
       label: "Billing & Subscriptions",
       href: "/settings/billing",
     },
+    {
+      key: "integrations",
+      label: "Integrations",
+      href: "/settings/integrations",
+    },
     //{ label: "Application", href: "/settings/application" },
   ];
 
@@ -114,12 +115,10 @@ export default function SettingsLayout({
     if (path.startsWith("/settings/application")) return "application";
     if (path.startsWith("/settings/permission-templates"))
       return "permissiontemplates";
-    if (path.startsWith("/settings/multi-location"))
-      return "multilocation";
-    if (path.startsWith("/settings/audit-trail"))
-      return "audittrail";
-    if (path.startsWith("/settings/billing"))
-      return "billing";
+    if (path.startsWith("/settings/multi-location")) return "multilocation";
+    if (path.startsWith("/settings/audit-trail")) return "audittrail";
+    if (path.startsWith("/settings/billing")) return "billing";
+    if (path.startsWith("/settings/integrations")) return "integrations";
     return "company";
   };
 
@@ -230,7 +229,8 @@ export default function SettingsLayout({
     pathname === "/settings/multi-location" ||
     pathname.startsWith("/settings/audit-trail") ||
     pathname.startsWith("/settings/billing") ||
-    /^\/settings\/company\/updatecompany\/?$/.test(pathname);
+    /^\/settings\/company\/updatecompany\/?$/.test(pathname) ||
+    pathname.startsWith("/settings/integrations");
 
   const sectionToEntitlement: Record<SettingsSection, string> = {
     company: "view_company",
@@ -241,10 +241,14 @@ export default function SettingsLayout({
     application: "view_company",
     audittrail: "view_company",
     billing: "view_company",
+    integrations: "view_company",
   };
 
   return (
-    <PageGuard module="settings" entitlement={sectionToEntitlement[activeSection]}>
+    <PageGuard
+      module="settings"
+      entitlement={sectionToEntitlement[activeSection]}
+    >
       <NavBar title="Settings" items={navItems} activeHref={activeNav?.href} />
 
       {/* Breadcrumb / secondary top bar */}
