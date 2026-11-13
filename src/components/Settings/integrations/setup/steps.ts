@@ -13,11 +13,11 @@ export type SetupStepId =
 export const SETUP_STEP_ORDER: SetupStepId[] = [
   "odoo_connection",
   "company_selection",
-  // "vendor_mapping",
-  // "chart_of_accounts",
-  // "purchase_journal",
-  // "tax_mapping",
-  // "currency_mapping",
+  "vendor_mapping",
+  "chart_of_accounts",
+  "purchase_journal",
+  "tax_mapping",
+  "currency_mapping",
 ];
 
 export const SETUP_STEP_LABELS: Record<SetupStepId, string> = {
@@ -37,9 +37,9 @@ export interface SetupStepGroup {
 
 export const SETUP_STEP_GROUPS: SetupStepGroup[] = [
   { label: "Connection", steps: ["odoo_connection", "company_selection"] },
-  // { label: "Mappings", steps: ["vendor_mapping", "chart_of_accounts"] },
-  // {
-  //   label: "Configuration",
-  //   steps: ["purchase_journal", "tax_mapping", "currency_mapping"],
-  // },
+  { label: "Mappings", steps: ["vendor_mapping", "chart_of_accounts"] },
+  {
+    label: "Configuration",
+    steps: ["purchase_journal", "tax_mapping", "currency_mapping"],
+  },
 ];

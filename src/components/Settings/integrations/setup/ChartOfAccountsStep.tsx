@@ -34,19 +34,23 @@ const accountLabel = (a: OdooAccount) =>
   [a.code, a.name].filter(Boolean).join(" ") || a.name || `#${a.id}`;
 
 /**
- * Groups the mapping table by the FastrSuite account type, e.g.
+ * Groups the mapping table by the FastraSuite account type, e.g.
  * "expense_and_cost" → "Expense and cost accounts".
  */
 const accountGroupLabel = (type: string): string => {
   const words = type.replace(/[_-]+/g, " ").trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return "Other accounts";
   const label = words
-    .map((w) => (w.toLowerCase() === "and" ? "and" : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
+    .map((w) =>
+      w.toLowerCase() === "and"
+        ? "and"
+        : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(),
+    )
     .join(" ");
   return /accounts?$/i.test(label) ? label : `${label} accounts`;
 };
 
-/** "Chart of accounts mapping" step: match FastrSuite accounts to Odoo accounts. */
+/** "Chart of accounts mapping" step: match FastraSuite accounts to Odoo accounts. */
 export function ChartOfAccountsStep() {
   const mappingsQuery = useGetAccountMappingsQuery();
   const accountsQuery = useGetAccountsQuery();
@@ -60,7 +64,8 @@ export function ChartOfAccountsStep() {
   const [saveError, setSaveError] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   /** Counters from the latest successful POST /account-mappings/suggest/. */
-  const [suggestSummary, setSuggestSummary] = useState<MappingSuggestSummary | null>(null);
+  const [suggestSummary, setSuggestSummary] =
+    useState<MappingSuggestSummary | null>(null);
 
   const rows = useMemo(() => mappingsQuery.data ?? [], [mappingsQuery.data]);
   const accountOptions = (accountsQuery.data ?? []).map((a) => ({
@@ -68,7 +73,9 @@ export function ChartOfAccountsStep() {
     label: accountLabel(a),
   }));
 
-  const completeCount = rows.filter((m) => getMappingStatus(m) === "confirmed").length;
+  const completeCount = rows.filter(
+    (m) => getMappingStatus(m) === "confirmed",
+  ).length;
   const attentionCount = rows.length - completeCount;
   const dirtyCount = Object.keys(dirty).length;
 
@@ -77,7 +84,8 @@ export function ChartOfAccountsStep() {
     if (filter === "complete" && status !== "confirmed") return false;
     if (filter === "attention" && status === "confirmed") return false;
     if (search.trim()) {
-      const hay = `${getLocalAccountLabel(m)} ${getOdooAccountName(m)}`.toLowerCase();
+      const hay =
+        `${getLocalAccountLabel(m)} ${getOdooAccountName(m)}`.toLowerCase();
       if (!hay.includes(search.trim().toLowerCase())) return false;
     }
     return true;
@@ -146,7 +154,7 @@ export function ChartOfAccountsStep() {
     <div>
       <PageHeader
         title="Chart of accounts mapping"
-        subtitle="Match each FastrSuite account to its Odoo account."
+        subtitle="Match each FastraSuite account to its Odoo account."
         actions={
           rows.length === 0 ? (
             suggestButton
@@ -169,7 +177,11 @@ export function ChartOfAccountsStep() {
           title="We could not load account mappings"
           className="mt-4"
           action={
-            <Button type="button" variant="outline" onClick={() => void mappingsQuery.refetch()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void mappingsQuery.refetch()}
+            >
               Try again
             </Button>
           }
@@ -187,14 +199,23 @@ export function ChartOfAccountsStep() {
           className="mt-4"
           action={suggestButton}
         >
-          Suggest mappings to match your FastrSuite accounts to their Odoo accounts.
+          Suggest mappings to match your FastraSuite accounts to their Odoo
+          accounts.
         </Banner>
       ) : saveError ? (
-        <Banner variant="error" title="Some mappings could not be saved" className="mt-4">
+        <Banner
+          variant="error"
+          title="Some mappings could not be saved"
+          className="mt-4"
+        >
           Your changes are still selected. Try saving again.
         </Banner>
       ) : completeCount === rows.length ? (
-        <Banner variant="success" title="All accounts are mapped" className="mt-4">
+        <Banner
+          variant="success"
+          title="All accounts are mapped"
+          className="mt-4"
+        >
           Vendor bills can sync for every account.
         </Banner>
       ) : (
@@ -226,7 +247,11 @@ export function ChartOfAccountsStep() {
           className="w-full max-w-xl"
         />
         <div className="flex items-center gap-2">
-          <FilterPill active={filter === "all"} count={rows.length} onClick={() => setFilter("all")}>
+          <FilterPill
+            active={filter === "all"}
+            count={rows.length}
+            onClick={() => setFilter("all")}
+          >
             All
           </FilterPill>
           <FilterPill
@@ -248,7 +273,8 @@ export function ChartOfAccountsStep() {
 
       {/* Table */}
       <div className="mt-4">
-        {mappingsQuery.isLoading || (rows.length > 0 && accountsQuery.isLoading) ? (
+        {mappingsQuery.isLoading ||
+        (rows.length > 0 && accountsQuery.isLoading) ? (
           <div className="space-y-2">
             {[0, 1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-12 w-full" />
@@ -258,7 +284,9 @@ export function ChartOfAccountsStep() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-100 text-left text-gray-600">
-                <th className="rounded-l-md px-4 py-2.5 font-normal">FastrSuite account</th>
+                <th className="rounded-l-md px-4 py-2.5 font-normal">
+                  FastraSuite account
+                </th>
                 <th className="px-4 py-2.5 font-normal">Odoo account</th>
                 <th className="px-4 py-2.5 font-normal">Status</th>
                 <th className="rounded-r-md px-4 py-2.5" />
@@ -295,7 +323,9 @@ export function ChartOfAccountsStep() {
                           <Select
                             placeholder="Select Odoo account"
                             value={chosenValue(m)}
-                            onChange={(v) => setDirty((prev) => ({ ...prev, [id]: v }))}
+                            onChange={(v) =>
+                              setDirty((prev) => ({ ...prev, [id]: v }))
+                            }
                             options={accountOptions}
                             disabled={accountOptions.length === 0}
                             className="h-9"
@@ -316,7 +346,10 @@ export function ChartOfAccountsStep() {
               })}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                  <td
+                    colSpan={4}
+                    className="px-4 py-8 text-center text-gray-500"
+                  >
                     No accounts match the current search or filter.
                   </td>
                 </tr>

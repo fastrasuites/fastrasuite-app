@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Banner,
-  Button,
-  PageHeader,
-  Pill,
-  Select,
-} from "../shared/primitives";
+import { Banner, Button, PageHeader, Pill, Select } from "../shared/primitives";
 
 /**
  * "Tax mapping" step.
@@ -23,7 +17,7 @@ import {
  */
 
 interface TaxRow {
-  /** FastrSuite tax label, e.g. "VAT 7.5%". */
+  /** FastraSuite tax label, e.g. "VAT 7.5%". */
   local: string;
   /** Currently selected Odoo tax label, or null when unmapped. */
   odoo: string | null;
@@ -44,10 +38,14 @@ export function TaxMappingStep() {
     <div>
       <PageHeader
         title="Tax mapping"
-        subtitle="Match FastrSuite taxes to Odoo taxes where applicable."
+        subtitle="Match FastraSuite taxes to Odoo taxes where applicable."
         actions={
           /* TODO(backend): enable once the tax-mapping save endpoint exists. */
-          <Button type="button" disabled title="Available once the tax endpoints are documented">
+          <Button
+            type="button"
+            disabled
+            title="Available once the tax endpoints are documented"
+          >
             Save
           </Button>
         }
@@ -70,7 +68,9 @@ export function TaxMappingStep() {
       <table className="mt-4 w-full text-sm">
         <thead>
           <tr className="bg-gray-100 text-left text-gray-600">
-            <th className="rounded-l-md px-4 py-2.5 font-normal">FastrSuite tax</th>
+            <th className="rounded-l-md px-4 py-2.5 font-normal">
+              FastraSuite tax
+            </th>
             <th className="px-4 py-2.5 font-normal">Odoo tax</th>
             <th className="rounded-r-md px-4 py-2.5 font-normal">Status</th>
           </tr>
@@ -78,7 +78,9 @@ export function TaxMappingStep() {
         <tbody className="divide-y divide-gray-100">
           {rows.map((row, index) => (
             <tr key={row.local}>
-              <td className="px-4 py-3 font-medium text-gray-900">{row.local}</td>
+              <td className="px-4 py-3 font-medium text-gray-900">
+                {row.local}
+              </td>
               <td className="px-4 py-3">
                 <div className="w-full max-w-sm">
                   <Select
@@ -86,7 +88,9 @@ export function TaxMappingStep() {
                     value={row.odoo}
                     onChange={(v) =>
                       setRows((prev) =>
-                        prev.map((r, i) => (i === index ? { ...r, odoo: v } : r)),
+                        prev.map((r, i) =>
+                          i === index ? { ...r, odoo: v } : r,
+                        ),
                       )
                     }
                     options={

@@ -39,7 +39,9 @@ export const isSyncStatus = (value: string): value is SyncStatus =>
 
 export function SyncStatusPill({ status }: { status: SyncStatus }) {
   return (
-    <Pill variant={SYNC_STATUS_VARIANTS[status]}>{SYNC_STATUS_LABELS[status]}</Pill>
+    <Pill variant={SYNC_STATUS_VARIANTS[status]}>
+      {SYNC_STATUS_LABELS[status]}
+    </Pill>
   );
 }
 
@@ -69,7 +71,9 @@ export function SetupAttentionBanner({
 }) {
   if (items.length === 0) return null;
   const label =
-    items.length === 1 ? "1 setup item needs attention" : `${items.length} setup items need attention`;
+    items.length === 1
+      ? "1 setup item needs attention"
+      : `${items.length} setup items need attention`;
   const reason =
     items.length === 1
       ? `${items[0]} is incomplete. Related records cannot sync until it is completed.`
@@ -80,7 +84,12 @@ export function SetupAttentionBanner({
         <p className="text-[15px] font-semibold text-gray-900">{label}</p>
         <p className="mt-1 text-sm text-gray-700">{reason}</p>
       </div>
-      <Button type="button" variant="outline" onClick={onReview} className="bg-transparent">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={onReview}
+        className="bg-transparent"
+      >
         Review setup
       </Button>
     </div>
@@ -109,8 +118,12 @@ export function AttemptTimeline({ attempts }: { attempts: SyncAttempt[] }) {
       <div className="flex items-start gap-3">
         <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-gray-400" />
         <div>
-          <p className="text-[15px] font-medium text-gray-900">No attempts yet</p>
-          <p className="text-sm text-gray-500">FastrSuite will start syncing automatically.</p>
+          <p className="text-[15px] font-medium text-gray-900">
+            No attempts yet
+          </p>
+          <p className="text-sm text-gray-500">
+            FastraSuite will start syncing automatically.
+          </p>
         </div>
       </div>
     );
@@ -120,11 +133,18 @@ export function AttemptTimeline({ attempts }: { attempts: SyncAttempt[] }) {
       {attempts.map((attempt, index) => (
         <li key={index} className="flex items-start gap-3">
           <span
-            className={cn("mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full", dotColors[attempt.outcome])}
+            className={cn(
+              "mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full",
+              dotColors[attempt.outcome],
+            )}
           />
           <div className="min-w-0">
-            <p className="text-[15px] font-medium text-gray-900">{attempt.title}</p>
-            {attempt.at ? <p className="text-sm text-gray-500">{attempt.at}</p> : null}
+            <p className="text-[15px] font-medium text-gray-900">
+              {attempt.title}
+            </p>
+            {attempt.at ? (
+              <p className="text-sm text-gray-500">{attempt.at}</p>
+            ) : null}
           </div>
         </li>
       ))}

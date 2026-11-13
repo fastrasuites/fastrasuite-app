@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { SetupAttentionBanner, StatCard, SyncStatusPill, formatNaira } from "../shared/SyncComponents";
+import {
+  SetupAttentionBanner,
+  StatCard,
+  SyncStatusPill,
+  formatNaira,
+} from "../shared/SyncComponents";
 import { PageHeader, SearchInput, Select } from "../shared/primitives";
 import { useSetupStatus } from "../setup/useSetupStatus";
 import { BillSyncDetailModal } from "./BillSyncDetailModal";
@@ -29,7 +34,11 @@ const DATE_OPTIONS = [
  * mockData.ts – swap in the bills API queries when the backend
  * documents them (TODO(backend)).
  */
-export function VendorBillsScreen({ onReviewSetup }: { onReviewSetup: () => void }) {
+export function VendorBillsScreen({
+  onReviewSetup,
+}: {
+  onReviewSetup: () => void;
+}) {
   const { attentionLabels } = useSetupStatus();
 
   const [search, setSearch] = useState("");
@@ -42,7 +51,8 @@ export function VendorBillsScreen({ onReviewSetup }: { onReviewSetup: () => void
     return VENDOR_BILLS.filter((bill) => {
       if (status !== "all" && bill.status !== status) return false;
       if (search.trim()) {
-        const hay = `${bill.bill_number} ${bill.vendor} ${bill.odoo_reference ?? ""}`.toLowerCase();
+        const hay =
+          `${bill.bill_number} ${bill.vendor} ${bill.odoo_reference ?? ""}`.toLowerCase();
         if (!hay.includes(search.trim().toLowerCase())) return false;
       }
       return true;
@@ -53,12 +63,18 @@ export function VendorBillsScreen({ onReviewSetup }: { onReviewSetup: () => void
     <div className="px-8 py-6">
       <SetupAttentionBanner items={attentionLabels} onReview={onReviewSetup} />
 
-      <PageHeader title="Vendor bills" subtitle="Vendor bills sent from FastrSuite to Odoo." />
+      <PageHeader
+        title="Vendor bills"
+        subtitle="Vendor bills sent from FastraSuite to Odoo."
+      />
 
       <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Total" value={VENDOR_BILL_STATS.total} />
         <StatCard label="Synced" value={VENDOR_BILL_STATS.synced} />
-        <StatCard label="Pending / Processing" value={VENDOR_BILL_STATS.pending} />
+        <StatCard
+          label="Pending / Processing"
+          value={VENDOR_BILL_STATS.pending}
+        />
         <StatCard label="Failed" value={VENDOR_BILL_STATS.failed} />
       </div>
 
@@ -90,7 +106,9 @@ export function VendorBillsScreen({ onReviewSetup }: { onReviewSetup: () => void
       <table className="mt-4 w-full text-sm">
         <thead>
           <tr className="bg-gray-100 text-left text-gray-600">
-            <th className="rounded-l-md px-4 py-2.5 font-normal">Bill number</th>
+            <th className="rounded-l-md px-4 py-2.5 font-normal">
+              Bill number
+            </th>
             <th className="px-4 py-2.5 font-normal">Vendor</th>
             <th className="px-4 py-2.5 font-normal">Amount</th>
             <th className="px-4 py-2.5 font-normal">Odoo reference</th>
@@ -106,19 +124,31 @@ export function VendorBillsScreen({ onReviewSetup }: { onReviewSetup: () => void
               onClick={() => setSelected(bill)}
               className="cursor-pointer transition-colors hover:bg-gray-50"
             >
-              <td className="px-4 py-3.5 font-medium text-gray-900">{bill.bill_number}</td>
+              <td className="px-4 py-3.5 font-medium text-gray-900">
+                {bill.bill_number}
+              </td>
               <td className="px-4 py-3.5 text-gray-700">{bill.vendor}</td>
-              <td className="px-4 py-3.5 text-gray-900">{formatNaira(bill.amount)}</td>
-              <td className="px-4 py-3.5 text-gray-700">{bill.odoo_reference ?? "-"}</td>
+              <td className="px-4 py-3.5 text-gray-900">
+                {formatNaira(bill.amount)}
+              </td>
+              <td className="px-4 py-3.5 text-gray-700">
+                {bill.odoo_reference ?? "-"}
+              </td>
               <td className="px-4 py-3.5">
                 <SyncStatusPill status={bill.status} />
                 {bill.status === "retrying" && bill.next_retry ? (
-                  <p className="mt-1 text-xs text-gray-500">{bill.next_retry}</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {bill.next_retry}
+                  </p>
                 ) : null}
               </td>
-              <td className="px-4 py-3.5 text-gray-700">{bill.last_attempt ?? "-"}</td>
               <td className="px-4 py-3.5 text-gray-700">
-                {bill.max_attempts ? `${bill.attempts} of ${bill.max_attempts}` : bill.attempts}
+                {bill.last_attempt ?? "-"}
+              </td>
+              <td className="px-4 py-3.5 text-gray-700">
+                {bill.max_attempts
+                  ? `${bill.attempts} of ${bill.max_attempts}`
+                  : bill.attempts}
               </td>
             </tr>
           ))}
