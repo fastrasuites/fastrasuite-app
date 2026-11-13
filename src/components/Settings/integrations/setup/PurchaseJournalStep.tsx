@@ -43,10 +43,13 @@ export function PurchaseJournalStep() {
   );
 
   useEffect(() => {
-    if (selected === null && current) setSelected(String(getJournalId(current)));
+    if (selected === null && current)
+      setSelected(String(getJournalId(current)));
   }, [current, selected]);
 
-  const dirty = selected !== null && String(getJournalId(current ?? {} as OdooJournal)) !== selected;
+  const dirty =
+    selected !== null &&
+    String(getJournalId(current ?? ({} as OdooJournal))) !== selected;
   const currentLabel = getJournalLabel(current);
 
   const handleSave = async () => {
@@ -67,7 +70,7 @@ export function PurchaseJournalStep() {
       <div>
         <PageHeader
           title="Purchase journal"
-          subtitle="The Odoo journal FastrSuite uses for vendor bills."
+          subtitle="The Odoo journal FastraSuite uses for vendor bills."
         />
         <Skeleton className="mt-6 h-16 w-full max-w-xl" />
       </div>
@@ -78,7 +81,7 @@ export function PurchaseJournalStep() {
     <div>
       <PageHeader
         title="Purchase journal"
-        subtitle="The Odoo journal FastrSuite uses for vendor bills."
+        subtitle="The Odoo journal FastraSuite uses for vendor bills."
         actions={
           <Button
             type="button"
@@ -97,7 +100,11 @@ export function PurchaseJournalStep() {
           title="We could not load Odoo journals"
           className="mt-4"
           action={
-            <Button type="button" variant="outline" onClick={() => void journalsQuery.refetch()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void journalsQuery.refetch()}
+            >
               Try again
             </Button>
           }
@@ -111,7 +118,9 @@ export function PurchaseJournalStep() {
       ) : null}
 
       <div className="mt-6 max-w-xl">
-        <p className="mb-1.5 text-sm font-semibold text-gray-900">Odoo purchase journal</p>
+        <p className="mb-1.5 text-sm font-semibold text-gray-900">
+          Odoo purchase journal
+        </p>
         <Select
           placeholder="Select journal"
           value={selected}

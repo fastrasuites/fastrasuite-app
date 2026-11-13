@@ -33,7 +33,7 @@ export function CurrencyMappingStep() {
     <div>
       <PageHeader
         title="Currency mapping"
-        subtitle="The currencies FastrSuite and Odoo both use."
+        subtitle="The currencies FastraSuite and Odoo both use."
       />
 
       <Banner
@@ -47,7 +47,9 @@ export function CurrencyMappingStep() {
       <table className="mt-4 w-full text-sm">
         <thead>
           <tr className="bg-gray-100 text-left text-gray-600">
-            <th className="rounded-l-md px-4 py-2.5 font-normal">FastrSuite currency</th>
+            <th className="rounded-l-md px-4 py-2.5 font-normal">
+              FastraSuite currency
+            </th>
             <th className="px-4 py-2.5 font-normal">Odoo currency</th>
             <th className="rounded-r-md px-4 py-2.5 font-normal">Status</th>
           </tr>
@@ -55,7 +57,9 @@ export function CurrencyMappingStep() {
         <tbody className="divide-y divide-gray-100">
           {LOCAL_CURRENCY_ROWS.map((row) => (
             <tr key={row.code}>
-              <td className="px-4 py-3 font-medium text-gray-900">{row.code}</td>
+              <td className="px-4 py-3 font-medium text-gray-900">
+                {row.code}
+              </td>
               <td className="px-4 py-3">
                 <div className="w-full max-w-sm">
                   <Select

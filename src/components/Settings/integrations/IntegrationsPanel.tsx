@@ -70,12 +70,12 @@ export function IntegrationsPanel() {
       {/* Content */}
       <div className="flex-1">
         {tab === "setup" && <SetupScreen />}
-        {/* {tab === "bills" && (
+        {tab === "bills" && (
           <VendorBillsScreen onReviewSetup={() => setTab("setup")} />
         )}
         {tab === "payments" && (
           <PaymentsScreen onReviewSetup={() => setTab("setup")} />
-        )} */}
+        )}
       </div>
     </div>
   );

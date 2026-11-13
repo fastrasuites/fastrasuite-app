@@ -33,7 +33,9 @@ export function CompanySelectionStep({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pendingCompany, setPendingCompany] = useState<OdooCompany | null>(null);
+  const [pendingCompany, setPendingCompany] = useState<OdooCompany | null>(
+    null,
+  );
   const [actionError, setActionError] = useState<string | null>(null);
 
   /* GET /connection/ returns configured=false when not set up. */
@@ -99,19 +101,23 @@ export function CompanySelectionStep({
       <div>
         <PageHeader
           title="Odoo company"
-          subtitle="Choose the Odoo company FastrSuite should use."
+          subtitle="Choose the Odoo company FastraSuite should use."
         />
         <Banner
           variant="error"
           title="Not connected to Odoo"
           className="mt-4"
           action={
-            <Button type="button" variant="outline" onClick={() => onNavigate("odoo_connection")}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onNavigate("odoo_connection")}
+            >
               Go to connection
             </Button>
           }
         >
-          Connect FastrSuite to your Odoo database before selecting a company.
+          Connect FastraSuite to your Odoo database before selecting a company.
         </Banner>
       </div>
     );
@@ -121,7 +127,7 @@ export function CompanySelectionStep({
     <div>
       <PageHeader
         title="Odoo company"
-        subtitle="Choose the Odoo company FastrSuite should use."
+        subtitle="Choose the Odoo company FastraSuite should use."
         actions={
           <Button
             type="button"
@@ -141,7 +147,11 @@ export function CompanySelectionStep({
           title="We could not load your Odoo companies"
           className="mt-4"
           action={
-            <Button type="button" variant="outline" onClick={() => void companiesQuery.refetch()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void companiesQuery.refetch()}
+            >
               Try again
             </Button>
           }
@@ -158,15 +168,20 @@ export function CompanySelectionStep({
           title={`Active company: ${activeCompany.name ?? "—"} (ID ${activeCompany.id})`}
           className="mt-4"
         >
-          FastrSuite uses this company for vendor bills and payments.
+          FastraSuite uses this company for vendor bills and payments.
         </Banner>
       ) : (
         <Banner variant="info" title="No company selected yet" className="mt-4">
-          Pick a company below – FastrSuite will use it for vendor bills and payments.
+          Pick a company below – FastraSuite will use it for vendor bills and
+          payments.
         </Banner>
       )}
 
-      <div className="mt-5 space-y-3" role="radiogroup" aria-label="Odoo companies">
+      <div
+        className="mt-5 space-y-3"
+        role="radiogroup"
+        aria-label="Odoo companies"
+      >
         {companiesQuery.isLoading ? (
           <>
             <Skeleton className="h-[68px] w-full" />
@@ -199,7 +214,9 @@ export function CompanySelectionStep({
                     selected ? "border-blue-600" : "border-gray-400",
                   )}
                 >
-                  {selected ? <span className="h-2 w-2 rounded-full bg-blue-600" /> : null}
+                  {selected ? (
+                    <span className="h-2 w-2 rounded-full bg-blue-600" />
+                  ) : null}
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-[15px] font-semibold text-gray-900">

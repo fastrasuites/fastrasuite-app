@@ -418,14 +418,14 @@ export const getPartnerId = (p: OdooPartner): number => p?.id ?? 0;
 export const getPartnerLabel = (p: OdooPartner): string =>
   p?.name ?? `#${p?.id ?? ""}`;
 
-/** "600 Office Supplies" style label for the FastrSuite side. */
+/** "600 Office Supplies" style label for the FastraSuite side. */
 export const getLocalAccountLabel = (m: AccountMapping): string => {
   const a = m?.fastra_account;
   if (!a) return "—";
   return [a.code, a.name].filter(Boolean).join(" ") || a.name || `#${a.id}`;
 };
 
-/** FastrSuite account type – used to group the mapping table. */
+/** FastraSuite account type – used to group the mapping table. */
 export const getLocalAccountType = (m: AccountMapping): string | null =>
   m?.fastra_account?.type ?? null;
 

@@ -43,7 +43,9 @@ const connectionFormSchema = z.object({
     .min(1, "Odoo base URL is required")
     .refine(
       (v) =>
-        /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z0-9-]+(\/\S*)?$/i.test(v.trim()),
+        /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z0-9-]+(:\d+)?(\/\S*)?$/i.test(
+          v.trim(),
+        ),
       "Enter a valid Odoo URL, e.g. https://mycompany.odoo.com",
     ),
   database: z.string().min(1, "Database name is required"),
@@ -137,7 +139,7 @@ export function OdooConnectionStep({
     values: ConnectionFormValues,
   ): SaveConnectionRequest => {
     const payload: SaveConnectionRequest = {
-      name: connection?.name?.trim() || "Odoo",
+      name: connection?.name?.trim() || "Odoo Integration",
       base_url: values.base_url.trim(),
       database: values.database.trim(),
       username: values.username.trim(),
@@ -364,7 +366,8 @@ export function OdooConnectionStep({
               </Button>
             }
           >
-            FastrSuite needs to know which company in your Odoo database to use.
+            FastraSuite needs to know which company in your Odoo database to
+            use.
           </Banner>
         ) : null}
 
@@ -412,7 +415,7 @@ export function OdooConnectionStep({
           open={disconnectOpen}
           onOpenChange={setDisconnectOpen}
           title="Disconnect from Odoo?"
-          description={`Your saved connection details will be removed from FastrSuite. Vendor bills and payments will stop syncing until you connect again.${
+          description={`Your saved connection details will be removed from FastraSuite. Vendor bills and payments will stop syncing until you connect again.${
             company.name
               ? ` Mappings made for ${company.name} will also be cleared.`
               : ""
@@ -639,8 +642,8 @@ export function OdooConnectionStep({
       </form>
 
       <p className="mt-8 border-t border-gray-100 pt-5 text-sm text-gray-500">
-        FastrSuite keeps its own General Ledger. Connecting does not change your
-        FastrSuite records.
+        FastraSuite keeps its own General Ledger. Connecting does not change
+        your FastraSuite records.
       </p>
     </div>
   );

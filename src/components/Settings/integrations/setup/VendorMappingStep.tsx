@@ -38,7 +38,7 @@ interface ReplaceTarget {
   newPartnerName: string;
 }
 
-/** "Vendor mapping" step: map each FastrSuite vendor to an Odoo contact. */
+/** "Vendor mapping" step: map each FastraSuite vendor to an Odoo contact. */
 export function VendorMappingStep() {
   const mappingsQuery = useGetVendorMappingsQuery();
   const partnersQuery = useGetPartnersQuery();
@@ -49,11 +49,16 @@ export function VendorMappingStep() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<VendorFilter>("all");
   /** Rows being re-pointed before Confirm is pressed. */
-  const [pendingChoice, setPendingChoice] = useState<Record<string, string>>({});
-  const [replaceTarget, setReplaceTarget] = useState<ReplaceTarget | null>(null);
+  const [pendingChoice, setPendingChoice] = useState<Record<string, string>>(
+    {},
+  );
+  const [replaceTarget, setReplaceTarget] = useState<ReplaceTarget | null>(
+    null,
+  );
   const [actionError, setActionError] = useState<string | null>(null);
   /** Counters from the latest successful POST /vendor-mappings/suggest/. */
-  const [suggestSummary, setSuggestSummary] = useState<MappingSuggestSummary | null>(null);
+  const [suggestSummary, setSuggestSummary] =
+    useState<MappingSuggestSummary | null>(null);
 
   /** Lets the "Change" button open the row's select dropdown. */
   const selectTriggers = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -72,13 +77,16 @@ export function VendorMappingStep() {
     if (filter === "confirmed" && status !== "confirmed") return false;
     if (filter === "unmapped" && status === "confirmed") return false;
     if (search.trim()) {
-      const haystack = `${getVendorName(m)} ${getOdooPartnerName(m)}`.toLowerCase();
+      const haystack =
+        `${getVendorName(m)} ${getOdooPartnerName(m)}`.toLowerCase();
       if (!haystack.includes(search.trim().toLowerCase())) return false;
     }
     return true;
   });
 
-  const confirmedCount = rows.filter((m) => getMappingStatus(m) === "confirmed").length;
+  const confirmedCount = rows.filter(
+    (m) => getMappingStatus(m) === "confirmed",
+  ).length;
   const unmappedCount = rows.length - confirmedCount;
 
   /**
@@ -98,8 +106,13 @@ export function VendorMappingStep() {
     const currentId = getOdooPartnerId(m);
     if (getMappingStatus(m) === "confirmed" && currentId !== null) {
       const name =
-        partnerOptions.find((o) => o.value === value)?.label ?? "the selected contact";
-      setReplaceTarget({ mapping: m, newPartnerId: value, newPartnerName: name });
+        partnerOptions.find((o) => o.value === value)?.label ??
+        "the selected contact";
+      setReplaceTarget({
+        mapping: m,
+        newPartnerId: value,
+        newPartnerName: name,
+      });
       return;
     }
     setPendingChoice((prev) => ({ ...prev, [id]: value }));
@@ -116,7 +129,8 @@ export function VendorMappingStep() {
     });
     if (res.error) {
       setActionError(
-        getErrorDetail(res.error) ?? "Could not confirm the mapping. Please try again.",
+        getErrorDetail(res.error) ??
+          "Could not confirm the mapping. Please try again.",
       );
       return;
     }
@@ -138,7 +152,8 @@ export function VendorMappingStep() {
     });
     if (res.error) {
       setActionError(
-        getErrorDetail(res.error) ?? "Could not replace the mapping. Please try again.",
+        getErrorDetail(res.error) ??
+          "Could not replace the mapping. Please try again.",
       );
     }
   };
@@ -178,7 +193,7 @@ export function VendorMappingStep() {
     <div>
       <PageHeader
         title="Vendor mapping"
-        subtitle="Link each FastrSuite vendor to its Odoo contact."
+        subtitle="Link each FastraSuite vendor to its Odoo contact."
         actions={rows.length === 0 ? suggestButton : undefined}
       />
 
@@ -188,7 +203,11 @@ export function VendorMappingStep() {
           title="We could not load vendor mappings"
           className="mt-4"
           action={
-            <Button type="button" variant="outline" onClick={() => void mappingsQuery.refetch()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void mappingsQuery.refetch()}
+            >
               Try again
             </Button>
           }
@@ -206,15 +225,23 @@ export function VendorMappingStep() {
           className="mt-4"
           action={suggestButton}
         >
-          Suggest mappings to link your FastrSuite vendors to their Odoo contacts. Vendor
-          bills cannot sync until vendors are mapped.
+          Suggest mappings to link your FastraSuite vendors to their Odoo
+          contacts. Vendor bills cannot sync until vendors are mapped.
         </Banner>
       ) : confirmedCount === rows.length ? (
-        <Banner variant="success" title="All vendors are mapped" className="mt-4">
+        <Banner
+          variant="success"
+          title="All vendors are mapped"
+          className="mt-4"
+        >
           Vendor bills can now sync for every vendor.
         </Banner>
       ) : (
-        <Banner variant="error" title={`${unmappedCount} vendor${unmappedCount === 1 ? "" : "s"} need mapping`} className="mt-4">
+        <Banner
+          variant="error"
+          title={`${unmappedCount} vendor${unmappedCount === 1 ? "" : "s"} need mapping`}
+          className="mt-4"
+        >
           Vendor bills for unmapped vendors cannot sync.
         </Banner>
       )}
@@ -236,7 +263,11 @@ export function VendorMappingStep() {
           className="w-full max-w-xl"
         />
         <div className="flex items-center gap-2">
-          <FilterPill active={filter === "all"} count={rows.length} onClick={() => setFilter("all")}>
+          <FilterPill
+            active={filter === "all"}
+            count={rows.length}
+            onClick={() => setFilter("all")}
+          >
             All
           </FilterPill>
           <FilterPill
@@ -258,7 +289,8 @@ export function VendorMappingStep() {
 
       {/* Table */}
       <div className="mt-4">
-        {mappingsQuery.isLoading || (rows.length > 0 && partnersQuery.isLoading) ? (
+        {mappingsQuery.isLoading ||
+        (rows.length > 0 && partnersQuery.isLoading) ? (
           <div className="space-y-2">
             {[0, 1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-12 w-full" />
@@ -268,7 +300,9 @@ export function VendorMappingStep() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-gray-100 text-left text-gray-600">
-                <th className="rounded-l-md px-4 py-2.5 font-normal">FastrSuite vendor</th>
+                <th className="rounded-l-md px-4 py-2.5 font-normal">
+                  FastraSuite vendor
+                </th>
                 <th className="px-4 py-2.5 font-normal">Odoo contact</th>
                 <th className="px-4 py-2.5 font-normal">Status</th>
                 <th className="rounded-r-md px-4 py-2.5" />
@@ -281,7 +315,9 @@ export function VendorMappingStep() {
                 const confirmed = status === "confirmed";
                 return (
                   <tr key={id} className="align-middle">
-                    <td className="px-4 py-3 font-medium text-gray-900">{getVendorName(m)}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      {getVendorName(m)}
+                    </td>
                     <td className="px-4 py-3">
                       <div className="w-full max-w-xs">
                         <Select
@@ -324,7 +360,9 @@ export function VendorMappingStep() {
                               variant="neutral"
                               size="sm"
                               loading={rejectState.isLoading}
-                              onClick={() => void reject({ mappingId: getMappingId(m) })}
+                              onClick={() =>
+                                void reject({ mappingId: getMappingId(m) })
+                              }
                             >
                               Reject
                             </Button>
@@ -337,7 +375,10 @@ export function VendorMappingStep() {
               })}
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                  <td
+                    colSpan={4}
+                    className="px-4 py-8 text-center text-gray-500"
+                  >
                     No vendors match the current search or filter.
                   </td>
                 </tr>
@@ -356,7 +397,8 @@ export function VendorMappingStep() {
         description={
           replaceTarget
             ? `${getVendorName(replaceTarget.mapping)} is mapped to ${
-                getOdooPartnerName(replaceTarget.mapping) || "the current contact"
+                getOdooPartnerName(replaceTarget.mapping) ||
+                "the current contact"
               }. Replace it with ${replaceTarget.newPartnerName}?`
             : ""
         }
